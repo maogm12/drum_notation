@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState } from "preact/compat";
 import type { PagePadding } from "../vexflow/types";
 import { SETTINGS_RANGES } from "../vexflow/config";
 

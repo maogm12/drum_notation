@@ -1,12 +1,20 @@
 import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
+import preact from "@preact/preset-vite";
 import { resolve } from "path";
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [preact()],
   base: "/DrumMark/",
   appType: "mpa",
+  resolve: {
+    alias: {
+      react: "preact/compat",
+      "react-dom": "preact/compat",
+      "react/jsx-runtime": "preact/jsx-runtime",
+      "react-dom/client": "preact/compat/client",
+    },
+  },
   optimizeDeps: {
     force: true,
   },
@@ -17,7 +25,7 @@ export default defineConfig({
       overlay: false,
     },
   },
-   build: {
+  build: {
     rollupOptions: {
       input: {
         main: resolve(__dirname, "index.html"),

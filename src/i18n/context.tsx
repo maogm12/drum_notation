@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "preact/compat";
 import type { I18nKey } from "./keys";
 import en from "./en.json";
 import zh from "./zh.json";

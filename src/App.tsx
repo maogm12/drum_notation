@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type UIEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type UIEvent } from "preact/compat";
 import { EditorState, Compartment } from "@codemirror/state";
 import { EditorView, highlightActiveLine, highlightActiveLineGutter, lineNumbers, keymap } from "@codemirror/view";
 import { history, historyKeymap } from "@codemirror/commands";
@@ -574,7 +574,6 @@ export function App() {
   const resolvedTheme: AppTheme = useSyncExternalStore(
     (listener) => subscribeToThemeChanges(listener),
     () => resolveDocumentTheme(),
-    (): AppTheme => "light",
   );
   const [dsl, setDsl] = useState(() => {
     const saved = localStorage.getItem("drummark-dsl");

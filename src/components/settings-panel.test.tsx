@@ -1,9 +1,7 @@
 // @vitest-environment jsdom
 
 import { beforeAll, describe, expect, it } from "vitest";
-import React from "react";
-import { createRoot } from "react-dom/client";
-import { flushSync } from "react-dom";
+import { render } from "preact/compat";
 import { SettingsPanel } from "./SettingsPanel";
 import { defaultSettings } from "../hooks/useAppSettings";
 import { I18nProvider } from "../i18n/context";
@@ -23,12 +21,9 @@ beforeAll(() => {
   }
 });
 
-function renderSync(jsx: React.ReactElement): HTMLElement {
+function renderSync(jsx: any): HTMLElement {
   const container = document.createElement("div");
-  const root = createRoot(container);
-  flushSync(() => {
-    root.render(<I18nProvider>{jsx}</I18nProvider>);
-  });
+  render(<I18nProvider>{jsx}</I18nProvider>, container);
   return container;
 }
 
@@ -36,9 +31,7 @@ function openAccordionItem(container: HTMLElement, triggerText: string) {
   const triggers = container.querySelectorAll(".settings-trigger");
   for (const trigger of triggers) {
     if (trigger.textContent?.includes(triggerText)) {
-      flushSync(() => {
-        (trigger as HTMLButtonElement).click();
-      });
+      (trigger as HTMLButtonElement).click();
       return;
     }
   }

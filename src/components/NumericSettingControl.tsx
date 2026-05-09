@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect } from "preact/compat";
 
 function clampNumber(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -103,7 +103,8 @@ export function NumericSettingControl({
           }}
           onBlur={commit}
           onChange={(e) => {
-            const raw = e.target.value;
+            const target = e.target as HTMLInputElement;
+            const raw = target.value;
             setRawText(raw);
             const parsed = parseInput(raw);
             if (raw === "" || raw === "-") return;
