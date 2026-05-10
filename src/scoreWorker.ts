@@ -1,6 +1,9 @@
 /// <reference lib="webworker" />
 
 import { buildMusicXml, buildNormalizedScore, type ParseMode } from "./dsl";
+import { initWasm } from "./wasm/drummark_wasm";
+
+const wasmInit = initWasm().catch(() => {});
 
 type ParseRequest = {
   type: "parse";
@@ -32,9 +35,7 @@ type XmlResponse = {
 
 let lastScore: ReturnType<typeof buildNormalizedScore> | null = null;
 
-self.onmessage = (event: MessageEvent<ScoreWorkerRequest>) => {
-  const msg = event.data;
-
+function handleMessage(msg: ScoreWorkerRequest) {
   if (msg.type === "parse") {
     const { id, dsl, parseMode } = msg;
     const score = buildNormalizedScore(dsl, parseMode);
@@ -52,6 +53,14 @@ self.onmessage = (event: MessageEvent<ScoreWorkerRequest>) => {
     const response: XmlResponse = { type: "xml", id, xml };
     self.postMessage(response);
   }
+}
+
+self.onmessage = async (event: MessageEvent<ScoreWorkerRequest>) => {
+  const msg = event.data;
+  if (msg.type === "parse" && msg.parseMode === "wasm") {
+    await wasmInit;
+  }
+  handleMessage(msg);
 };
 
 export {};
