@@ -21,6 +21,7 @@ describe("cli runtime", () => {
       input: "score.drum",
       format: "svg",
       output: "score.svg",
+      parser: "lezer",
     });
   });
 
@@ -30,9 +31,9 @@ describe("cli runtime", () => {
   });
 
   it("derives default output paths only for file outputs", () => {
-    expect(resolveCliOutputPath({ input: "score.drum", format: "xml", output: null })).toBe("score.xml");
-    expect(resolveCliOutputPath({ input: "score.drum", format: "svg", output: null })).toBe("score.svg");
-    expect(resolveCliOutputPath({ input: "score.drum", format: "ir", output: null })).toBeNull();
+    expect(resolveCliOutputPath({ input: "score.drum", format: "xml", output: null, parser: "lezer" })).toBe("score.xml");
+    expect(resolveCliOutputPath({ input: "score.drum", format: "svg", output: null, parser: "lezer" })).toBe("score.svg");
+    expect(resolveCliOutputPath({ input: "score.drum", format: "ir", output: null, parser: "lezer" })).toBeNull();
   });
 
   it("formats warnings from normalized parser errors", async () => {

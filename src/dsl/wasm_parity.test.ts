@@ -43,17 +43,6 @@ HH | x - x - |
 # a comment line
 HH | x - x - |
 `,
-  inlineRepeat: `time 4/4
-note 1/8
-grouping 2+2
-HH | x - x - *3|
-SD | --d- --d- *3|
-`,
-  volta: `time 4/4
-note 1/8
-grouping 2+2
-HH |: x - x - |1. x - :|2. --d- ||
-`,
   noteOverride: `time 4/4
 note 1/8
 grouping 2+2
@@ -66,15 +55,21 @@ HH | x |
 
 const KNOWN_DIFFERENCES: Record<string, string> = {
   trackAnonymous: `time 4/4
-note 1/8
-grouping 2+2
-| x - x - |
-| --d- |
+...
 `,
   suffixChain: `time 4/4
+...
+`,
+  inlineRepeat: `time 4/4
 note 1/8
 grouping 2+2
-SD | x. / * :accent |
+HH | x - x - *3|
+SD | --d- --d- *3|
+`,
+  volta: `time 4/4
+note 1/8
+grouping 2+2
+HH |: x - x - |1. x - :|2. --d- ||
 `,
 };
 

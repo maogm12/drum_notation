@@ -6,6 +6,7 @@ import { renderScoreToSvg } from "./src/vexflow/index";
 import { highlightDslStatic } from "./src/drummark";
 import { DEFAULT_RENDER_OPTIONS } from "./src/vexflow/types";
 import { ensureCliRenderEnvironment } from "./src/cli_render_env";
+import { initWasm } from "./src/wasm/drummark_wasm";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -51,7 +52,7 @@ async function buildDocs(templatePath: string, outputPath: string) {
         let renderedSvg = "";
         try {
             globalThis.document.body.innerHTML = '<div id="vd-container"></div>';
-            const score = buildNormalizedScore(dsl);
+            const score = buildNormalizedScore(dsl, "wasm");
             renderedSvg = await renderScoreToSvg(score, {
                 ...DEFAULT_RENDER_OPTIONS,
             });
@@ -104,6 +105,8 @@ async function buildDocs(templatePath: string, outputPath: string) {
 }
 
 async function run() {
+    console.log("Initializing WASM parser...");
+    await initWasm();
     await buildDocs('docs.template.html', 'docs.html');
     await buildDocs('docs_zh.template.html', 'docs_zh.html');
     console.log("Build complete.");

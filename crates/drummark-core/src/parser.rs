@@ -55,6 +55,11 @@ impl<'a> Parser<'a> {
 
     fn peek_n(&mut self, n: usize) -> Option<Token> {
         while self.peek_buf.len() <= n {
+            // Check for multi-rest pattern before delegating to lexer
+            if let Some(mr) = self.try_scan_multi_rest() {
+                self.peek_buf.push(mr);
+                continue;
+            }
             match self.lexer.next() {
                 Some(Ok(Token::Space | Token::Comment)) => continue,
                 Some(Ok(t)) => self.peek_buf.push(t),
@@ -69,11 +74,45 @@ impl<'a> Parser<'a> {
         Some(self.peek_buf[n].clone())
     }
 
+    fn try_scan_multi_rest(&mut self) -> Option<Token> {
+        let pos = self.lexer.span().end;
+        let rest = &self.source[pos..];
+        let bytes = rest.as_bytes();
+        if !rest.starts_with("--") { return None; }
+        let mut i = 2;
+        while bytes.get(i) == Some(&b'-') { i += 1; }
+        while bytes.get(i) == Some(&b' ') || bytes.get(i) == Some(&b'\t') { i += 1; }
+        let num_start = i;
+        if bytes.get(i) == Some(&b'1') {
+            i += 1;
+            if !bytes.get(i).map_or(false, |b| b.is_ascii_digit()) { return None; }
+            while bytes.get(i).map_or(false, |b| b.is_ascii_digit()) { i += 1; }
+        } else if bytes.get(i).map_or(false, |b| (b'2'..=b'9').contains(b)) {
+            i += 1;
+            while bytes.get(i).map_or(false, |b| b.is_ascii_digit()) { i += 1; }
+        } else {
+            return None;
+        }
+        let count: u32 = rest[num_start..i].parse().unwrap_or(2);
+        while bytes.get(i) == Some(&b' ') || bytes.get(i) == Some(&b'\t') { i += 1; }
+        if bytes.get(i) != Some(&b'-') || bytes.get(i + 1) != Some(&b'-') { return None; }
+        i += 2;
+        while bytes.get(i) == Some(&b'-') { i += 1; }
+        for _ in 0..i {
+            let _ = self.lexer.next();
+        }
+        Some(Token::MultiRest(count))
+    }
+
     fn next(&mut self) -> Result<Token, ParseError> {
         let t = if !self.peek_buf.is_empty() {
             self.peek_buf.remove(0)
         } else {
             loop {
+                // Check for multi-rest pattern before delegating to lexer
+                if let Some(mr) = self.try_scan_multi_rest() {
+                    break mr;
+                }
                 match self.lexer.next() {
                     Some(Ok(Token::Space | Token::Comment)) => continue,
                     Some(Ok(t)) => break t,
@@ -194,9 +233,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn extract_multi_rest_count(&self, s: &str) -> u32 {
-        s.chars().filter(|c| c.is_ascii_digit()).collect::<String>().parse().unwrap_or(1)
-    }
 
     // ── Document ──────────────────────────────────────────────────
 
@@ -408,7 +444,6 @@ impl<'a> Parser<'a> {
                 Some(_) => { tokens.push(self.parse_measure_expr()?); }
             }
         }
-        // Omit trailing empty measures (barline followed by another barline or newline with no content)
         if tokens.is_empty() && matches!(self.peek(), Some(Token::Newline) | None) {
             return Ok(None);
         }
@@ -433,11 +468,8 @@ impl<'a> Parser<'a> {
                 let count = self.lexer.span().len() as u32;
                 Ok(MeasureExpr::MeasureRepeat(count))
             }
-            Some(Token::MultiRest) => {
+            Some(Token::MultiRest(count)) => {
                 let _t = self.next().unwrap();
-                let span = self.lexer.span();
-                let s = &self.source[span.start..span.end];
-                let count = self.extract_multi_rest_count(s);
                 Ok(MeasureExpr::MultiRest(count))
             }
             Some(Token::InlineRepeat) => {
@@ -755,11 +787,40 @@ mod tests {
     }
 
     #[test]
-    fn test_simple_track_short() {
-        let doc = parse_ok("HH | x |\n");
-        let line = &doc.paragraphs[0].lines[0];
-        assert_eq!(line.track.as_deref(), Some("HH"));
-        assert_eq!(line.measures.len(), 1);
+    fn test_multi_track() {
+        let src = "time 4/4\nnote 1/8\ngrouping 2+2\nHH | x - x - |\nSD | --d- --d- |\n";
+        let doc = parse_ok(src);
+        assert_eq!(doc.paragraphs.len(), 1);
+        let lines = &doc.paragraphs[0].lines;
+        assert_eq!(lines.len(), 2, "should have HH and SD lines");
+        assert_eq!(lines[0].track.as_deref(), Some("HH"));
+        assert_eq!(lines[1].track.as_deref(), Some("SD"));
+    }
+
+    #[test]
+    fn test_dashes_as_rests() {
+        // --d- should be parsed as Rest+Rest+d+Rest, not as MultiRest
+        let src = "time 4/4\nnote 1/8\ngrouping 2+2\nSD | --d- --d- |\n";
+        let doc = parse_ok(src);
+        let tokens = &doc.paragraphs[0].lines[0].measures[0].tokens;
+        // Should have 8 tokens: Rest,Rest,Glyphd,Rest,Rest,Rest,Glyphd,Rest
+        assert_eq!(tokens.len(), 8);
+    }
+
+    #[test]
+    fn test_multi_rest_parser() {
+        let src = "time 4/4\nnote 1/8\ngrouping 2+2\nHH | x | --2-- |\n";
+        let doc = parse_ok(src);
+        let measures = &doc.paragraphs[0].lines[0].measures;
+        eprintln!("measures.len={}", measures.len());
+        for (i, m) in measures.iter().enumerate() {
+            eprintln!("  m[{}]: {} tokens", i, m.tokens.len());
+        }
+        assert_eq!(measures.len(), 2, "expected 2 measures (x and --2--)");
+        let m2_tokens = &measures[1].tokens;
+        eprintln!("m2 tokens: {:?}", m2_tokens);
+        assert_eq!(m2_tokens.len(), 1, "expected 1 multi-rest token");
+        assert!(matches!(m2_tokens[0], MeasureExpr::MultiRest(2)));
     }
 
     #[test]
