@@ -2353,3 +2353,29 @@ Extends the Local Barline Mapping from Addendum 2026-05-06 with:
 ### Grammar Rule
 
 `VoltaTerminatorRepeatStartBarline { "|:." }` placed before `VoltaBarline` and `RepeatStartBarline` in `BarlineNode` alternatives.
+
+## Addendum v1.6: Rust/WASM Parser Backend
+
+### Architecture
+
+A third parser backend (`"wasm"`) is implemented as a Rust crate (`crates/drummark-core`) compiled to WebAssembly. The parser is a hand-written recursive descent parser using the `logos` crate for tokenization. The WASM output uses `wasm-bindgen` + `js-sys` for direct JS object construction (no JSON serialization).
+
+### Tokenization
+
+- Logos-based lexer with longest-match disambiguation
+- ~130 token variants covering all grammar tokens
+- Error characters emitted as `FreeText` tokens for header values and unknown content
+
+### Pipeline Integration
+
+`ast.ts` accepts `parseMode: "lezer" | "regex" | "wasm"` (default: `"lezer"`). WASM is initialized on application startup (`main.tsx`) and via `initSync` for Node.js test environments.
+
+### Native CLI
+
+A native binary is available at `cargo run -- <file> --format json`. The binary reads DrumMark source and outputs the parsed AST as JSON.
+
+### WASM Size
+
+- Compiled WASM: ~101KB uncompressed, ~34KB gzipped
+- JS glue: ~11KB
+- No `serde` / `serde_json` dependency
