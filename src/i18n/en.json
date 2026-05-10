@@ -51,6 +51,7 @@
   "settings.titleGap": "Title Gap",
   "settings.voltaOffset": "Volta Offset",
   "settings.hairpinOffset": "Hairpin Vertical Offset",
+  "settings.useWasmParser": "Use WASM Parser",
   "settings.decrease": "Decrease {{label}}",
   "settings.increase": "Increase {{label}}"
 }

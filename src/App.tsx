@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type UIEvent } from "preact/compat";
-import { buildNormalizedScore, type ParseError, type ParseMode } from "./dsl";
+import { buildNormalizedScore, type ParseError } from "./dsl";
 import { type NormalizedScore } from "./dsl";
 import type { VexflowRenderOptions, PagePadding } from "./vexflow";
 import { resolveDocumentTheme, subscribeToThemeChanges, type AppTheme } from "./theme";
@@ -661,16 +661,8 @@ export function App() {
   const latestHandledRequestIdRef = useRef(0);
   const [isScorePending, setIsScorePending] = useState(false);
   const [analysis, setAnalysis] = useState(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const parseMode: ParseMode = urlParams.get("wasm") === "1" ? "wasm" : "lezer";
-    let initialScore;
-    try {
-      initialScore = buildNormalizedScore(dsl, parseMode);
-    } catch {
-      // WASM may not be ready yet — fall back to lezer
-      initialScore = buildNormalizedScore(dsl, "lezer");
-    }
-    return { score: initialScore, parseMode };
+    const initialScore = buildNormalizedScore(dsl);
+    return { score: initialScore };
   });
   const [staffXml, setStaffXml] = useState<string | null>(null);
   const [isXmlPending, setIsXmlPending] = useState(false);
@@ -688,8 +680,9 @@ export function App() {
     () => ({
       dsl,
       hideVoice2Rests: settings.hideVoice2Rests,
+      useWasmParser: settings.useWasmParser,
     }),
-    [dsl, settings.hideVoice2Rests],
+    [dsl, settings.hideVoice2Rests, settings.useWasmParser],
   );
   const debouncedAnalysisInput = useDebouncedValue(
     analysisInput,
@@ -745,6 +738,7 @@ export function App() {
       id: nextId,
       dsl: debouncedAnalysisInput.dsl,
       hideVoice2Rests: debouncedAnalysisInput.hideVoice2Rests,
+      parseMode: settings.useWasmParser ? "wasm" : "lezer",
     });
   }, [debouncedAnalysisInput]);
 

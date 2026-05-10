@@ -1,12 +1,13 @@
 /// <reference lib="webworker" />
 
-import { buildMusicXml, buildNormalizedScore } from "./dsl";
+import { buildMusicXml, buildNormalizedScore, type ParseMode } from "./dsl";
 
 type ParseRequest = {
   type: "parse";
   id: number;
   dsl: string;
   hideVoice2Rests: boolean;
+  parseMode: ParseMode;
 };
 
 type GenerateXmlRequest = {
@@ -35,8 +36,8 @@ self.onmessage = (event: MessageEvent<ScoreWorkerRequest>) => {
   const msg = event.data;
 
   if (msg.type === "parse") {
-    const { id, dsl } = msg;
-    const score = buildNormalizedScore(dsl);
+    const { id, dsl, parseMode } = msg;
+    const score = buildNormalizedScore(dsl, parseMode);
     lastScore = score;
     const response: ParseResponse = { type: "parse", id, score };
     self.postMessage(response);

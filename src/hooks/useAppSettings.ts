@@ -6,6 +6,7 @@ export type MainTab = "editor" | "page" | "xml";
 
 export interface AppSettings {
   hideVoice2Rests: boolean;
+  useWasmParser: boolean;
   pagePadding: PagePadding;
   staffScale: number;
   headerStaffSpacing: number;
@@ -26,6 +27,7 @@ export interface AppSettings {
 
 export const defaultSettings: AppSettings = {
   hideVoice2Rests: false,
+  useWasmParser: false,
   pagePadding: { top: 30, right: 50, bottom: 30, left: 50 },
   staffScale: 0.75,
   headerStaffSpacing: 60,

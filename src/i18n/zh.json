@@ -51,6 +51,7 @@
   "settings.titleGap": "标题间距",
   "settings.voltaOffset": "房子偏移",
   "settings.hairpinOffset": "强弱记号偏移",
+  "settings.useWasmParser": "使用 WASM 解析器",
   "settings.decrease": "减小 {{label}}",
   "settings.increase": "增大 {{label}}"
 }

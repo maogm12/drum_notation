@@ -108,7 +108,17 @@ export function SettingsPanel({
             Advanced Debugging
             <span className="settings-accordion-chevron" aria-hidden />
           </Accordion.Trigger>
-          <Accordion.Content className="settings-content">
+           <Accordion.Content className="settings-content">
+            <label className="setting-row toggle">
+              <span>{t("settings.useWasmParser")}</span>
+              <Switch.Root
+                className="toggle-root"
+                checked={settings.useWasmParser}
+                onCheckedChange={(checked) => updateSetting("useWasmParser", checked)}
+              >
+                <Switch.Thumb className="toggle-thumb" />
+              </Switch.Root>
+            </label>
             <div className="settings-group-label">Coordinate Offsets</div>
             <NumericSettingControl
               label="Tempo X"
