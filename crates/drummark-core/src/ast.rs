@@ -1,9 +1,11 @@
+#[derive(Debug)]
 pub struct Document {
     pub headers: HeaderSection,
     pub paragraphs: Vec<Paragraph>,
     pub errors: Vec<ParseError>,
 }
 
+#[derive(Debug, Default)]
 pub struct HeaderSection {
     pub title: Option<String>,
     pub subtitle: Option<String>,
@@ -15,21 +17,25 @@ pub struct HeaderSection {
     pub divisions: Option<u32>,
 }
 
+#[derive(Debug, Default)]
 pub struct Paragraph {
     pub note: Option<(u32, u32)>,
     pub lines: Vec<TrackLine>,
 }
 
+#[derive(Debug)]
 pub struct TrackLine {
     pub track: Option<String>,
     pub measures: Vec<MeasureSection>,
 }
 
+#[derive(Debug)]
 pub struct MeasureSection {
     pub barline: Barline,
     pub tokens: Vec<MeasureExpr>,
 }
 
+#[derive(Debug)]
 pub enum Barline {
     Regular,
     Double,
@@ -41,6 +47,7 @@ pub enum Barline {
     Volta { prefix: String, numbers: Vec<u32> },
 }
 
+#[derive(Debug)]
 pub enum MeasureExpr {
     BasicNote(NoteExpr),
     SummonedNote { track: String, note: NoteExpr },
@@ -58,6 +65,7 @@ pub enum MeasureExpr {
     NavJump(String),
 }
 
+#[derive(Debug)]
 pub struct NoteExpr {
     pub glyph: String,
     pub dots: u32,
@@ -66,6 +74,7 @@ pub struct NoteExpr {
     pub modifiers: Vec<String>,
 }
 
+#[derive(Debug)]
 pub struct GroupExpr {
     pub n: Option<u32>,
     pub items: Vec<MeasureExpr>,

@@ -181,11 +181,9 @@ pub enum Token {
     #[token(">")] DecrescendoStart,
     #[token("!")] HairpinEnd,
 
-    // --- HeaderWord: no regex token here. The lexer returns Err(()) for
-    // unrecognized characters, and the parser groups consecutive unknowns
-    // into HeaderWord chunks for header values, composer names, etc.
-    // This avoids the priority conflict between #[token] literals and
-    // a catch-all #[regex] pattern.
+    // Synthetic: parser-generated free text (not derived by Logos)
+    #[logos(skip)]
+    FreeText(String),
 }
 
 impl Token {
