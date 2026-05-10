@@ -154,11 +154,23 @@ impl<'a> Parser<'a> {
     fn token_text(&self, t: &Token) -> String {
         match t {
             Token::FreeText(s) => s.clone(),
-            // For glyph tokens in header values, extract the actual source text
+            // Return actual source character for single-char tokens
+            Token::Dot => ".".to_string(),
+            Token::Star => "*".to_string(),
+            Token::Slash => "/".to_string(),
+            Token::Colon => ":".to_string(),
+            Token::Plus => "+".to_string(),
+            Token::Comma => ",".to_string(),
+            Token::Rest => "-".to_string(),
+            Token::CrescendoStart => "<".to_string(),
+            Token::DecrescendoStart => ">".to_string(),
+            Token::HairpinEnd => "!".to_string(),
+            // Glyph tokens: return the glyph name
             _ => {
                 if let Some(g) = t.glyph_name() {
                     g.to_string()
                 } else {
+                    // Fallback for any other token in header context
                     format!("{:?}", t)
                 }
             }
