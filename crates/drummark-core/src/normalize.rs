@@ -264,6 +264,11 @@ pub fn normalize_document(doc: &Document) -> NormalizedScore {
                     _ => {}
                 }
 
+                // Check closing barline for repeat-end
+                if let Some(Barline::RepeatEnd) = &ms.closing_barline {
+                    repeat_end = true;
+                }
+
                 // Scan tokens
                 let mut tokens: Vec<TokenGlyph> = ms.tokens.iter()
                     .map(to_token_glyph)

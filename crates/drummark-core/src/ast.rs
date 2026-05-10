@@ -33,6 +33,7 @@ pub struct TrackLine {
 pub struct MeasureSection {
     pub barline: Barline,
     pub tokens: Vec<MeasureExpr>,
+    pub closing_barline: Option<Barline>,
 }
 
 #[derive(Debug)]

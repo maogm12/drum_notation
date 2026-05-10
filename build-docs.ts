@@ -52,7 +52,7 @@ async function buildDocs(templatePath: string, outputPath: string) {
         let renderedSvg = "";
         try {
             globalThis.document.body.innerHTML = '<div id="vd-container"></div>';
-            const score = buildNormalizedScore(dsl, "wasm");
+            const score = buildNormalizedScore(dsl);
             renderedSvg = await renderScoreToSvg(score, {
                 ...DEFAULT_RENDER_OPTIONS,
             });

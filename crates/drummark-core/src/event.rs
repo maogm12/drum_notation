@@ -161,7 +161,7 @@ pub fn token_to_events(
             let group_tuplet = if effective_count > effective_span
                 && !(reduced_normal == 1 && (reduced_actual == 2 || reduced_actual == 4))
             {
-                Some((reduced_actual, reduced_normal))
+                Some((effective_count, effective_span))
             } else {
                 inherited_tuplet
             };

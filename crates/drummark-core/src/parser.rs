@@ -435,10 +435,15 @@ impl<'a> Parser<'a> {
     fn parse_track_line(&mut self) -> Result<TrackLine, ParseError> {
         let track = self.parse_optional_track_name();
         let mut measures = Vec::new();
+        let mut last_was_repeat_end = false;
         loop {
             match self.peek() {
                 Some(Token::Newline) | None => break,
                 Some(ref t) if t.is_barline_like() => {
+                    // Check if this barline closes the previous measure
+                    if matches!(t, Token::RepeatEnd) && !measures.is_empty() {
+                        last_was_repeat_end = true;
+                    }
                     if let Some(ms) = self.parse_measure_section()? {
                         measures.push(ms);
                     } else { break; }
@@ -448,6 +453,12 @@ impl<'a> Parser<'a> {
                         measures.push(ms);
                     }
                 }
+            }
+        }
+        // Apply repeat-end to last measure
+        if last_was_repeat_end {
+            if let Some(last) = measures.last_mut() {
+                last.closing_barline = Some(Barline::RepeatEnd);
             }
         }
         Ok(TrackLine { track, measures })
@@ -466,7 +477,7 @@ impl<'a> Parser<'a> {
         if tokens.is_empty() && matches!(self.peek(), Some(Token::Newline) | None) {
             return Ok(None);
         }
-        Ok(Some(MeasureSection { barline, tokens }))
+        Ok(Some(MeasureSection { barline, tokens, closing_barline: None }))
     }
 
     fn parse_optional_track_name(&mut self) -> Option<String> {

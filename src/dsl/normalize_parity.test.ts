@@ -43,19 +43,15 @@ grouping 2+2
 HH | @segno x |
 HH | @dc |
 `,
-  multiRest: `time 4/4
-note 1/8
-grouping 2+2
-HH | x | --2-- |
-`,
-};
-
-// Parser-level structural differences (WASM and TS model bars differently)
-const KNOWN: Record<string, string> = {
   repeats: `time 4/4
 note 1/8
 grouping 2+2
 HH |: x - x - :|
+`,
+  multiRest: `time 4/4
+note 1/8
+grouping 2+2
+HH | x | --2-- |
 `,
 };
 
@@ -84,45 +80,22 @@ function stripPosition(s: any): any {
 
 // ── Tests ────────────────────────────────────────────────────────
 
-describe("WASM vs TS (known differences)", () => {
-  for (const [name, source] of Object.entries(KNOWN)) {
-    it.skip(name, () => {
-      const wasm = buildNormalizedScoreWasm(source);
-      const ts = buildNormalizedScore(source, "lezer");
-      const w = stripPosition(normalizeScore(wasm));
-      const t = stripPosition(normalizeScore(ts));
-      expect(w).toEqual(t);
-    });
-  }
-});
-
 describe("WASM vs TS normalizer parity", () => {
   for (const [name, source] of Object.entries(FIXTURES)) {
     it(name, () => {
       const wasm = buildNormalizedScoreWasm(source);
       const ts = buildNormalizedScore(source, "lezer");
 
-      // Compare semantic structure (strip position fields)
       const w = stripPosition(normalizeScore(wasm));
       const t = stripPosition(normalizeScore(ts));
 
-      // Compare measure count
       expect(w.measures.length).toBe(t.measures.length);
 
-      // For each measure, compare events
       for (let mi = 0; mi < w.measures.length; mi++) {
         const wm = w.measures[mi];
         const tm = t.measures[mi];
-
-        // Compare barline
         expect(wm.barline).toBe(tm.barline);
 
-        // Compare event count
-        if (wm.events.length !== tm.events.length) {
-          console.error(`Measure ${mi}: WASM ${wm.events.length} events, TS ${tm.events.length} events`);
-        }
-
-        // Compare first few events
         const minLen = Math.min(wm.events.length, tm.events.length);
         for (let ei = 0; ei < minLen; ei++) {
           const we = wm.events[ei];
