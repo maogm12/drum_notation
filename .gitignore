@@ -6,3 +6,5 @@ docs.html
 docs_zh.html
 crates/drummark-core/target/
 crates/drummark-core/pkg/
+crates/drummark-layout/target/
+crates/drummark-layout/pkg/
