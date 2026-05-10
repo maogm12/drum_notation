@@ -10,6 +10,10 @@ pub mod to_js;
 pub mod fraction;
 pub mod resolve;
 pub mod validate;
+pub mod hairpin;
+pub mod nav;
+pub mod volta;
+pub mod event;
 
 /// Parse a DrumMark source string and return the AST as a JS object.
 ///
