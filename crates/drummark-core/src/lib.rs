@@ -9,6 +9,7 @@ pub mod error;
 pub mod to_js;
 pub mod fraction;
 pub mod resolve;
+pub mod validate;
 
 /// Parse a DrumMark source string and return the AST as a JS object.
 ///
