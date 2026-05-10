@@ -2,11 +2,13 @@
 /* eslint-disable */
 
 /**
+ * Parse and normalize a DrumMark source string in one call.
+ * Returns the NormalizedScore as a JS object tree.
+ */
+export function build_normalized_score(source: string): any;
+
+/**
  * Parse a DrumMark source string and return the AST as a JS object.
- *
- * Returns a JsValue representing the DocumentSkeleton tree directly
- * consumable by the TypeScript wrapper layer. No JSON serialization
- * is performed — the object tree is constructed via js_sys primitives.
  */
 export function parse(source: string): any;
 
@@ -14,6 +16,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly build_normalized_score: (a: number, b: number) => number;
     readonly parse: (a: number, b: number) => number;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
