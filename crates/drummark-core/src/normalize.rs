@@ -377,6 +377,15 @@ pub fn normalize_document(doc: &Document) -> NormalizedScore {
                 }
             }
 
+            // Post-process barline: merge repeat-start + repeat-end into repeat-both
+            if repeat_start && repeat_end {
+                barline = Some("repeat-both".to_string());
+            } else if repeat_start {
+                barline = barline.or(Some("repeat-start".to_string()));
+            } else if repeat_end {
+                barline = Some("repeat-end".to_string());
+            }
+
             all_measures.push(NormalizedMeasure {
                 index: m_idx as u32,
                 global_index,
