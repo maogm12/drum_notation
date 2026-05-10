@@ -330,7 +330,7 @@ pub fn calculate_token_weight_as_fraction(
     let dot_denom = 1u64 << dots; // 2^dots
     let dot_num = (1u64 << (dots + 1))
         .saturating_sub(1);
-    let dot_weight = Fraction::new(dot_num, dot_denom);
+    let _dot_weight = Fraction::new(dot_num, dot_denom);
 
     // Net stars/halves
     let net = stars as i32 - halves as i32;
