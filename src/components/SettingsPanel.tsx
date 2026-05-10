@@ -53,7 +53,7 @@ export function SettingsPanel({
 }) {
   const { t } = useT();
   return (
-    <Accordion.Root type="multiple" className="settings-accordion" defaultValue={["page-layout", "notation", "staff-header"]}>
+    <Accordion.Root type="multiple" className="settings-accordion" defaultValue={["page-layout", "notation", "staff-header", "debug"]}>
       <Accordion.Item value="page-layout">
         <Accordion.Trigger className="settings-trigger">
           {t("settings.pageLayout")}
@@ -108,7 +108,7 @@ export function SettingsPanel({
             Advanced Debugging
             <span className="settings-accordion-chevron" aria-hidden />
           </Accordion.Trigger>
-           <Accordion.Content className="settings-content">
+          <Accordion.Content className="settings-content">
             <label className="setting-row toggle">
               <span>{t("settings.useLayoutEngine")}</span>
               <Switch.Root

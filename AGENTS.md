@@ -63,6 +63,18 @@ The final task MUST always include consolidation of the proposal into the spec (
 
 After authoring the tasks file, the agent MUST invoke a sub-agent to review it, following the **Linear Ledger Protocol** (append-only, Review Rounds + Author Responses). The reviewer checks for completeness, correct ordering, and coverage of all proposal requirements.
 
+#### Task Independence Rule
+
+Each task MUST be independently implementable and testable. Avoid the "normalize.rs trap" — where tasks are defined as logical phases but the implementation reveals they are deeply coupled (e.g., `token_to_events` cannot work without `resolve_token`, which cannot work without `fraction`). Rules:
+
+- **Every task must have a clear input/output contract** — what data goes in, what data comes out.
+- **Every task must be testable in isolation** — using hand-crafted mock inputs, without requiring downstream or upstream tasks to be complete.
+- **Tasks that compute positions from shared data (e.g., note X from slot→X mapping) depend on foundation tasks, but tasks that compute DIFFERENT element types from the SAME shared data are parallel and independent.** Example: note placement depends on `slot→X`, but barline placement and beam placement are independent of each other — both read slot→X results, neither reads the other's output.
+- **Algorithms with no external dependencies (e.g., edge element stacking, fixpoint loop) must be their own task**, testable with a hand-crafted list of mock edge elements.
+- **Orchestrator tasks (that call modules in sequence) come last**, after all independent modules are built and tested.
+
+The reviewer MUST check for task independence and reject designs where multiple tasks share hidden coupling.
+
 ### 5. Final Approval, Consolidation & Stamp
 
 - Implementation may ONLY begin after **both** the proposal and tasks files achieve sub-agent `STATUS: APPROVED`.

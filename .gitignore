@@ -8,3 +8,4 @@ crates/drummark-core/target/
 crates/drummark-core/pkg/
 crates/drummark-layout/target/
 crates/drummark-layout/pkg/
+src/wasm/layout-pkg/
