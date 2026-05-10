@@ -328,7 +328,8 @@ pub fn normalize_document(doc: &Document) -> NormalizedScore {
 
                 // Expand tokens to events
                 let mut position = Fraction::zero();
-                for (t_idx, token) in tokens.iter().enumerate() {
+                for (_t_idx, token) in tokens.iter().enumerate() {
+                    let token_start = position.multiply(duration_per_quarter);
                     // Validate modifier legality
                     if let TokenGlyph::Basic { value, modifiers, .. } = token {
                         if value != "-" {
@@ -352,7 +353,7 @@ pub fn normalize_document(doc: &Document) -> NormalizedScore {
 
                     let events = token_to_events(
                         token,
-                        position,
+                        token_start,
                         dur,
                         context_track,
                         para_idx as u32,
