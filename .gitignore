@@ -4,3 +4,5 @@ dist
 *.tsbuildinfo
 docs.html
 docs_zh.html
+crates/drummark-core/target/
+crates/drummark-core/pkg/
