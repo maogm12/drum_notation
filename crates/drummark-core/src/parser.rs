@@ -321,12 +321,18 @@ impl<'a> Parser<'a> {
                     result.push(' ');
                 }
                 Some(_) => {
-                    let t = self.next().unwrap(); // use next() which skips trivia
+                    let t = self.next().unwrap();
                     result.push_str(&self.token_text(&t));
                 }
             }
         }
-        result.trim().to_string()
+        let s = result.trim().to_string();
+        // Strip surrounding quotes from title/subtitle/composer values
+        if s.len() >= 2 && s.starts_with('"') && s.ends_with('"') {
+            s[1..s.len()-1].to_string()
+        } else {
+            s
+        }
     }
 
     fn consume_newline(&mut self) {

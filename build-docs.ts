@@ -52,12 +52,13 @@ async function buildDocs(templatePath: string, outputPath: string) {
         let renderedSvg = "";
         try {
             globalThis.document.body.innerHTML = '<div id="vd-container"></div>';
-            const score = buildNormalizedScore(dsl, "wasm");
+            const score = buildNormalizedScore(dsl);
             renderedSvg = await renderScoreToSvg(score, {
                 ...DEFAULT_RENDER_OPTIONS,
             });
         } catch (e: any) {
             console.error(`     Error rendering ${id}:`, e.message);
+            if (e.stack) console.error(`     ${e.stack.split('\n').slice(0,5).join('\n')}`);
             renderedSvg = `<div class="staff-error">Render Error: ${e.message}</div>`;
         }
 
