@@ -52,6 +52,7 @@ export const I18N_KEYS = [
   "settings.voltaOffset",
   "settings.hairpinOffset",
   "settings.useWasmParser",
+  "settings.useLayoutEngine",
   "settings.decrease",
   "settings.increase",
 ] as const;

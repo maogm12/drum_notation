@@ -444,6 +444,26 @@ const PagePreview = memo(function PagePreview({
       measureWidthCompression,
     };
 
+    let useLayoutEngine = false;
+    try {
+      const raw = localStorage.getItem("drummark-settings");
+      if (raw) useLayoutEngine = (JSON.parse(raw) as any)?.useLayoutEngine ?? false;
+    } catch {}
+    if (useLayoutEngine) {
+      import("./renderer/svgRenderer")
+        .then(({ renderScoreToSvg }) => {
+          const svg = renderScoreToSvg(score, {
+            staffScale, pageWidth: pdfPageWidth, showTitle: true,
+          });
+          const markup = `<section class="staff-preview-page" data-page="1">${svg}</section>`;
+          setRenderedMarkup(markup); setIsRendering(false);
+          if (shellRef.current) { shellRef.current.scrollTop = targetTop; shellRef.current.scrollLeft = targetLeft; }
+          setError(null);
+        })
+        .catch((e) => { setIsRendering(false); setError(String(e)); });
+      return;
+    }
+
     import("./vexflow")
       .then(({ renderScorePagesToSvgs }) => renderScorePagesToSvgs(score, opts))
       .then((pages) => {

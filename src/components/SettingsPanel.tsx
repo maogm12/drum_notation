@@ -110,6 +110,16 @@ export function SettingsPanel({
           </Accordion.Trigger>
            <Accordion.Content className="settings-content">
             <label className="setting-row toggle">
+              <span>{t("settings.useLayoutEngine")}</span>
+              <Switch.Root
+                className="toggle-root"
+                checked={settings.useLayoutEngine}
+                onCheckedChange={(checked) => updateSetting("useLayoutEngine", checked)}
+              >
+                <Switch.Thumb className="toggle-thumb" />
+              </Switch.Root>
+            </label>
+            <label className="setting-row toggle">
               <span>{t("settings.useWasmParser")}</span>
               <Switch.Root
                 className="toggle-root"
