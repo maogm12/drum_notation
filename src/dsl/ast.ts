@@ -1,4 +1,6 @@
 import { parseDocumentSkeletonFromLezer } from "./lezer_skeleton";
+import { parseDocumentSkeleton } from "./parser";
+import { parseDocumentSkeletonFromWasmSync } from "../wasm/skeleton";
 import {
   TRACKS,
   type DocumentSkeleton,
@@ -398,10 +400,28 @@ function validateMeasureMetadata(paragraphs: ScoreParagraph[], errors: ParseErro
   }
 }
 
-export function buildScoreAst(sourceOrSkeleton: string | DocumentSkeleton): ScoreAst {
-  const skeleton = typeof sourceOrSkeleton === "string"
-    ? parseDocumentSkeletonFromLezer(sourceOrSkeleton)
-    : sourceOrSkeleton;
+export type ParseMode = "lezer" | "regex" | "wasm";
+
+export function buildScoreAst(
+  sourceOrSkeleton: string | DocumentSkeleton,
+  parseMode: ParseMode = "lezer",
+): ScoreAst {
+  let skeleton: DocumentSkeleton;
+  if (typeof sourceOrSkeleton === "string") {
+    switch (parseMode) {
+      case "regex":
+        skeleton = parseDocumentSkeleton(sourceOrSkeleton);
+        break;
+      case "wasm":
+        // WASM must be pre-initialized via initWasm() before calling
+        skeleton = parseDocumentSkeletonFromWasmSync(sourceOrSkeleton);
+        break;
+      default:
+        skeleton = parseDocumentSkeletonFromLezer(sourceOrSkeleton);
+    }
+  } else {
+    skeleton = sourceOrSkeleton;
+  }
   const errors = [...skeleton.errors];
   validateGrouping(skeleton.headers as ScoreAst["headers"], errors);
   const paragraphs: ScoreParagraph[] = [];
