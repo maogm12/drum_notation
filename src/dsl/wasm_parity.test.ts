@@ -26,21 +26,51 @@ note 1/8
 grouping 2+2
 HH | x < d > ! |
 `,
+  paragraphs: `time 4/4
+note 1/8
+grouping 2+2
+HH | x - x - |
+SD | --d- --d- |
+
+HH | x - x - |
+SD | --d- --d- |
+`,
+  comments: `time 4/4
+note 1/8
+grouping 2+2
+HH | x - x - |
+
+# a comment line
+HH | x - x - |
+`,
+  inlineRepeat: `time 4/4
+note 1/8
+grouping 2+2
+HH | x - x - *3|
+SD | --d- --d- *3|
+`,
+  volta: `time 4/4
+note 1/8
+grouping 2+2
+HH |: x - x - |1. x - :|2. --d- ||
+`,
+  noteOverride: `time 4/4
+note 1/8
+grouping 2+2
+HH | x - x - |
+
+note 1/4
+HH | x |
+`,
 };
 
-// Cases with known structural differences between WASM and Lezer
 const KNOWN_DIFFERENCES: Record<string, string> = {
-  // Lezer model: anonymous lines → separate ParsedTrackLines
-  // WASM model: anonymous barlines → consecutive MeasureSections in one line
-  // Resolution: normalizer handles both; not a rendering difference.
   trackAnonymous: `time 4/4
 note 1/8
 grouping 2+2
 | x - x - |
 | --d- |
 `,
-  // Lezer does not parse `*` and `/` suffix chars after space.
-  // WASM correctly parses the full suffix chain per the grammar.
   suffixChain: `time 4/4
 note 1/8
 grouping 2+2
@@ -50,12 +80,6 @@ SD | x. / * :accent |
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-/** Strip fields that differ between WASM and Lezer by design:
- *  - Source positions (WASM doesn't track line numbers yet)
- *  - Content/raw strings (different generation strategies)
- *  - null vs undefined (WASM always emits null for absent fields)
- *  - Extra WASM-only fields (voltaIndices, voltaTerminator, multiRestCount, measureRepeatSlashes)
- */
 function normalize(s: any): any {
   if (s === null || s === undefined) return undefined;
   if (Array.isArray(s)) return s.map(normalize);
@@ -63,21 +87,16 @@ function normalize(s: any): any {
 
   const out: Record<string, any> = {};
   for (const k of Object.keys(s)) {
-    // Skip source-position fields (WASM doesn't track line numbers)
     if (k === "line" || k === "lineNumber" || k === "startLine" ||
         k === "startOffset" || k === "globalIndex") continue;
-    // Skip raw/source text (generated differently)
     if (k === "raw" || k === "content" || k === "source") continue;
-    // Strip barline: "regular" (Lezer omits it, WASM always emits)
     if (k === "barline" && s[k] === "regular") continue;
-    // Skip WASM-only false/null/undefined placeholder fields
     if (k === "voltaTerminator" && s[k] === false) continue;
     if (s[k] === null || s[k] === undefined) continue;
     if (k === "voltaIndices" || k === "measureRepeatSlashes" ||
         k === "multiRestCount" || k === "trackOverride") {
       if (s[k] === null) continue;
     }
-
     const v = normalize(s[k]);
     if (v !== undefined) out[k] = v;
   }
@@ -95,10 +114,8 @@ describe("WASM vs Lezer parser parity", () => {
     it(name, () => {
       const wasm = parseDocumentSkeletonFromWasmSync(source);
       const lezer = parseDocumentSkeletonFromLezer(source);
-
       const w = normalize(normalizeSkeleton(wasm));
       const l = normalize(normalizeSkeleton(lezer));
-
       try {
         expect(w).toEqual(l);
       } catch (e) {
