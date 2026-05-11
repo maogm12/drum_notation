@@ -280,8 +280,8 @@ pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
         // Opening barline
         append_line(&sys_arr, margin, s_top, margin, s_bot, "#333", 1.0);
 
-        // Percussion clef — centered on middle line (3rd line, between spaces 2-3)
-        append_text(&sys_arr, margin + 5.0, s_mid + 6.0, "\u{E069}", "Bravura,Academico", 30.0, "#333");
+        // Percussion clef — centered on middle line
+        append_text(&sys_arr, margin + 5.0, s_mid + 3.0, "\u{E069}", "Bravura,Academico", 30.0, "#333");
 
         // Time signature — fills spaces 1-4 (full staff height)
         if is_first_system {
