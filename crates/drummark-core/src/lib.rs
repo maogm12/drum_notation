@@ -196,53 +196,128 @@ pub fn build_layout_plan(source: &str) -> JsValue {
     let opts = drummark_layout::LayoutOptions::default();
     let systems = drummark_layout::build_systems(&layout_score, &opts);
 
-    // 5. Serialize to JsValue
+    // 5. Serialize as pages → systems → drawing instructions
+    let page_obj = Object::new();
+    // One page for now — all systems
     let sys_arr = Array::new();
+    let page_w = 612.0_f64;
+    let page_h = 792.0_f64;
+    let margin = 30.0_f64;
+    let staff_ss = 10.0_f64; // staff space: 10pt
+
     for sys in &systems {
-        let s_obj = Object::new();
-        set(&s_obj, "y", &JsValue::from_f64(sys.y as f64));
-        set(&s_obj, "height", &JsValue::from_f64(sys.height as f64));
+        let sy = sys.y as f64;
+        let s_top = sy + staff_ss;
+        let s_bot = sy + staff_ss * 5.0;
+        let s_mid = sy + staff_ss * 3.0;
 
-        let m_arr = Array::new();
-        for m in &sys.measures {
-            let m_obj = Object::new();
-            set(&m_obj, "x", &JsValue::from_f64(m.x as f64));
-            set(&m_obj, "width", &JsValue::from_f64(m.width as f64));
-
-            let e_arr = Array::new();
-            for e in &m.elements {
-                let e_obj = Object::new();
-                set(&e_obj, "kind", &JsValue::from_str(match e.kind {
-                    drummark_layout::ElementKind::Note => "note",
-                    drummark_layout::ElementKind::Rest => "rest",
-                    drummark_layout::ElementKind::Barline => "barline",
-                    drummark_layout::ElementKind::Sticking => "sticking",
-                    drummark_layout::ElementKind::Modifier => "modifier",
-                    drummark_layout::ElementKind::GraceNote => "graceNote",
-                    drummark_layout::ElementKind::Beam => "beam",
-                    drummark_layout::ElementKind::Stem => "stem",
-                    _ => "other",
-                }));
-                set(&e_obj, "x", &JsValue::from_f64(e.x as f64));
-                set(&e_obj, "y", &JsValue::from_f64(e.y as f64));
-                set(&e_obj, "width", &JsValue::from_f64(e.width as f64));
-                set(&e_obj, "height", &JsValue::from_f64(e.height as f64));
-                if let Some(cp) = e.smufl_codepoint {
-                    set(&e_obj, "codepoint", &JsValue::from_f64(cp as f64));
-                }
-                if let Some(v) = e.voice { set(&e_obj, "voice", &JsValue::from_f64(v as f64)); }
-                if let Some(v) = e.stem_up { set(&e_obj, "stemUp", &JsValue::from_f64(if v { 1.0 } else { 0.0 })); }
-                if let Some(ref t) = e.text { set(&e_obj, "text", &JsValue::from_str(t)); }
-                e_arr.push(&e_obj);
-            }
-            set(&m_obj, "elements", &e_arr);
-            m_arr.push(&m_obj);
+        // Staff lines (5 lines spanning the full system)
+        for i in 0..5 {
+            let ly = sy + staff_ss * (1.0 + i as f64);
+            append_line(&sys_arr, margin, ly, page_w - margin, ly, "#999", 0.6);
         }
-        set(&s_obj, "measures", &m_arr);
-        sys_arr.push(&s_obj);
+
+        // Opening barline (left edge of system)
+        append_line(&sys_arr, margin, s_top, margin, s_bot, "#333", 1.0);
+
+        // Percussion clef
+        append_text(&sys_arr, margin + 5.0, s_mid + 6.0, "\u{E069}", "Bravura,Academico", 30.0, "#333");
+
+        // Time signature (first system only)
+        if sys.measures.first().map(|m| m.x) == sys.measures.first().map(|m| m.x) {
+            let tsx = margin + 35.0;
+            let beats = layout_score.header.time_beats;
+            let unit = layout_score.header.time_beat_unit;
+            append_text(&sys_arr, tsx, sy + staff_ss * 1.6, &num_to_glyph(beats), "Bravura,Academico", 30.0, "#333");
+            append_text(&sys_arr, tsx, sy + staff_ss * 3.6, &num_to_glyph(unit), "Bravura,Academico", 30.0, "#333");
+        }
+
+        // Measures
+        for m in &sys.measures {
+            // Measure barline
+            append_line(&sys_arr, m.x as f64, s_top, m.x as f64, s_bot, "#333", 1.0);
+
+            // Notes/barlines/etc
+            for e in &m.elements {
+                match e.kind {
+                    drummark_layout::ElementKind::Note => {
+                        if let Some(cp) = e.smufl_codepoint {
+                            let ny = e.y as f64; // notehead Y
+                            append_text(&sys_arr, e.x as f64 - 7.0, ny, &char::from_u32(cp).unwrap_or('?').to_string(), "Bravura,Academico", 30.0, "#333");
+                            // Stem
+                            let sx = e.x as f64 + 9.0;
+                            let up = e.stem_up.unwrap_or(true);
+                            if up {
+                                append_line(&sys_arr, sx, ny - staff_ss * 3.5, sx, ny, "#333", 1.2);
+                            } else {
+                                append_line(&sys_arr, sx, ny, sx, ny + staff_ss * 3.5, "#333", 1.2);
+                            }
+                        }
+                    }
+                    drummark_layout::ElementKind::Beam => {
+                        if let (Some(fx), Some(tx)) = (e.from_x, e.to_x) {
+                            let by = e.y as f64;
+                            append_line(&sys_arr, fx as f64, by, tx as f64, by, "#333", 4.0);
+                        }
+                    }
+                    drummark_layout::ElementKind::Text => {
+                        if let Some(ref t) = e.text {
+                            append_text(&sys_arr, e.x as f64, e.y as f64, t, "Academico,serif", 12.0, "#333");
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // Closing barline (right edge of last measure)
+        if let Some(last) = sys.measures.last() {
+            let ex = last.x as f64 + last.width as f64;
+            append_line(&sys_arr, ex, s_top, ex, s_bot, "#333", 1.0);
+            append_line(&sys_arr, ex + 3.0, s_top, ex + 3.0, s_bot, "#333", 3.0);
+        }
     }
 
+    let pages_arr = Array::new();
+    let p_obj = Object::new();
+    set(&p_obj, "width", &JsValue::from_f64(page_w));
+    set(&p_obj, "height", &JsValue::from_f64(page_h));
+    set(&p_obj, "systems", &sys_arr);
+    pages_arr.push(&p_obj);
+
     let result = Object::new();
-    set(&result, "systems", &sys_arr);
+    set(&result, "pages", &pages_arr);
     result.into()
+}
+
+fn append_line(arr: &Array, x1: f64, y1: f64, x2: f64, y2: f64, stroke: &str, sw: f64) {
+    let obj = Object::new();
+    set(&obj, "tag", &JsValue::from_str("line"));
+    set(&obj, "x1", &JsValue::from_f64(x1));
+    set(&obj, "y1", &JsValue::from_f64(y1));
+    set(&obj, "x2", &JsValue::from_f64(x2));
+    set(&obj, "y2", &JsValue::from_f64(y2));
+    set(&obj, "stroke", &JsValue::from_str(stroke));
+    set(&obj, "strokeWidth", &JsValue::from_f64(sw));
+    arr.push(&obj);
+}
+
+fn append_text(arr: &Array, x: f64, y: f64, text: &str, font: &str, size: f64, fill: &str) {
+    let obj = Object::new();
+    set(&obj, "tag", &JsValue::from_str("text"));
+    set(&obj, "x", &JsValue::from_f64(x));
+    set(&obj, "y", &JsValue::from_f64(y));
+    set(&obj, "text", &JsValue::from_str(text));
+    set(&obj, "fontFamily", &JsValue::from_str(font));
+    set(&obj, "fontSize", &JsValue::from_f64(size));
+    set(&obj, "fill", &JsValue::from_str(fill));
+    arr.push(&obj);
+}
+
+fn num_to_glyph(n: u32) -> String {
+    match n {
+        0 => "\u{E080}", 1 => "\u{E081}", 2 => "\u{E082}", 3 => "\u{E083}", 4 => "\u{E084}",
+        5 => "\u{E085}", 6 => "\u{E086}", 7 => "\u{E087}", 8 => "\u{E088}", 9 => "\u{E089}",
+        _ => n.to_string(),
+    }.to_string()
 }
