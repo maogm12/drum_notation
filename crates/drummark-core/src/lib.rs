@@ -277,9 +277,6 @@ pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
             append_line(&sys_arr, margin, ly, page_w - margin, ly, "#999", 0.6);
         }
 
-        // Opening barline
-        append_line(&sys_arr, margin, s_top, margin, s_bot, "#333", 1.0);
-
         // Percussion clef — dominant-baseline="central" centers on y
         append_text(&sys_arr, margin + 5.0, s_mid, "\u{E069}", "Bravura,Academico", 30.0, "#333");
 
@@ -288,19 +285,20 @@ pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
             let tsx = margin + 35.0;
             let beats = layout_score.header.time_beats;
             let unit = layout_score.header.time_beat_unit;
-            // Upper at 2nd line, lower at 4th line (dominant-baseline="central")
             append_text(&sys_arr, tsx, sy + staff_ss * 2.0, &num_to_glyph(beats), "Bravura,Academico", 30.0, "#333");
             append_text(&sys_arr, tsx, sy + staff_ss * 4.0, &num_to_glyph(unit), "Bravura,Academico", 30.0, "#333");
         }
 
-        // Measures — equal width: system_width / measure_count
-        let available_w = (page_w - margin * 2.0 - 70.0).max(100.0); // minus clef+timesig area
+        // Measures — equal width. No barline between clef/ts and first measure.
+        let available_w = (page_w - margin * 2.0 - 70.0).max(100.0);
         let mw = available_w / measures.len().max(1) as f64;
         let mut mx = content_start;
 
-        for m in measures {
-            // Barline
-            append_line(&sys_arr, mx, s_top, mx, s_bot, "#333", 1.0);
+        for (mi, m) in measures.iter().enumerate() {
+            // Barline between measures (skip first — clef/ts area is the left boundary)
+            if mi > 0 {
+                append_line(&sys_arr, mx, s_top, mx, s_bot, "#333", 1.0);
+            }
 
             // Notes — distribute evenly across measure width
             let hit_count = m.events.iter().filter(|e| e.kind == drummark_layout::EventKind::Hit).count().max(1);
