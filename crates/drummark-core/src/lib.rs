@@ -293,25 +293,18 @@ pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
             append_text(&sys_arr, tsx, sy + staff_ss * 4.0, &num_to_glyph(unit), "Bravura,Academico", 30.0, "#333");
         }
 
-        // Measures in this system — lay out horizontally
+        // Measures — equal width: system_width / measure_count
+        let available_w = (page_w - margin * 2.0 - 70.0).max(100.0); // minus clef+timesig area
+        let mw = available_w / measures.len().max(1) as f64;
         let mut mx = content_start;
-        for m in measures {
-            // Measure width: proportional to time signature beats.
-            // Compact: measure-repeat (30pt), multi-rest (60pt).
-            let mw = if m.measure_repeat_slashes.is_some() {
-                30.0
-            } else if m.multi_rest_count.is_some() {
-                60.0
-            } else {
-                (layout_score.header.time_beats as f64 * 50.0).max(80.0)
-            };
 
+        for m in measures {
             // Barline
             append_line(&sys_arr, mx, s_top, mx, s_bot, "#333", 1.0);
 
             // Notes — distribute evenly across measure width
             let hit_count = m.events.iter().filter(|e| e.kind == drummark_layout::EventKind::Hit).count().max(1);
-            let note_spacing = (mw - 24.0) / hit_count as f64; // 24pt = left/right padding
+            let note_spacing = (mw - 24.0) / hit_count as f64;
             let mut note_idx = 0;
             for ev in &m.events {
                 if ev.kind == drummark_layout::EventKind::Hit {
