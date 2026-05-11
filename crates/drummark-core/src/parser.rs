@@ -434,16 +434,27 @@ impl<'a> Parser<'a> {
 
     fn parse_track_line(&mut self) -> Result<TrackLine, ParseError> {
         let track = self.parse_optional_track_name();
-        let mut measures = Vec::new();
-        let mut last_was_repeat_end = false;
+        let mut measures: Vec<MeasureSection> = Vec::new();
         loop {
             match self.peek() {
                 Some(Token::Newline) | None => break,
-                Some(ref t) if t.is_barline_like() => {
-                    // Check if this barline closes the previous measure
-                    if matches!(t, Token::RepeatEnd) && !measures.is_empty() {
-                        last_was_repeat_end = true;
+                Some(Token::RepeatEnd) => {
+                    // :| is always a closing barline, never an opening
+                    self.next().ok(); // consume :|
+                    if let Some(last) = measures.last_mut() {
+                        last.closing_barline = Some(Barline::RepeatEnd);
                     }
+                    // After :|, there may be a volta number without | prefix
+                    match self.peek() {
+                        Some(Token::Newline) | None => break,
+                        _ => {
+                            if let Some(ms) = self.parse_measure_section()? {
+                                measures.push(ms);
+                            }
+                        }
+                    }
+                }
+                Some(ref t) if t.is_barline_like() => {
                     if let Some(ms) = self.parse_measure_section()? {
                         measures.push(ms);
                     } else { break; }
@@ -453,12 +464,6 @@ impl<'a> Parser<'a> {
                         measures.push(ms);
                     }
                 }
-            }
-        }
-        // Apply repeat-end to last measure
-        if last_was_repeat_end {
-            if let Some(last) = measures.last_mut() {
-                last.closing_barline = Some(Barline::RepeatEnd);
             }
         }
         Ok(TrackLine { track, measures })
@@ -474,10 +479,17 @@ impl<'a> Parser<'a> {
                 Some(_) => { tokens.push(self.parse_measure_expr()?); }
             }
         }
-        if tokens.is_empty() && matches!(self.peek(), Some(Token::Newline) | None) {
+        // Capture closing :| if present (consumed by parse_track_line's loop)
+        let closing_barline = if let Some(Token::RepeatEnd) = self.peek() {
+            self.next().ok();
+            Some(Barline::RepeatEnd)
+        } else {
+            None
+        };
+        if tokens.is_empty() && closing_barline.is_none() && matches!(self.peek(), Some(Token::Newline) | None) {
             return Ok(None);
         }
-        Ok(Some(MeasureSection { barline, tokens, closing_barline: None }))
+        Ok(Some(MeasureSection { barline, tokens, closing_barline }))
     }
 
     fn parse_optional_track_name(&mut self) -> Option<String> {
@@ -687,11 +699,30 @@ impl<'a> Parser<'a> {
     // ── Barline ───────────────────────────────────────────────────
 
     fn parse_barline(&mut self) -> Result<Barline, ParseError> {
+        // Handle standalone volta number without | prefix (appears after :|)
+        if let Some(Token::Integer(n)) = self.peek() {
+            self.next().ok();
+            let mut nums = vec![n as u32];
+            loop {
+                if let Some(Token::Integer(n2)) = self.peek() {
+                    self.next().ok();
+                    nums.push(n2 as u32);
+                } else { break; }
+                if self.peek() == Some(Token::Comma) { self.next().ok(); }
+                else { break; }
+            }
+            if self.peek() == Some(Token::Dot) {
+                self.next().ok();
+                return Ok(Barline::Volta { prefix: String::new(), numbers: nums });
+            }
+            return Err(self.error_at(self.last_end, "expected barline or volta number (e.g. '1.'), found standalone number"));
+        }
+
         match self.next()? {
             Token::VoltaRepeatStart => Ok(Barline::VoltaRepeatStart),
             Token::DoubleVoltaTerminator => Ok(Barline::DoubleVoltaTerminator),
             Token::RepeatStart => self.parse_volta_barline("|:"),
-            Token::RepeatEnd => self.parse_volta_barline(":|"),
+            Token::RepeatEnd => Ok(Barline::RepeatEnd),
             Token::DoubleBarline => Ok(Barline::Double),
             Token::VoltaTerminator => Ok(Barline::VoltaTerminator),
             Token::Barline => self.parse_volta_barline("|"),

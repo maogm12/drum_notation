@@ -5,8 +5,68 @@ use crate::hairpin::{HairpinState, HairpinIntent, HairpinKind, collect_track_hai
 use crate::nav::{StartNav, EndNav, Anchor, BarlineType};
 use crate::volta::{VoltaMeasure, propagate_voltas};
 use crate::event::{NormalizedEvent, EventKind, TokenGlyph, token_to_events, scan_hairpin_tokens};
-use crate::ast::{Document, Barline, MeasureExpr, NoteExpr, GroupExpr, MeasureSection, TrackLine, HeaderSection};
+use crate::ast::{Document, Barline, MeasureExpr, MeasureSection, TrackLine, HeaderSection};
 use std::collections::{HashMap, HashSet};
+
+// ── Inline-Repeat Expansion Helpers ────────────────────────────────
+
+/// Expanded form of a MeasureSection after inline-repeat processing.
+#[derive(Debug, Clone)]
+struct ExpandedSection {
+    tokens: Vec<MeasureExpr>,
+    barline: Barline,
+    closing_barline: Option<Barline>,
+}
+
+/// Split tokens into content and optional trailing InlineRepeat(n).
+fn split_inline_repeat(tokens: &[MeasureExpr]) -> (Vec<MeasureExpr>, Option<u32>) {
+    let mut content = Vec::new();
+    let mut inline_repeat = None;
+    for tok in tokens {
+        match tok {
+            MeasureExpr::InlineRepeat(n) => inline_repeat = Some(*n),
+            _ => content.push(tok.clone()),
+        }
+    }
+    (content, inline_repeat)
+}
+
+/// Expand a TrackLine's measure sections, resolving inline repeats.
+fn expand_line_sections(line: &TrackLine) -> Vec<ExpandedSection> {
+    let mut result = Vec::new();
+    let mut prev_tokens: Option<Vec<MeasureExpr>> = None;
+
+    for section in &line.measures {
+        let (content, repeat) = split_inline_repeat(&section.tokens);
+
+        if let Some(n) = repeat {
+            // Expand content into n total copies
+            for i in 0..n as usize {
+                let is_first = i == 0;
+                let is_last = i + 1 == n as usize;
+                result.push(ExpandedSection {
+                    tokens: content.clone(),
+                    barline: if is_first { section.barline.clone() } else { Barline::Regular },
+                    closing_barline: if is_last { section.closing_barline.clone() } else { None },
+                });
+            }
+            if !content.is_empty() {
+                prev_tokens = Some(content);
+            }
+        } else {
+            // No inline repeat: use section as-is
+            result.push(ExpandedSection {
+                tokens: content,
+                barline: section.barline.clone(),
+                closing_barline: section.closing_barline.clone(),
+            });
+            if !section.tokens.is_empty() {
+                prev_tokens = Some(section.tokens.clone());
+            }
+        }
+    }
+    result
+}
 
 // ── Normalized Score Output Types ────────────────────────────────
 
@@ -216,43 +276,8 @@ pub fn normalize_document(doc: &Document) -> NormalizedScore {
     let mut global_index: u32 = 0;
     let mut repeat_spans: Vec<RepeatSpan> = Vec::new();
 
-    // Per-track hairpin state
-    let mut hairpin_states: HashMap<String, HairpinState> = HashMap::new();
-
-    for (para_idx, para) in doc.paragraphs.iter().enumerate() {
-        let para_note_value = para.note.map(|(_, d)| d).unwrap_or(note_value);
-
-        // Determine measure count from first line
-        let measure_count = para.lines.first()
-            .map(|l| l.measures.len() as u32)
-            .unwrap_or(0);
-
-        for m_idx in 0..measure_count as usize {
-            let mut measure_events: Vec<NormalizedEvent> = Vec::new();
-            let mut measure_hairpins: Vec<HairpinIntent> = Vec::new();
-            let mut barline: Option<String> = None;
-            let mut repeat_start = false;
-            let mut repeat_end = false;
-            let mut volta_indices: Option<Vec<u32>> = None;
-            let mut volta_terminator = false;
-            let mut measure_repeat_slashes: Option<u32> = None;
-            let mut multi_rest_count: Option<u32> = None;
-            let mut start_nav: Option<StartNav> = None;
-            let mut end_nav: Option<EndNav> = None;
-
-            for line in &para.lines {
-                if m_idx >= line.measures.len() { continue; }
-                let ms = &line.measures[m_idx];
-                let context_track = line.track.as_deref();
-                let use_track = context_track.unwrap_or("ANONYMOUS");
-
-                // Barline metadata from first line
-                if barline.is_none() {
-                    barline = barline_type(&ms.barline);
-                }
-
                 // Check for repeat/volta metadata
-                match &ms.barline {
+                match &es.barline {
                     Barline::RepeatStart | Barline::VoltaRepeatStart => repeat_start = true,
                     Barline::RepeatEnd => repeat_end = true,
                     Barline::Volta { numbers, .. } => {
@@ -265,12 +290,12 @@ pub fn normalize_document(doc: &Document) -> NormalizedScore {
                 }
 
                 // Check closing barline for repeat-end
-                if let Some(Barline::RepeatEnd) = &ms.closing_barline {
+                if let Some(Barline::RepeatEnd) = &es.closing_barline {
                     repeat_end = true;
                 }
 
                 // Scan tokens
-                let mut tokens: Vec<TokenGlyph> = ms.tokens.iter()
+                let mut tokens: Vec<TokenGlyph> = es.tokens.iter()
                     .map(to_token_glyph)
                     .collect();
 
@@ -283,7 +308,7 @@ pub fn normalize_document(doc: &Document) -> NormalizedScore {
                 });
 
                 // Scan for measure-repeat, multi-rest, nav markers
-                for tok in &ms.tokens {
+                for tok in &es.tokens {
                     match tok {
                         MeasureExpr::MeasureRepeat(count) => {
                             measure_repeat_slashes = Some(*count);
@@ -479,5 +504,21 @@ fn token_weight(token: &TokenGlyph) -> Fraction {
         TokenGlyph::Crescendo | TokenGlyph::Decrescendo | TokenGlyph::HairpinEnd => {
             Fraction::zero()
         }
+    }
+}
+
+#[cfg(test)]
+mod volta_test {
+    use crate::parser;
+    use crate::normalize;
+
+    #[test]
+    fn test_volta_barlines() {
+        let p = parser::Parser::new("|: s s |1. d d :|2. g g |");
+        let doc = p.parse().unwrap();
+        let score = normalize::normalize_document(&doc);
+        assert_eq!(score.measures.len(), 3);
+        assert_eq!(score.measures[1].volta, Some(vec![1]));
+        assert_eq!(score.measures[2].volta, Some(vec![2]));
     }
 }

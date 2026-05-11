@@ -36,7 +36,7 @@ pub struct MeasureSection {
     pub closing_barline: Option<Barline>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Barline {
     Regular,
     Double,
@@ -48,7 +48,7 @@ pub enum Barline {
     Volta { prefix: String, numbers: Vec<u32> },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum MeasureExpr {
     BasicNote(NoteExpr),
     SummonedNote { track: String, note: NoteExpr },
@@ -66,7 +66,7 @@ pub enum MeasureExpr {
     NavJump(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NoteExpr {
     pub glyph: String,
     pub dots: u32,
@@ -75,7 +75,7 @@ pub struct NoteExpr {
     pub modifiers: Vec<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GroupExpr {
     pub n: Option<u32>,
     pub items: Vec<MeasureExpr>,

@@ -86,12 +86,26 @@ fn normalize_to_js(score: &normalize::NormalizedScore) -> JsValue {
         let mo = Object::new();
         set(&mo, "index", &JsValue::from_f64(m.index as f64));
         set(&mo, "globalIndex", &JsValue::from_f64(m.global_index as f64));
+        set(&mo, "paragraphIndex", &JsValue::from_f64(m.paragraph_index as f64));
+        set(&mo, "measureInParagraph", &JsValue::from_f64(m.measure_in_paragraph as f64));
+        set(&mo, "noteValue", &JsValue::from_f64(m.note_value as f64));
         if let Some(ref b) = m.barline { set(&mo, "barline", &JsValue::from_str(b)); }
         if let Some(ref s) = m.start_nav {
             set(&mo, "startNav", &JsValue::from_str(s.kind_name()));
         }
         if let Some(ref e) = m.end_nav {
             set(&mo, "endNav", &JsValue::from_str(e.kind_name()));
+        }
+        if let Some(ref v) = m.volta {
+            let va = Array::new();
+            for n in v { va.push(&JsValue::from_f64(*n as f64)); }
+            set(&mo, "volta", &va.into());
+        }
+        if let Some(slashes) = m.measure_repeat_slashes {
+            set(&mo, "measureRepeatSlashes", &JsValue::from_f64(slashes as f64));
+        }
+        if let Some(count) = m.multi_rest_count {
+            set(&mo, "multiRestCount", &JsValue::from_f64(count as f64));
         }
         // Events
         let eva = Array::new();
