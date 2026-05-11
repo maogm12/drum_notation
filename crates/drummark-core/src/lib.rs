@@ -296,22 +296,33 @@ pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
         // Measures in this system — lay out horizontally
         let mut mx = content_start;
         for m in measures {
-            let slots = m.events.len().max(4) as f64;
-            let mw = (slots * 15.0).max(60.0);
+            // Measure width: proportional to time signature beats.
+            // Compact: measure-repeat (30pt), multi-rest (60pt).
+            let mw = if m.measure_repeat_slashes.is_some() {
+                30.0
+            } else if m.multi_rest_count.is_some() {
+                60.0
+            } else {
+                (layout_score.header.time_beats as f64 * 50.0).max(80.0)
+            };
 
             // Barline
             append_line(&sys_arr, mx, s_top, mx, s_bot, "#333", 1.0);
 
-            // Notes
-            let mut nx = mx + 12.0;
+            // Notes — distribute evenly across measure width
+            let hit_count = m.events.iter().filter(|e| e.kind == drummark_layout::EventKind::Hit).count().max(1);
+            let note_spacing = (mw - 24.0) / hit_count as f64; // 24pt = left/right padding
+            let mut note_idx = 0;
             for ev in &m.events {
                 if ev.kind == drummark_layout::EventKind::Hit {
-                    // Simplified Y — use dominant-baseline="central" in renderer
-                    let ny = s_top + staff_ss * 2.0; // SD-like position
-                    let cp = 0xE0A4u32; // default notehead
+                    let nx = mx + 12.0 + note_spacing * note_idx as f64;
+                    let ny = s_top + staff_ss * 2.0;
+                    let cp = 0xE0A4u32;
                     append_text(&sys_arr, nx - 7.0, ny, &char::from_u32(cp).unwrap_or('?').to_string(), "Bravura,Academico", 30.0, "#333");
                     append_line(&sys_arr, nx + 9.0, ny - staff_ss * 3.5, nx + 9.0, ny, "#333", 1.2);
+                    note_idx += 1;
                 }
+            }
                 nx += 20.0;
             }
 
