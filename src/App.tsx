@@ -381,6 +381,7 @@ const PagePreview = memo(function PagePreview({
   measureWidthCompression,
   active,
   theme,
+  useLayoutEngine,
 }: {
   score: NormalizedScore | null;
   pagePadding: PagePadding;
@@ -401,6 +402,7 @@ const PagePreview = memo(function PagePreview({
   measureWidthCompression: number;
   active: boolean;
   theme: AppTheme;
+  useLayoutEngine: boolean;
 }) {
   const { t } = useT();
   const shellRef = useRef<HTMLDivElement | null>(null);
@@ -444,19 +446,12 @@ const PagePreview = memo(function PagePreview({
       measureWidthCompression,
     };
 
-    let useLayoutEngine = false;
-    try {
-      const raw = localStorage.getItem("drummark-settings");
-      if (raw) useLayoutEngine = (JSON.parse(raw) as any)?.useLayoutEngine ?? false;
-    } catch {}
     if (useLayoutEngine) {
       import("./renderer/svgRenderer")
         .then(({ renderScoreToSvg }) => {
-          const svg = renderScoreToSvg(score, {
-            staffScale, pageWidth: pdfPageWidth, showTitle: true,
-          });
-          const markup = `<section class="staff-preview-page" data-page="1">${svg}</section>`;
-          setRenderedMarkup(markup); setIsRendering(false);
+          const svg = renderScoreToSvg(score, { staffScale, pageWidth: pdfPageWidth, showTitle: true });
+          setRenderedMarkup(`<section class="staff-preview-page" data-page="1">${svg}</section>`);
+          setIsRendering(false);
           if (shellRef.current) { shellRef.current.scrollTop = targetTop; shellRef.current.scrollLeft = targetLeft; }
           setError(null);
         })
@@ -484,7 +479,7 @@ const PagePreview = memo(function PagePreview({
         console.error("VexFlow render error:", renderError);
         setError(msg || t("preview.error"));
       });
-  }, [score, systemSpacing, stemLength, voltaSpacing, hairpinOffsetY, headerStaffSpacing, headerHeight, active, hideVoice2Rests, pagePadding, staffScale, tempoOffsetX, tempoOffsetY, measureNumberOffsetX, measureNumberOffsetY, measureNumberFontSize, durationSpacingCompression, measureWidthCompression]);
+  }, [score, systemSpacing, stemLength, voltaSpacing, hairpinOffsetY, headerStaffSpacing, headerHeight, active, hideVoice2Rests, pagePadding, staffScale, tempoOffsetX, tempoOffsetY, measureNumberOffsetX, measureNumberOffsetY, measureNumberFontSize, durationSpacingCompression, measureWidthCompression, useLayoutEngine]);
 
   if (!score) {
     return (
@@ -1226,9 +1221,10 @@ export function App() {
                       measureNumberFontSize={settings.measureNumberFontSize}
                       durationSpacingCompression={settings.durationSpacingCompression}
                       measureWidthCompression={settings.measureWidthCompression}
-                      active={true}
-                      theme={resolvedTheme}
-                    />
+                       active={true}
+                       theme={resolvedTheme}
+                       useLayoutEngine={settings.useLayoutEngine}
+                     />
                   ) : null}
                 </div>
               </div>
