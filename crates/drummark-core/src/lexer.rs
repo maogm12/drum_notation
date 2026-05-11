@@ -109,6 +109,7 @@ pub enum Token {
     #[token("open")]      ModOpen,
     #[token("bell")]      ModBell,
     #[token("rim")]       ModRim,
+    #[token("^")]         ModMarcato,
 
     // --- Glyph tokens (longest-first for prefix disambiguation) ---
     // 3-char glyphs
@@ -288,6 +289,7 @@ impl Token {
             Token::ModOpen => Some("open"),
             Token::ModBell => Some("bell"),
             Token::ModRim => Some("rim"),
+            Token::ModMarcato => Some("marcato"),
             _ => None,
         }
     }

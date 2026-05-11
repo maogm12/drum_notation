@@ -466,11 +466,14 @@ pub fn normalize_document(doc: &Document) -> NormalizedScore {
                     position = position.add(weight);
                 }
 
-                // Collect hairpins per track
+                // Collect hairpins per track (positions are raw weight counts — convert to time)
                 let hairpin_scan = scan_hairpin_tokens(&tokens, Fraction::zero(), divisions);
+                let hairpin_scan_time: Vec<_> = hairpin_scan.iter().map(|(pos, kind, sig)| {
+                    (pos.multiply(duration_per_quarter), *kind, *sig)
+                }).collect();
                 let state = hairpin_states.entry(use_track.to_string())
                     .or_insert_with(HairpinState::new);
-                let track_hairpins = collect_track_hairpins(&hairpin_scan, global_index as usize, state);
+                let track_hairpins = collect_track_hairpins(&hairpin_scan_time, global_index as usize, state);
                 measure_hairpins.extend(track_hairpins);
             }
 

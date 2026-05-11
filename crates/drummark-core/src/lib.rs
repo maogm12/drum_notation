@@ -107,6 +107,23 @@ fn normalize_to_js(score: &normalize::NormalizedScore) -> JsValue {
         if let Some(count) = m.multi_rest_count {
             set(&mo, "multiRestCount", &JsValue::from_f64(count as f64));
         }
+        // Hairpins
+        if !m.hairpins.is_empty() {
+            let ha = Array::new();
+            for hp in &m.hairpins {
+                let ho = Object::new();
+                set(&ho, "kind", &JsValue::from_str(match hp.kind {
+                    hairpin::HairpinKind::Crescendo => "crescendo",
+                    hairpin::HairpinKind::Decrescendo => "decrescendo",
+                }));
+                set(&ho, "start", &frac_js(hp.start));
+                set(&ho, "startMeasureIndex", &JsValue::from_f64(hp.start_measure_index as f64));
+                set(&ho, "end", &frac_js(hp.end));
+                set(&ho, "endMeasureIndex", &JsValue::from_f64(hp.end_measure_index as f64));
+                ha.push(&ho.into());
+            }
+            set(&mo, "hairpins", &ha.into());
+        }
         // Events
         let eva = Array::new();
         for ev in &m.events {
@@ -121,6 +138,14 @@ fn normalize_to_js(score: &normalize::NormalizedScore) -> JsValue {
             set(&evo, "start", &frac_js(ev.start));
             set(&evo, "duration", &frac_js(ev.duration));
             set(&evo, "voice", &JsValue::from_f64(ev.voice as f64));
+            if !ev.modifiers.is_empty() {
+                let ma_mod = Array::new();
+                for m in &ev.modifiers { ma_mod.push(&JsValue::from_str(m)); }
+                set(&evo, "modifiers", &ma_mod.into());
+            }
+            if let Some(ref m) = ev.modifier {
+                set(&evo, "modifier", &JsValue::from_str(m));
+            }
             eva.push(&evo.into());
         }
         set(&mo, "events", &eva.into());

@@ -646,8 +646,11 @@ impl<'a> Parser<'a> {
                 Some(Token::Colon) => {
                     self.next().ok();
                     if let Some(ref t) = self.peek() {
-                        if let Some(m) = t.modifier_name() { self.next().ok(); modifiers.push(m.to_string()); }
-                        else { break; }
+                        if let Some(m) = t.modifier_name() {
+                            self.next().ok(); modifiers.push(m.to_string());
+                        } else if matches!(t, Token::DecrescendoStart) {
+                            self.next().ok(); modifiers.push("accent".to_string());
+                        } else { break; }
                     } else { break; }
                 }
                 _ => break,
