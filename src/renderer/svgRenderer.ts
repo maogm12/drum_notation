@@ -17,7 +17,9 @@ export function renderScoreToSvg(
   _options?: { staffScale?: number; pageWidth?: number; showTitle?: boolean },
 ): string {
   const pageWidth = _options?.pageWidth ?? 612;
+  const pageHeight = 792; // US Letter
   const showTitle = _options?.showTitle ?? true;
+  const usableBottom = pageHeight - 40; // bottom margin
   const marginLeft = MARGIN_LEFT;
   const systemStart = marginLeft + CLEF_WIDTH + TIME_SIG_WIDTH + 10; // after clef + time sig
 
@@ -52,16 +54,17 @@ export function renderScoreToSvg(
     systems.push(currentSystem);
   }
 
-  // Assign Y positions to systems
+  // Assign Y positions to systems, with page breaks
   let sysY = staffY;
   for (const sys of systems) {
+    if (sysY + STAFF_HEIGHT + STAFF_SPACE * 2 > usableBottom) {
+      sysY = STAFF_SPACE * 2; // new page, top margin
+    }
     sys.y = sysY;
     sysY += STAFF_HEIGHT + STAFF_SPACE * 5;
   }
 
-  const svgHeight = Math.max(sysY + STAFF_SPACE * 2, 500);
-
-  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${pageWidth}" height="${svgHeight}" viewBox="0 0 ${pageWidth} ${svgHeight}" font-family="Bravura,Academico" font-size="10pt">`;
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${pageWidth}" height="${pageHeight}" viewBox="0 0 ${pageWidth} ${pageHeight}" font-family="Bravura,Academico" font-size="10pt">`;
   svg += `<defs><style>
     .vf-staff { stroke: #333; stroke-width: 1; fill: none; }
     .vf-notehead { fill: #333; font-size: ${NOTEHEAD_FONT}pt; }
