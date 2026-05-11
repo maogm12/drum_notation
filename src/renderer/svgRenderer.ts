@@ -26,24 +26,40 @@ export function renderScoreToSvg(
     staffY += HEADER_HEIGHT;
   }
 
-  // Measure layout
-  let measures: { m: NormalizedMeasure; x: number; width: number }[] = [];
+  // ── System Layout ────────────────────────────────────────────
+
+  type System = { y: number; measures: { m: NormalizedMeasure; x: number; width: number }[] };
+  let systems: System[] = [];
+  let currentPara = 0;
+  let currentSystem: System = { y: 0, measures: [] };
   let cursorX = systemStart;
-  const usableWidth = pageWidth - marginLeft * 2 - CLEF_WIDTH - TIME_SIG_WIDTH;
 
   for (const measure of score.measures) {
-    const slots = Math.max(measure.events.length || 4, 4);
-    // VexFlow: measure width ≈ slots * 15pt (approximate, will vary by content)
-    const width = Math.max(slots * 15, 60);
-    if (cursorX + width > systemStart + usableWidth && measures.length > 0) {
-      staffY += STAFF_HEIGHT + STAFF_SPACE * 5;
+    // System break at paragraph boundary
+    const paraIdx = (measure as any).paragraphIndex ?? 0;
+    if (paraIdx !== currentPara && currentSystem.measures.length > 0) {
+      systems.push(currentSystem);
+      currentSystem = { y: 0, measures: [] };
       cursorX = systemStart;
+      currentPara = paraIdx;
     }
-    measures.push({ m: measure, x: cursorX, width });
+    const slots = Math.max(measure.events.length || 4, 4);
+    const width = Math.max(slots * 15, 60);
+    currentSystem.measures.push({ m: measure, x: cursorX, width });
     cursorX += width;
   }
+  if (currentSystem.measures.length > 0) {
+    systems.push(currentSystem);
+  }
 
-  const totalHeight = staffY + STAFF_HEIGHT + STAFF_SPACE * 3;
+  // Assign Y positions to systems
+  let sysY = staffY;
+  for (const sys of systems) {
+    sys.y = sysY;
+    sysY += STAFF_HEIGHT + STAFF_SPACE * 5;
+  }
+
+  const totalHeight = sysY + STAFF_SPACE * 2;
   const scaledW = pageWidth;
   const scaledH = totalHeight;
 
@@ -62,35 +78,39 @@ export function renderScoreToSvg(
     svg += `<text class="vf-text" font-size="18pt" x="${pageWidth / 2}" y="${MARGIN_TOP + 15}" text-anchor="middle">${esc(String(headerTitle))}</text>`;
   }
 
-  // Tempo
+  // Tempo (only above first system)
   if (score.header?.tempo) {
-    svg += `<text class="vf-text" font-size="14pt" x="${marginLeft + 5}" y="${staffY - STAFF_SPACE}">♩ = ${score.header.tempo}</text>`;
+    svg += `<text class="vf-text" font-size="14pt" x="${marginLeft + 5}" y="${systems[0]?.y ?? staffY - STAFF_SPACE}">♩ = ${score.header.tempo}</text>`;
   }
 
-  // Percussion clef
-  svg += `<text class="vf-notehead" x="${marginLeft + 5}" y="${staffY + STAFF_HEIGHT / 2 + STAFF_SPACE * 0.5}">\u{E069}</text>`;
+  // ── Render each system ────────────────────────────────────────
 
-  // Time signature
-  const beats = score.header?.timeSignature?.beats ?? 4;
-  const beatUnit = score.header?.timeSignature?.beatUnit ?? 4;
-  svg += `<text class="vf-notehead" x="${marginLeft + CLEF_WIDTH + 5}" y="${staffY + STAFF_SPACE * 1.4}">${numGlyph(beats)}</text>`;
-  svg += `<text class="vf-notehead" x="${marginLeft + CLEF_WIDTH + 5}" y="${staffY + STAFF_SPACE * 3.4}">${numGlyph(beatUnit)}</text>`;
+  for (const sys of systems) {
+    const sysY = sys.y;
 
-  // Staff lines and measures
-  for (const { m, x, width } of measures) {
-    svg += renderStaff(x, staffY, width);
+    // Percussion clef for this system
+    svg += `<text class="vf-notehead" x="${marginLeft + 5}" y="${sysY + STAFF_HEIGHT / 2 + STAFF_SPACE * 0.5}">\u{E069}</text>`;
 
-    // Barline at measure start
-    svg += renderBarline(x, staffY, m.barline, true);
+    // Time signature (only first system)
+    if (sys === systems[0]) {
+      const beats = score.header?.timeSignature?.beats ?? 4;
+      const beatUnit = score.header?.timeSignature?.beatUnit ?? 4;
+      svg += `<text class="vf-notehead" x="${marginLeft + CLEF_WIDTH + 5}" y="${sysY + STAFF_SPACE * 1.4}">${numGlyph(beats)}</text>`;
+      svg += `<text class="vf-notehead" x="${marginLeft + CLEF_WIDTH + 5}" y="${sysY + STAFF_SPACE * 3.4}">${numGlyph(beatUnit)}</text>`;
+    }
 
-    // Content
-    svg += renderNotes(m, x, staffY, width);
-  }
+    // Staff lines + measures
+    for (const { m, x, width } of sys.measures) {
+      svg += renderStaff(x, sysY, width);
+      svg += renderBarline(x, sysY, m.barline);
+      svg += renderNotes(m, x, sysY, width);
+    }
 
-  // Final barline
-  const lastM = measures[measures.length - 1];
-  if (lastM) {
-    svg += renderBarline(lastM.x + lastM.width, staffY, "final", false);
+    // Final barline for this system
+    const lastM = sys.measures[sys.measures.length - 1];
+    if (lastM) {
+      svg += renderBarline(lastM.x + lastM.width, sysY, "final");
+    }
   }
 
   svg += "</svg>";
@@ -136,69 +156,95 @@ function renderBarline(x: number, y: number, type?: string | null, _isRight?: bo
 
 // ── Notes ────────────────────────────────────────────────────────
 
-function renderNotes(m: NormalizedMeasure, measureX: number, staffY: number, _w: number): string {
+function renderNotes(m: NormalizedMeasure, measureX: number, staffY: number, _measureW: number): string {
   let s = "";
-  let px = measureX + 12;
+  const events = m.events.length > 0 ? m.events : (m as any)._fillEvents || [];
 
-  // Measure repeat
+  // Measure repeat (percent sign)
   if ((m as any).measureRepeat) {
     const slashes = (m as any).measureRepeat.slashes ?? 1;
     const label = slashes === 2 ? "%%" : "%";
-    s += `<text x="${measureX + _w / 2}" y="${staffY + STAFF_SPACE * 3.5}" text-anchor="middle" font-size="20pt" class="vf-text">${label}</text>`;
+    s += `<text x="${measureX + _measureW / 2}" y="${staffY + STAFF_SPACE * 3.5}" text-anchor="middle" font-size="20pt" class="vf-text">${label}</text>`;
     return s;
   }
 
-  // Multi-rest
+  // Multi-rest (H-bar)
   if ((m as any).multiRest) {
     const count = (m as any).multiRest.count ?? 2;
-    const midX = measureX + _w / 2;
-    s += `<line x1="${measureX + 10}" y1="${staffY + STAFF_SPACE * 3}" x2="${measureX + _w - 10}" y2="${staffY + STAFF_SPACE * 3}" class="vf-staff" stroke-width="3"/>`;
+    const midX = measureX + _measureW / 2;
+    s += `<line x1="${measureX + 10}" y1="${staffY + STAFF_SPACE * 3}" x2="${measureX + _measureW - 10}" y2="${staffY + STAFF_SPACE * 3}" class="vf-staff" stroke-width="3"/>`;
     s += `<text x="${midX + 4}" y="${staffY + STAFF_SPACE * 2.5}" font-size="14pt" class="vf-text">${count}</text>`;
     return s;
   }
 
-  // Generate events if empty (fill with rests for empty measures)
-  const events = m.events.length > 0 ? m.events : (m as any)._fillEvents || [];
+  // ── Render notes with beam grouping ──────────────────────────
+
+  // First pass: collect note positions for beam detection
+  const notePositions: { x: number; y: number; up: boolean; voice: number; glyph: string; modifiers: string[] }[] = [];
+  let posX = measureX + 12;
 
   for (const ev of events) {
-    const noteX = px + 6;
-    const isRest = ev.kind === "rest";
+    if (ev.kind === "rest") { posX += 20; continue; }
+    const y = noteY(ev.track, staffY);
+    const ny = y + STAFF_SPACE * 0.5;
+    notePositions.push({
+      x: posX + 6, y: ny, up: ev.voice !== 2, voice: ev.voice ?? 1,
+      glyph: noteGlyph(ev), modifiers: ev.modifiers || [],
+    });
+    posX += 20;
+  }
 
-    if (isRest) {
-      // Rest glyph from SMuFL
-      s += `<text class="vf-notehead" x="${noteX}" y="${staffY + STAFF_SPACE * 3.5}">${restGlyph(ev)}</text>`;
-    } else {
-      const y = noteY(ev.track, staffY);
-      const glyph = noteGlyph(ev);
+  // Second pass: render with beam groups
+  let i = 0;
+  while (i < notePositions.length) {
+    const np = notePositions[i]!;
 
-      // Notehead
-      const ny = y + STAFF_SPACE * 0.5;
-      s += `<text class="vf-notehead" x="${noteX - NOTEHEAD_FONT * 0.22}" y="${ny}">${glyph}</text>`;
+    // Detect beam group: consecutive notes in same voice
+    let beamEnd = i;
+    while (beamEnd + 1 < notePositions.length
+      && notePositions[beamEnd + 1]!.voice === np.voice) {
+      beamEnd++;
+    }
+
+    // Render individual notes
+    for (let j = i; j <= beamEnd; j++) {
+      const p = notePositions[j]!;
+      s += `<text class="vf-notehead" x="${p.x - NOTEHEAD_FONT * 0.22}" y="${p.y}">${p.glyph}</text>`;
 
       // Stem
-      const up = ev.voice !== 2;
-      const stemTop = ny - STAFF_SPACE * 3;
-      const stemBot = ny;
-      s += `<line x1="${noteX + NOTEHEAD_FONT * 0.3}" y1="${up ? stemTop : stemBot}" x2="${noteX + NOTEHEAD_FONT * 0.3}" y2="${up ? stemBot : stemTop}" class="vf-stem"/>`;
-
-      // Accent modifier
-      if (ev.modifiers?.includes("accent")) {
-        s += `<text class="vf-text" font-size="16pt" x="${noteX}" y="${ny - STAFF_SPACE * 1.2}" text-anchor="middle">></text>`;
-      }
-      // Ghost modifier
-      if (ev.modifiers?.includes("ghost")) {
-        s += `<text class="vf-text" font-size="14pt" x="${noteX - 5}" y="${ny}">(</text>`;
-        s += `<text class="vf-text" font-size="14pt" x="${noteX + 5}" y="${ny}">)</text>`;
-      }
-
-      // Beams
-      if (ev.beam && ev.beam !== "none") {
-        // Draw a beam line between consecutive beam notes (simplified)
-        s += `<line x1="${noteX - 2}" y1="${up ? stemTop : stemTop - 2}" x2="${noteX + 16}" y2="${up ? stemTop : stemTop - 2}" class="vf-stem" stroke-width="4"/>`;
+      const stemX = p.x + NOTEHEAD_FONT * 0.3;
+      const stemTop = p.y - STAFF_SPACE * 3.5;
+      const stemBot = p.y + STAFF_SPACE * 0.5;
+      if (p.up) {
+        s += `<line x1="${stemX}" y1="${stemTop}" x2="${stemX}" y2="${p.y}" class="vf-stem"/>`;
+      } else {
+        s += `<line x1="${stemX}" y1="${p.y}" x2="${stemX}" y2="${stemBot}" class="vf-stem"/>`;
       }
     }
 
-    px += 20; // advance position
+    // Beam line connecting the group
+    if (beamEnd > i) {
+      const first = notePositions[i]!;
+      const last = notePositions[beamEnd]!;
+      const beamY = first.y - STAFF_SPACE * (first.up ? 3.5 : -0.5);
+      const bx1 = first.x + NOTEHEAD_FONT * 0.3;
+      const bx2 = last.x + NOTEHEAD_FONT * 0.3;
+      s += `<line x1="${bx1}" y1="${beamY}" x2="${bx2}" y2="${beamY}" class="vf-stem" stroke-width="4"/>`;
+    }
+
+    // Modifiers
+    for (let j = i; j <= beamEnd; j++) {
+      const p = notePositions[j]!;
+      if (p.modifiers.includes("accent")) {
+        s += `<text class="vf-text" font-size="16pt" x="${p.x}" y="${p.y - STAFF_SPACE * 1.2}" text-anchor="middle">></text>`;
+      }
+      if (p.modifiers.includes("ghost")) {
+        s += `<text class="vf-text" font-size="14pt" x="${p.x - 5}" y="${p.y}">(</text>`;
+        s += `<text class="vf-text" font-size="14pt" x="${p.x + 5}" y="${p.y}">)</text>`;
+      }
+    }
+
+    i = beamEnd + 1;
   }
   return s;
 }
@@ -231,15 +277,6 @@ function noteGlyph(ev: NormalizedEvent): string {
     if (m === "rim") return "\u{E0CE}";
   }
   return "\u{E0A4}"; // standard black notehead
-}
-
-function restGlyph(ev: NormalizedEvent): string {
-  const d = ev.duration?.denominator ?? 4;
-  if (d >= 32) return "\u{E4E7}";
-  if (d >= 16) return "\u{E4E6}";
-  if (d >= 8)  return "\u{E4E5}";
-  if (d >= 4)  return "\u{E4E4}";
-  return "\u{E4E3}";
 }
 
 function numGlyph(n: number): string {
