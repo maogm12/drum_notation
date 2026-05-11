@@ -224,17 +224,26 @@ pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
         errors: score.errors.clone(),
     };
 
-    // 4. Layout
-    // 4. Layout
-    let systems = drummark_layout::build_systems(&layout_score, &opts);
+    // 4. Build systems grouped by paragraph_index
+    let mut para_systems: Vec<Vec<&drummark_layout::NormalizedMeasure>> = Vec::new();
+    let mut current_para = -1i32;
+    for m in &layout_score.measures {
+        if m.paragraph_index as i32 != current_para {
+            para_systems.push(Vec::new());
+            current_para = m.paragraph_index as i32;
+        }
+        para_systems.last_mut().unwrap().push(m);
+    }
 
     // 5. Serialize as pages → systems → drawing instructions
     let sys_arr = Array::new();
     let page_w = opts.page_width_pt as f64;
     let page_h = opts.page_height_pt as f64;
     let margin = opts.left_margin_pt as f64;
-    let staff_ss = 10.0_f64; // staff space: 10pt
+    let staff_ss = 10.0_f64;
     let center_x = page_w / 2.0;
+    let content_start = margin + 35.0 + 35.0; // clef + time sig area
+    let mut sys_y = opts.top_margin_pt as f64 + 50.0; // after title area
 
     // ── Title / Subtitle / Composer / Tempo ────────────────────
 
@@ -249,29 +258,30 @@ pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
     }
     if layout_score.header.tempo > 0 {
         let tempo_text = format!("♩ = {}", layout_score.header.tempo);
-        append_text(&sys_arr, margin, 25.0, &tempo_text, "Academico,serif", 12.0, "#333");
+        append_text_anchor(&sys_arr, margin, sys_y - 10.0, &tempo_text, "Academico,serif", 12.0, "#333", "start");
     }
 
-    for sys in &systems {
-        let sy = sys.y as f64;
+    for measures in &para_systems {
+        let sy = sys_y;
+        sys_y += staff_ss * 8.0; // staff height + gap
         let s_top = sy + staff_ss;
         let s_bot = sy + staff_ss * 5.0;
         let s_mid = sy + staff_ss * 3.0;
 
-        // Staff lines (5 lines spanning the full system)
+        // Staff lines
         for i in 0..5 {
             let ly = sy + staff_ss * (1.0 + i as f64);
             append_line(&sys_arr, margin, ly, page_w - margin, ly, "#999", 0.6);
         }
 
-        // Opening barline (left edge of system)
+        // Opening barline
         append_line(&sys_arr, margin, s_top, margin, s_bot, "#333", 1.0);
 
         // Percussion clef
         append_text(&sys_arr, margin + 5.0, s_mid + 6.0, "\u{E069}", "Bravura,Academico", 30.0, "#333");
 
         // Time signature (first system only)
-        if sys.measures.first().map(|m| m.x) == sys.measures.first().map(|m| m.x) {
+        if para_systems.first().map(|p| p.as_ptr()) == Some(measures.as_ptr()) {
             let tsx = margin + 35.0;
             let beats = layout_score.header.time_beats;
             let unit = layout_score.header.time_beat_unit;
@@ -279,50 +289,33 @@ pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
             append_text(&sys_arr, tsx, sy + staff_ss * 3.6, &num_to_glyph(unit), "Bravura,Academico", 30.0, "#333");
         }
 
-        // Measures
-        for m in &sys.measures {
-            // Measure barline
-            append_line(&sys_arr, m.x as f64, s_top, m.x as f64, s_bot, "#333", 1.0);
+        // Measures in this system — lay out horizontally
+        let mut mx = content_start;
+        for m in measures {
+            let slots = m.events.len().max(4) as f64;
+            let mw = (slots * 15.0).max(60.0);
 
-            // Notes/barlines/etc
-            for e in &m.elements {
-                match e.kind {
-                    drummark_layout::ElementKind::Note => {
-                        if let Some(cp) = e.smufl_codepoint {
-                            let ny = e.y as f64; // notehead Y
-                            append_text(&sys_arr, e.x as f64 - 7.0, ny, &char::from_u32(cp).unwrap_or('?').to_string(), "Bravura,Academico", 30.0, "#333");
-                            // Stem
-                            let sx = e.x as f64 + 9.0;
-                            let up = e.stem_up.unwrap_or(true);
-                            if up {
-                                append_line(&sys_arr, sx, ny - staff_ss * 3.5, sx, ny, "#333", 1.2);
-                            } else {
-                                append_line(&sys_arr, sx, ny, sx, ny + staff_ss * 3.5, "#333", 1.2);
-                            }
-                        }
-                    }
-                    drummark_layout::ElementKind::Beam => {
-                        if let (Some(fx), Some(tx)) = (e.from_x, e.to_x) {
-                            let by = e.y as f64;
-                            append_line(&sys_arr, fx as f64, by, tx as f64, by, "#333", 4.0);
-                        }
-                    }
-                    drummark_layout::ElementKind::Text => {
-                        if let Some(ref t) = e.text {
-                            append_text(&sys_arr, e.x as f64, e.y as f64, t, "Academico,serif", 12.0, "#333");
-                        }
-                    }
-                    _ => {}
+            // Barline
+            append_line(&sys_arr, mx, s_top, mx, s_bot, "#333", 1.0);
+
+            // Notes
+            let mut nx = mx + 12.0;
+            for ev in &m.events {
+                if ev.kind == drummark_layout::EventKind::Hit {
+                    let ny = s_top + staff_ss * 2.0; // simplified Y
+                    let cp = 0xE0A4u32; // default notehead
+                    append_text(&sys_arr, nx - 7.0, ny, &char::from_u32(cp).unwrap_or('?').to_string(), "Bravura,Academico", 30.0, "#333");
+                    append_line(&sys_arr, nx + 9.0, ny - staff_ss * 3.5, nx + 9.0, ny, "#333", 1.2);
                 }
+                nx += 20.0;
             }
+
+            mx += mw;
         }
 
-        // Closing barline (right edge of last measure)
-        if let Some(last) = sys.measures.last() {
-            let ex = last.x as f64 + last.width as f64;
-            append_line(&sys_arr, ex, s_top, ex, s_bot, "#333", 1.0);
-            append_line(&sys_arr, ex + 3.0, s_top, ex + 3.0, s_bot, "#333", 3.0);
-        }
+        // Closing barline
+        append_line(&sys_arr, mx, s_top, mx, s_bot, "#333", 1.0);
+        append_line(&sys_arr, mx + 3.0, s_top, mx + 3.0, s_bot, "#333", 3.0);
     }
 
     let pages_arr = Array::new();
