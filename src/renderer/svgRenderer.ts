@@ -14,11 +14,23 @@ interface DrawCmd {
 
 export function renderScoreToSvg(
   _score: any,
-  _options?: { staffScale?: number; pageWidth?: number; showTitle?: boolean },
+  _options?: { staffScale?: number; pageWidth?: number; showTitle?: boolean; topMargin?: number; bottomMargin?: number; leftMargin?: number; rightMargin?: number },
 ): string {
   let plan: any = { pages: [] };
   try {
-    if (_cachedSource) plan = build_layout_plan(_cachedSource) as any;
+    if (_cachedSource) {
+      const opts = {
+        pageWidth: _options?.pageWidth ?? 612,
+        pageHeight: 792,
+        topMargin: _options?.topMargin ?? 30,
+        bottomMargin: _options?.bottomMargin ?? 30,
+        leftMargin: _options?.leftMargin ?? 30,
+        rightMargin: _options?.rightMargin ?? 30,
+        staffScale: _options?.staffScale ?? 0.75,
+        pxPerQuarter: 80,
+      };
+      plan = build_layout_plan(_cachedSource, opts as any) as any;
+    }
   } catch (e) {
     return `<svg xmlns="http://www.w3.org/2000/svg" width="612" height="792"><text x="20" y="40" fill="#666">Layout engine loading...</text></svg>`;
   }

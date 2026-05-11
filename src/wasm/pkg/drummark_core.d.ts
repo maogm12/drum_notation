@@ -1,7 +1,7 @@
 /* tslint:disable */
 /* eslint-disable */
 
-export function build_layout_plan(source: string): any;
+export function build_layout_plan(source: string, options: any): any;
 
 /**
  * Parse and normalize a DrumMark source string in one call.
@@ -20,7 +20,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
-    readonly build_layout_plan: (a: number, b: number) => number;
+    readonly build_layout_plan: (a: number, b: number, c: number) => number;
     readonly build_normalized_score: (a: number, b: number) => number;
     readonly parse: (a: number, b: number) => number;
     readonly layout_plan: (a: number, b: number) => number;

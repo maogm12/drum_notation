@@ -131,7 +131,39 @@ fn set(obj: &js_sys::Object, key: &str, val: &JsValue) {
 // ── Combined: Parse + Normalize + Layout → LayoutPlan ──────────
 
 #[wasm_bindgen]
-pub fn build_layout_plan(source: &str) -> JsValue {
+pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
+    // 0. Parse layout options from JS
+    let opts = if options.is_object() {
+        let get_f64 = |key: &str| -> f64 {
+            js_sys::Reflect::get(&options, &JsValue::from_str(key))
+                .ok().and_then(|v| v.as_f64()).unwrap_or(0.0)
+        };
+        let width = get_f64("pageWidth");
+        let height = get_f64("pageHeight");
+        let top = get_f64("topMargin");
+        let bottom = get_f64("bottomMargin");
+        let left = get_f64("leftMargin");
+        let right = get_f64("rightMargin");
+        let scale = get_f64("staffScale");
+        let px_q = get_f64("pxPerQuarter");
+        if width > 0.0 && height > 0.0 {
+            drummark_layout::LayoutOptions {
+                page_width_pt: width as f32,
+                page_height_pt: height as f32,
+                top_margin_pt: top as f32,
+                bottom_margin_pt: bottom as f32,
+                left_margin_pt: left as f32,
+                right_margin_pt: right as f32,
+                staff_scale: if scale > 0.0 { scale as f32 } else { 0.75 },
+                px_per_quarter: if px_q > 0.0 { px_q as f32 } else { 80.0 },
+                ..drummark_layout::LayoutOptions::default()
+            }
+        } else {
+            drummark_layout::LayoutOptions::default()
+        }
+    } else {
+        drummark_layout::LayoutOptions::default()
+    };
     // 1. Parse
     let parser = parser::Parser::new(source);
     let doc = match parser.parse() {
@@ -193,24 +225,24 @@ pub fn build_layout_plan(source: &str) -> JsValue {
     };
 
     // 4. Layout
-    let opts = drummark_layout::LayoutOptions::default();
+    // 4. Layout
     let systems = drummark_layout::build_systems(&layout_score, &opts);
 
     // 5. Serialize as pages → systems → drawing instructions
     let sys_arr = Array::new();
-    let page_w = 612.0_f64;
-    let page_h = 792.0_f64;
-    let margin = 30.0_f64;
+    let page_w = opts.page_width_pt as f64;
+    let page_h = opts.page_height_pt as f64;
+    let margin = opts.left_margin_pt as f64;
     let staff_ss = 10.0_f64; // staff space: 10pt
     let center_x = page_w / 2.0;
 
     // ── Title / Subtitle / Composer / Tempo ────────────────────
 
     if let Some(ref t) = layout_score.header.title {
-        append_text(&sys_arr, center_x, 25.0, t, "Academico,serif", 18.0, "#333");
+        append_text_anchor(&sys_arr, center_x, 25.0, t, "Academico,serif", 18.0, "#333", "middle");
     }
     if let Some(ref t) = layout_score.header.subtitle {
-        append_text(&sys_arr, center_x, 42.0, t, "Academico,serif", 12.0, "#333");
+        append_text_anchor(&sys_arr, center_x, 42.0, t, "Academico,serif", 12.0, "#333", "middle");
     }
     if let Some(ref t) = layout_score.header.composer {
         append_text_anchor(&sys_arr, page_w - margin, 25.0, t, "Academico,serif", 10.0, "#333", "end");
