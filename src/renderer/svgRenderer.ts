@@ -8,7 +8,6 @@ const STAFF_SPACE = 10;       // pt
 const NOTEHEAD_FONT = 30;     // pt
 const CLEF_WIDTH = 30;        // pt
 const TIME_SIG_WIDTH = 30;    // pt
-const MARGIN_LEFT = 20;       // pt
 const MARGIN_TOP = 10;        // pt
 const HEADER_HEIGHT = 50;     // pt (title area)
 
@@ -17,52 +16,49 @@ export function renderScoreToSvg(
   _options?: { staffScale?: number; pageWidth?: number; showTitle?: boolean },
 ): string {
   const pageWidth = _options?.pageWidth ?? 612;
-  const pageHeight = 792; // US Letter
+  const pageHeight = 792;
   const showTitle = _options?.showTitle ?? true;
-  const usableBottom = pageHeight - 40; // bottom margin
-  const marginLeft = MARGIN_LEFT;
-  const systemStart = marginLeft + CLEF_WIDTH + TIME_SIG_WIDTH + 10; // after clef + time sig
+  const usableBottom = pageHeight - 60;
+  const marginLeft = 30;
+  const marginRight = 30;
+  const systemStart = marginLeft; // where staff lines begin
+  const contentStart = marginLeft + CLEF_WIDTH + TIME_SIG_WIDTH + 10; // where measures begin
+  const systemWidth = pageWidth - marginLeft - marginRight; // full staff length
 
   let staffY = MARGIN_TOP;
-  if (showTitle && score.header?.title) {
-    staffY += HEADER_HEIGHT;
-  }
+  if (showTitle && score.header?.title) { staffY += HEADER_HEIGHT; }
 
-  // ── System Layout ────────────────────────────────────────────
+  // ── System Layout: group measures by paragraphIndex ────────────
 
   type System = { y: number; measures: { m: NormalizedMeasure; x: number; width: number }[] };
   let systems: System[] = [];
-  let currentPara = 0;
-  let currentSystem: System = { y: 0, measures: [] };
-  let cursorX = systemStart;
+  let currentPara = -1;
+  let sys: System = { y: 0, measures: [] };
+  let cursorX = contentStart;
 
   for (const measure of score.measures) {
-    // System break at paragraph boundary
     const paraIdx = (measure as any).paragraphIndex ?? 0;
-    if (paraIdx !== currentPara && currentSystem.measures.length > 0) {
-      systems.push(currentSystem);
-      currentSystem = { y: 0, measures: [] };
-      cursorX = systemStart;
-      currentPara = paraIdx;
+    if (paraIdx !== currentPara && sys.measures.length > 0) {
+      systems.push(sys);
+      sys = { y: 0, measures: [] };
+      cursorX = contentStart;
     }
-    const slots = Math.max(measure.events.length || 4, 4);
-    const width = Math.max(slots * 15, 60);
-    currentSystem.measures.push({ m: measure, x: cursorX, width });
-    cursorX += width;
+    currentPara = paraIdx;
+    const w = Math.max((measure.events.length || 4) * 15, 60);
+    sys.measures.push({ m: measure, x: cursorX, width: w });
+    cursorX += w;
   }
-  if (currentSystem.measures.length > 0) {
-    systems.push(currentSystem);
+  if (sys.measures.length > 0) systems.push(sys);
+
+  // Assign Y
+  let yPos = staffY;
+  for (const s of systems) {
+    if (yPos + STAFF_HEIGHT + STAFF_SPACE * 2 > usableBottom) yPos = STAFF_SPACE * 3;
+    s.y = yPos;
+    yPos += STAFF_HEIGHT + STAFF_SPACE * 5;
   }
 
-  // Assign Y positions to systems, with page breaks
-  let sysY = staffY;
-  for (const sys of systems) {
-    if (sysY + STAFF_HEIGHT + STAFF_SPACE * 2 > usableBottom) {
-      sysY = STAFF_SPACE * 2; // new page, top margin
-    }
-    sys.y = sysY;
-    sysY += STAFF_HEIGHT + STAFF_SPACE * 5;
-  }
+  // ── SVG ───────────────────────────────────────────────────────
 
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${pageWidth}" height="${pageHeight}" viewBox="0 0 ${pageWidth} ${pageHeight}" font-family="Bravura,Academico" font-size="10pt">`;
   svg += `<defs><style>
@@ -73,44 +69,52 @@ export function renderScoreToSvg(
     .vf-text { fill: #333; stroke: none; }
   </style></defs>`;
 
-  // Title
   const headerTitle = score.header?.title ?? (score as any).ast?.headers?.title?.value;
   if (showTitle && headerTitle) {
     svg += `<text class="vf-text" font-size="18pt" x="${pageWidth / 2}" y="${MARGIN_TOP + 15}" text-anchor="middle">${esc(String(headerTitle))}</text>`;
   }
-
-  // Tempo (only above first system)
   if (score.header?.tempo) {
     svg += `<text class="vf-text" font-size="14pt" x="${marginLeft + 5}" y="${systems[0]?.y ?? staffY - STAFF_SPACE}">♩ = ${score.header.tempo}</text>`;
   }
 
-  // ── Render each system ────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────
 
   for (const sys of systems) {
-    const sysY = sys.y;
+    const sy = sys.y;
+    const sTop = sy + STAFF_SPACE;     // staff top line
+    const sBot = sy + STAFF_SPACE * 5; // staff bottom line
 
-    // Percussion clef for this system
-    svg += `<text class="vf-notehead" x="${marginLeft + 5}" y="${sysY + STAFF_HEIGHT / 2 + STAFF_SPACE * 0.5}">\u{E069}</text>`;
+    // ONE continuous staff per system
+    svg += renderStaff(systemStart, sy, systemWidth);
 
-    // Time signature (only first system)
+    // Opening barline (left edge of system)
+    svg += `<line x1="${systemStart}" y1="${sTop}" x2="${systemStart}" y2="${sBot}" class="vf-bar"/>`;
+
+    // Percussion clef centered vertically on staff
+    const clefY = sy + STAFF_SPACE * 3; // middle of staff (3rd line)
+    svg += `<text class="vf-notehead" x="${marginLeft + 5}" y="${clefY + STAFF_SPACE * 0.6}">\u{E069}</text>`;
+
+    // Time signature (first system only)
     if (sys === systems[0]) {
       const beats = score.header?.timeSignature?.beats ?? 4;
       const beatUnit = score.header?.timeSignature?.beatUnit ?? 4;
-      svg += `<text class="vf-notehead" x="${marginLeft + CLEF_WIDTH + 5}" y="${sysY + STAFF_SPACE * 1.4}">${numGlyph(beats)}</text>`;
-      svg += `<text class="vf-notehead" x="${marginLeft + CLEF_WIDTH + 5}" y="${sysY + STAFF_SPACE * 3.4}">${numGlyph(beatUnit)}</text>`;
+      const tsX = marginLeft + CLEF_WIDTH + 5;
+      svg += `<text class="vf-notehead" x="${tsX}" y="${sy + STAFF_SPACE * 1.6}">${numGlyph(beats)}</text>`;
+      svg += `<text class="vf-notehead" x="${tsX}" y="${sy + STAFF_SPACE * 3.6}">${numGlyph(beatUnit)}</text>`;
     }
 
-    // Staff lines + measures
+    // Measures
     for (const { m, x, width } of sys.measures) {
-      svg += renderStaff(x, sysY, width);
-      svg += renderBarline(x, sysY, m.barline);
-      svg += renderNotes(m, x, sysY, width);
+      svg += renderBarline(x, sy, m.barline);
+      svg += renderNotes(m, x, sy, width);
     }
 
-    // Final barline for this system
+    // Closing double barline
     const lastM = sys.measures[sys.measures.length - 1];
     if (lastM) {
-      svg += renderBarline(lastM.x + lastM.width, sysY, "final");
+      const ex = lastM.x + lastM.width;
+      svg += `<line x1="${ex}" y1="${sTop}" x2="${ex}" y2="${sBot}" class="vf-bar"/>`;
+      svg += `<line x1="${ex + 3}" y1="${sTop}" x2="${ex + 3}" y2="${sBot}" class="vf-bar" stroke-width="3"/>`;
     }
   }
 
