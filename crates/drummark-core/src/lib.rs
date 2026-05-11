@@ -316,8 +316,10 @@ fn append_text(arr: &Array, x: f64, y: f64, text: &str, font: &str, size: f64, f
 
 fn num_to_glyph(n: u32) -> String {
     match n {
-        0 => "\u{E080}", 1 => "\u{E081}", 2 => "\u{E082}", 3 => "\u{E083}", 4 => "\u{E084}",
-        5 => "\u{E085}", 6 => "\u{E086}", 7 => "\u{E087}", 8 => "\u{E088}", 9 => "\u{E089}",
+        0 => "\u{E080}".to_string(), 1 => "\u{E081}".to_string(), 2 => "\u{E082}".to_string(),
+        3 => "\u{E083}".to_string(), 4 => "\u{E084}".to_string(), 5 => "\u{E085}".to_string(),
+        6 => "\u{E086}".to_string(), 7 => "\u{E087}".to_string(), 8 => "\u{E088}".to_string(),
+        9 => "\u{E089}".to_string(),
         _ => n.to_string(),
-    }.to_string()
+    }
 }

@@ -1,6 +1,8 @@
 import { build_layout_plan } from "../wasm/pkg/drummark_core";
+import { initWasm } from "../wasm/drummark_wasm";
 
 let _cachedSource = "";
+initWasm().catch(() => {});
 export function setLayoutSource(src: string) { _cachedSource = src; }
 
 interface DrawCmd {
@@ -14,7 +16,12 @@ export function renderScoreToSvg(
   _score: any,
   _options?: { staffScale?: number; pageWidth?: number; showTitle?: boolean },
 ): string {
-  const plan = build_layout_plan(_cachedSource || "") as any;
+  let plan: any = { pages: [] };
+  try {
+    if (_cachedSource) plan = build_layout_plan(_cachedSource) as any;
+  } catch (e) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="612" height="792"><text x="20" y="40" fill="#666">Layout engine loading...</text></svg>`;
+  }
   const pages = plan.pages || [];
   if (!pages.length) return `<svg xmlns="http://www.w3.org/2000/svg" width="612" height="792"><text x="20" y="40">No layout data</text></svg>`;
 
