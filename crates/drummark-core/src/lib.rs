@@ -323,8 +323,6 @@ pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
                     note_idx += 1;
                 }
             }
-                nx += 20.0;
-            }
 
             mx += mw;
         }
