@@ -1,287 +1,253 @@
 import type { NormalizedScore, NormalizedMeasure, NormalizedEvent } from "../dsl/types";
 import { trackFamily } from "./layoutMetrics";
 
-// ── Public API ───────────────────────────────────────────────────
+// VexFlow-compatible rendering constants
+// VexFlow uses 40pt staff height, 30pt noteheads, 10pt staff-space.
+const STAFF_HEIGHT = 40;      // pt (unscaled)
+const STAFF_SPACE = 10;       // pt
+const NOTEHEAD_FONT = 30;     // pt
+const CLEF_WIDTH = 30;        // pt
+const TIME_SIG_WIDTH = 30;    // pt
+const MARGIN_LEFT = 20;       // pt
+const MARGIN_TOP = 10;        // pt
+const HEADER_HEIGHT = 50;     // pt (title area)
 
 export function renderScoreToSvg(
   score: NormalizedScore,
   _options?: { staffScale?: number; pageWidth?: number; showTitle?: boolean },
 ): string {
   const pageWidth = _options?.pageWidth ?? 612;
-  const staffScale = _options?.staffScale ?? 0.75;
   const showTitle = _options?.showTitle ?? true;
-  const marginLeft = 50;
-  const marginRight = 50;
-  const marginTop = 30;
-  const staffHeightPx = 40 * staffScale;
-  const staffSpace = staffHeightPx / 4;
+  const marginLeft = MARGIN_LEFT;
+  const systemStart = marginLeft + CLEF_WIDTH + TIME_SIG_WIDTH + 10; // after clef + time sig
 
-  let currentY = marginTop;
-  if (showTitle && (score.header?.title || score.ast?.headers?.title)) {
-    currentY += 30;
+  let staffY = MARGIN_TOP;
+  if (showTitle && score.header?.title) {
+    staffY += HEADER_HEIGHT;
   }
 
   // Measure layout
   let measures: { m: NormalizedMeasure; x: number; width: number }[] = [];
-  let cursorX = marginLeft + 70;
-  const usableWidth = pageWidth - marginLeft - marginRight - 70;
+  let cursorX = systemStart;
+  const usableWidth = pageWidth - marginLeft * 2 - CLEF_WIDTH - TIME_SIG_WIDTH;
 
   for (const measure of score.measures) {
-    const width = Math.max((measure.events.length || 4) * 14 * staffScale, 60);
-    if (cursorX + width > marginLeft + usableWidth && measures.length > 0) {
-      currentY += staffHeightPx + 60;
-      cursorX = marginLeft + 70;
+    const slots = Math.max(measure.events.length || 4, 4);
+    // VexFlow: measure width ≈ slots * 15pt (approximate, will vary by content)
+    const width = Math.max(slots * 15, 60);
+    if (cursorX + width > systemStart + usableWidth && measures.length > 0) {
+      staffY += STAFF_HEIGHT + STAFF_SPACE * 5;
+      cursorX = systemStart;
     }
     measures.push({ m: measure, x: cursorX, width });
     cursorX += width;
   }
 
-  const totalHeight = currentY + staffHeightPx + marginTop + 40;
-  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${pageWidth}" height="${totalHeight}" viewBox="0 0 ${pageWidth} ${totalHeight}">`;
+  const totalHeight = staffY + STAFF_HEIGHT + STAFF_SPACE * 3;
+  const scaledW = pageWidth;
+  const scaledH = totalHeight;
+
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${scaledW}" height="${scaledH}" viewBox="0 0 ${scaledW} ${scaledH}" font-family="Bravura,Academico" font-size="10pt">`;
   svg += `<defs><style>
-    .staff-line { stroke: #666; stroke-width: 0.5; }
-    .barline { stroke: #666; stroke-width: 1.2; }
-    .notehead { fill: #333; font-family: Bravura,sans-serif; }
-    .rest { fill: #333; font-family: Bravura,sans-serif; }
-    .stem { stroke: #333; stroke-width: 0.8; }
-    .nav-text { fill: #333; font-family: Academico,serif; font-size: 12px; }
-    .hairpin { stroke: #333; stroke-width: 0.8; fill: none; }
-    .volta-line { stroke: #666; stroke-width: 0.5; fill: none; }
-    .tempo-text { fill: #666; font-family: Academico,serif; font-size: 10px; }
+    .vf-staff { stroke: #333; stroke-width: 1; fill: none; }
+    .vf-notehead { fill: #333; font-size: ${NOTEHEAD_FONT}pt; }
+    .vf-stem { stroke: #333; stroke-width: 1.5; }
+    .vf-bar { stroke: #333; stroke-width: 1.5; }
+    .vf-text { fill: #333; stroke: none; }
   </style></defs>`;
 
-  const headerTitle = (score as any).header?.title ?? score.ast?.headers?.title?.value;
+  // Title
+  const headerTitle = score.header?.title ?? (score as any).ast?.headers?.title?.value;
   if (showTitle && headerTitle) {
-    svg += `<text x="${pageWidth / 2}" y="${marginTop}" text-anchor="middle" font-family="Academico,serif" font-size="18" fill="#333">${esc(String(headerTitle))}</text>`;
+    svg += `<text class="vf-text" font-size="18pt" x="${pageWidth / 2}" y="${MARGIN_TOP + 15}" text-anchor="middle">${esc(String(headerTitle))}</text>`;
   }
+
+  // Tempo
   if (score.header?.tempo) {
-    svg += `<text x="${marginLeft + 70}" y="${marginTop + (showTitle ? 22 : 0)}" class="tempo-text">♩ = ${score.header.tempo}</text>`;
+    svg += `<text class="vf-text" font-size="14pt" x="${marginLeft + 5}" y="${staffY - STAFF_SPACE}">♩ = ${score.header.tempo}</text>`;
   }
 
-  let systemY = marginTop + (showTitle && headerTitle ? 30 : 0);
+  // Percussion clef
+  svg += `<text class="vf-notehead" x="${marginLeft + 5}" y="${staffY + STAFF_HEIGHT / 2 + STAFF_SPACE * 0.5}">\u{E069}</text>`;
 
-  for (let mi = 0; mi < measures.length; mi++) {
-    const item = measures[mi]!;
-    svg += renderStaffLines(item.x, systemY, item.width, staffSpace);
-    svg += renderBarline(item.x, systemY, item.m.barline, staffHeightPx);
-    svg += renderMeasureContent(item.m, item.x, systemY, item.width, staffSpace);
-    svg += renderHairpins(item.m, item.x, systemY, staffSpace, totalHeight);
-    svg += renderNavigation(item.m, item.x, systemY, staffSpace, staffHeightPx);
-    svg += renderVolta(item.m, item.x, systemY, staffSpace, staffHeightPx);
+  // Time signature
+  const beats = score.header?.timeSignature?.beats ?? 4;
+  const beatUnit = score.header?.timeSignature?.beatUnit ?? 4;
+  svg += `<text class="vf-notehead" x="${marginLeft + CLEF_WIDTH + 5}" y="${staffY + STAFF_SPACE * 1.4}">${numGlyph(beats)}</text>`;
+  svg += `<text class="vf-notehead" x="${marginLeft + CLEF_WIDTH + 5}" y="${staffY + STAFF_SPACE * 3.4}">${numGlyph(beatUnit)}</text>`;
+
+  // Staff lines and measures
+  for (const { m, x, width } of measures) {
+    svg += renderStaff(x, staffY, width);
+
+    // Barline at measure start
+    svg += renderBarline(x, staffY, m.barline, true);
+
+    // Content
+    svg += renderNotes(m, x, staffY, width);
   }
 
   // Final barline
-  const lastItem = measures[measures.length - 1];
-  if (lastItem) {
-    svg += renderBarline(lastItem.x + lastItem.width, systemY, "final", staffHeightPx);
+  const lastM = measures[measures.length - 1];
+  if (lastM) {
+    svg += renderBarline(lastM.x + lastM.width, staffY, "final", false);
   }
 
   svg += "</svg>";
   return svg;
 }
 
-// ── Staff Lines ─────────────────────────────────────────────────
+// ── Staff ────────────────────────────────────────────────────────
 
-function renderStaffLines(x: number, y: number, width: number, staffSpace: number): string {
+function renderStaff(x: number, y: number, width: number): string {
   let s = "";
   for (let i = 0; i < 5; i++) {
-    s += `<line x1="${x - 5}" y1="${y + i * staffSpace}" x2="${x + width + 5}" y2="${y + i * staffSpace}" class="staff-line"/>`;
+    const lineY = y + STAFF_SPACE + i * STAFF_SPACE;
+    s += `<line x1="${x}" y1="${lineY}" x2="${x + width}" y2="${lineY}" class="vf-staff"/>`;
   }
   return s;
 }
 
 // ── Barlines ─────────────────────────────────────────────────────
 
-function renderBarline(x: number, y: number, type?: string | null, h?: number): string {
-  const H = h ?? 30;
+function renderBarline(x: number, y: number, type?: string | null, _isRight?: boolean): string {
+  const y1 = y + STAFF_SPACE;
+  const y2 = y + STAFF_SPACE * 5;
+
   switch (type) {
     case "double": case "final":
-      return `<line x1="${x}" y1="${y}" x2="${x}" y2="${y + H}" class="barline"/>`
-        + `<line x1="${x + 3}" y1="${y}" x2="${x + 3}" y2="${y + H}" class="barline"/>`;
+      return `<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" class="vf-bar"/>`
+        + `<line x1="${x + 3}" y1="${y1}" x2="${x + 3}" y2="${y2}" class="vf-bar" stroke-width="3"/>`;
     case "repeat-start":
-      return `<line x1="${x + 3}" y1="${y}" x2="${x + 3}" y2="${y + H}" class="barline"/>`
-        + `<line x1="${x + 8}" y1="${y}" x2="${x + 8}" y2="${y + H}" class="barline"/>`
-        + `<text x="${x + 14}" y="${y + H / 2 + 4}" class="nav-text" text-anchor="middle">:</text>`;
+      return `<line x1="${x + 3}" y1="${y1}" x2="${x + 3}" y2="${y2}" class="vf-bar"/>`
+        + `<line x1="${x + 8}" y1="${y1}" x2="${x + 8}" y2="${y2}" class="vf-bar" stroke-width="3"/>`
+        + `<text x="${x + 14}" y="${y + STAFF_SPACE * 3.5}" font-size="12pt" class="vf-text" text-anchor="middle">:</text>`;
     case "repeat-end":
-      return `<text x="${x + 4}" y="${y + H / 2 + 4}" class="nav-text" text-anchor="middle">:</text>`
-        + `<line x1="${x + 10}" y1="${y}" x2="${x + 10}" y2="${y + H}" class="barline"/>`
-        + `<line x1="${x + 15}" y1="${y}" x2="${x + 15}" y2="${y + H}" class="barline"/>`;
+      return `<text x="${x + 2}" y="${y + STAFF_SPACE * 3.5}" font-size="12pt" class="vf-text" text-anchor="middle">:</text>`
+        + `<line x1="${x + 8}" y1="${y1}" x2="${x + 8}" y2="${y2}" class="vf-bar" stroke-width="3"/>`
+        + `<line x1="${x + 13}" y1="${y1}" x2="${x + 13}" y2="${y2}" class="vf-bar"/>`;
     case "repeat-both":
-      return renderBarline(x, y, "repeat-end", H) + renderBarline(x + 24, y, "repeat-start", H);
+      return renderBarline(x, y, "repeat-end")
+        + renderBarline(x + 22, y, "repeat-start");
     default:
-      return `<line x1="${x}" y1="${y}" x2="${x}" y2="${y + H}" class="barline"/>`;
+      return `<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" class="vf-bar"/>`;
   }
 }
 
-// ── Measure Content ──────────────────────────────────────────────
+// ── Notes ────────────────────────────────────────────────────────
 
-function renderMeasureContent(
-  m: NormalizedMeasure, measureX: number, staffY: number, _w: number, ss: number,
-): string {
+function renderNotes(m: NormalizedMeasure, measureX: number, staffY: number, _w: number): string {
   let s = "";
-  let px = measureX + 10;
+  let px = measureX + 12;
 
-  // Measure-repeat (percent sign)
+  // Measure repeat
   if ((m as any).measureRepeat) {
     const slashes = (m as any).measureRepeat.slashes ?? 1;
     const label = slashes === 2 ? "%%" : "%";
-    s += `<text x="${measureX + _w / 2}" y="${staffY + ss * 3}" text-anchor="middle" font-size="${ss * 3.5}px" fill="#666">${label}</text>`;
+    s += `<text x="${measureX + _w / 2}" y="${staffY + STAFF_SPACE * 3.5}" text-anchor="middle" font-size="20pt" class="vf-text">${label}</text>`;
     return s;
   }
 
-  // Multi-rest (H-bar + count)
+  // Multi-rest
   if ((m as any).multiRest) {
     const count = (m as any).multiRest.count ?? 2;
     const midX = measureX + _w / 2;
-    s += `<line x1="${measureX + 12}" y1="${staffY + ss * 4}" x2="${measureX + _w - 12}" y2="${staffY + ss * 4}" stroke="#333" stroke-width="${ss * 0.8}"/>`;
-    s += `<text x="${midX + 4}" y="${staffY + ss * 3}" text-anchor="start" font-size="${ss * 2}px" fill="#666">${count}</text>`;
+    s += `<line x1="${measureX + 10}" y1="${staffY + STAFF_SPACE * 3}" x2="${measureX + _w - 10}" y2="${staffY + STAFF_SPACE * 3}" class="vf-staff" stroke-width="3"/>`;
+    s += `<text x="${midX + 4}" y="${staffY + STAFF_SPACE * 2.5}" font-size="14pt" class="vf-text">${count}</text>`;
     return s;
   }
 
-  // Group events by voice for beam detection
-  const events = m.events || [];
+  // Generate events if empty (fill with rests for empty measures)
+  const events = m.events.length > 0 ? m.events : (m as any)._fillEvents || [];
 
-  for (let i = 0; i < events.length; i++) {
-    const ev = events[i]!;
-    px += 14;
-    const y = noteY(ev.track, staffY, ss);
-    const isRest = ev.kind !== "hit" && ev.kind !== "sticking";
+  for (const ev of events) {
+    const noteX = px + 6;
+    const isRest = ev.kind === "rest";
 
-    if (isRest) continue;
+    if (isRest) {
+      // Rest glyph from SMuFL
+      s += `<text class="vf-notehead" x="${noteX}" y="${staffY + STAFF_SPACE * 3.5}">${restGlyph(ev)}</text>`;
+    } else {
+      const y = noteY(ev.track, staffY);
+      const glyph = noteGlyph(ev);
 
-    // Combined hit (TODO: stacked noteheads)
+      // Notehead
+      const ny = y + STAFF_SPACE * 0.5;
+      s += `<text class="vf-notehead" x="${noteX - NOTEHEAD_FONT * 0.22}" y="${ny}">${glyph}</text>`;
 
-    const glyph = noteGlyph(ev);
-    const up = ev.voice !== 2;
+      // Stem
+      const up = ev.voice !== 2;
+      const stemTop = ny - STAFF_SPACE * 3;
+      const stemBot = ny;
+      s += `<line x1="${noteX + NOTEHEAD_FONT * 0.3}" y1="${up ? stemTop : stemBot}" x2="${noteX + NOTEHEAD_FONT * 0.3}" y2="${up ? stemBot : stemTop}" class="vf-stem"/>`;
 
-    // Notehead
-    s += `<text x="${px}" y="${y + ss * 0.7}" class="notehead" font-size="${ss * 2.5}px" text-anchor="middle">${glyph}</text>`;
-
-    // Grace notes (flam/drag)
-    if (ev.modifiers) {
-      const hasFlam = ev.modifiers.some((m: string) => m === "flam");
-      const hasDrag = ev.modifiers.some((m: string) => m === "drag");
-      if (hasFlam) {
-        s += `<text x="${px - ss * 1.2}" y="${y + ss * 0.4}" font-size="${ss * 1.8}px" fill="#333">\u{E0A4}</text>`;
-        s += `<line x1="${px - ss * 0.4}" y1="${y - ss * 1.5}" x2="${px - ss * 0.4}" y2="${y + ss * 1}" stroke="#333" stroke-width="0.5"/>`;
+      // Accent modifier
+      if (ev.modifiers?.includes("accent")) {
+        s += `<text class="vf-text" font-size="16pt" x="${noteX}" y="${ny - STAFF_SPACE * 1.2}" text-anchor="middle">></text>`;
       }
-      if (hasDrag) {
-        s += `<text x="${px - ss * 1.5}" y="${y + ss * 0.4}" font-size="${ss * 1.8}px" fill="#333">\u{E0A4}</text>`;
-        s += `<line x1="${px - ss * 0.7}" y1="${y - ss * 1.5}" x2="${px - ss * 0.7}" y2="${y + ss * 1}" stroke="#333" stroke-width="0.5"/>`;
-        s += `<line x1="${px - ss * 0.2}" y1="${y - ss * 1.3}" x2="${px - ss * 0.2}" y2="${y + ss * 0.8}" stroke="#333" stroke-width="0.5"/>`;
+      // Ghost modifier
+      if (ev.modifiers?.includes("ghost")) {
+        s += `<text class="vf-text" font-size="14pt" x="${noteX - 5}" y="${ny}">(</text>`;
+        s += `<text class="vf-text" font-size="14pt" x="${noteX + 5}" y="${ny}">)</text>`;
       }
-      // Roll (tremolo)
-      if (ev.modifiers.some((m: string) => m === "roll")) {
-        s += `<line x1="${px + ss * 0.3}" y1="${y - ss * 2}" x2="${px + ss * 0.3}" y2="${y - ss * 0.5}" stroke="#333" stroke-width="0.5"/>`;
-        s += `<line x1="${px + ss * 0.7}" y1="${y - ss * 2.2}" x2="${px + ss * 0.7}" y2="${y - ss * 0.5}" stroke="#333" stroke-width="0.5"/>`;
-        s += `<line x1="${px + ss * 1.1}" y1="${y - ss * 2.4}" x2="${px + ss * 1.1}" y2="${y - ss * 0.5}" stroke="#333" stroke-width="0.5"/>`;
-      }
-    }
 
-    // Stem
-    s += `<line x1="${px + ss * 0.8}" y1="${y - (up ? ss * 2.5 : 0)}" x2="${px + ss * 0.8}" y2="${y + (up ? 0 : ss * 2.5)}" class="stem"/>`;
-
-    // Modifier annotations
-    if (ev.modifiers) {
-      for (const mod of ev.modifiers) {
-        if (mod === "accent") s += `<text x="${px}" y="${y - ss * 1.5}" text-anchor="middle" font-size="${ss * 2}px" fill="#333">></text>`;
-        if (mod === "ghost") s += `<text x="${px - ss * 0.6}" y="${y + ss * 0.5}" font-size="${ss * 1.5}px" fill="#999">(</text><text x="${px + ss * 0.6}" y="${y + ss * 0.5}" font-size="${ss * 1.5}px" fill="#999">)</text>`;
+      // Beams
+      if (ev.beam && ev.beam !== "none") {
+        // Draw a beam line between consecutive beam notes (simplified)
+        s += `<line x1="${noteX - 2}" y1="${up ? stemTop : stemTop - 2}" x2="${noteX + 16}" y2="${up ? stemTop : stemTop - 2}" class="vf-stem" stroke-width="4"/>`;
       }
     }
 
-    // Tuplet bracket
-    if ((ev as any).tuplet) {
-      const t = (ev as any).tuplet;
-      const label = t.actual || t.normal || "3";
-      s += `<text x="${px - 2}" y="${y - ss * 3}" text-anchor="middle" font-size="${ss * 1.5}px" fill="#666">${label}</text>`;
-      s += `<line x1="${px - ss * 1.5}" y1="${y - ss * 2.5}" x2="${px + ss * 1.5}" y2="${y - ss * 2.5}" stroke="#666" stroke-width="0.5"/>`;
-    }
-
-    // Beam detection: consecutive beamable notes in same voice
-    let beamEnd = i;
-    while (beamEnd + 1 < events.length
-      && events[beamEnd + 1]!.voice === ev.voice
-      && events[beamEnd + 1]!.kind === "hit") {
-      beamEnd++;
-    }
-    if (beamEnd > i) {
-      const bx1 = px + ss * 0.8;
-      const bx2 = px + (beamEnd - i) * 14 + ss * 0.8;
-      const by = y - (up ? ss * 2.5 : -ss * 0.5);
-      s += `<line x1="${bx1}" y1="${by}" x2="${bx2}" y2="${by}" class="stem" stroke-width="${ss * 0.5}"/>`;
-    }
+    px += 20; // advance position
   }
   return s;
 }
 
-// ── Hairpins ─────────────────────────────────────────────────────
+// ── Note Y (VexFlow positions) ───────────────────────────────────
 
-function renderHairpins(m: NormalizedMeasure, measureX: number, staffY: number, ss: number, _totalH: number): string {
-  let s = "";
-  for (const h of m.hairpins || []) {
-    const x1 = measureX + 10;
-    const x2 = measureX + 50;
-    const y = staffY + ss * 10;
-    const open = (h as any).kind === "crescendo" || (h as any).kind === "Crescendo" || (h as any).type === "crescendo";
-    s += `<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y - (open ? 6 : 0)}" class="hairpin"/>`;
-    s += `<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y + (open ? 0 : 6)}" class="hairpin"/>`;
-  }
-  return s;
-}
-
-// ── Navigation Markers ───────────────────────────────────────────
-
-function renderNavigation(m: NormalizedMeasure, measureX: number, staffY: number, ss: number, staffH: number): string {
-  let s = "";
-  if (m.startNav) {
-    const kind = (m.startNav as any).kind ?? m.startNav;
-    const label = kind === "segno" ? "\u{E047}" : kind === "coda" ? "\u{E048}" : kind;
-    s += `<text x="${measureX + 4}" y="${staffY - ss * 1.5}" class="nav-text" font-family="Bravura,serif" font-size="${ss * 2.5}px">${label}</text>`;
-  }
-  if (m.endNav) {
-    const kind = (m.endNav as any).kind ?? m.endNav;
-    const label = kind === "fine" ? "Fine" : kind === "dc" ? "D.C." : kind === "ds" ? "D.S." : kind;
-    s += `<text x="${measureX + 30}" y="${staffY + staffH + ss * 2}" class="nav-text" text-anchor="start">${label}</text>`;
-  }
-  return s;
-}
-
-// ── Volta Brackets ───────────────────────────────────────────────
-
-function renderVolta(m: NormalizedMeasure, measureX: number, staffY: number, ss: number, _staffH: number): string {
-  let s = "";
-  if ((m as any).volta?.indices) {
-    const idx = (m as any).volta.indices.join(",");
-    s += `<text x="${measureX + 4}" y="${staffY - ss * 3}" class="nav-text">${idx}.</text>`;
-    s += `<line x1="${measureX + 8}" y1="${staffY - ss * 3.5}" x2="${measureX + 50}" y2="${staffY - ss * 3.5}" class="volta-line"/>`;
-    s += `<line x1="${measureX + 8}" y1="${staffY - ss * 3.5}" x2="${measureX + 8}" y2="${staffY - ss * 2}" class="volta-line"/>`;
-  }
-  return s;
-}
-
-// ── Note Y Position ─────────────────────────────────────────────
-
-function noteY(track: string, staffY: number, ss: number): number {
+function noteY(track: string, staffY: number): number {
+  // VexFlow: staffY + STAFF_SPACE is the top line.
+  // Note positions in staff-space units (0 = top line, positive = downward):
   const pos: Record<string, number> = {
-    HH: 0, RC: 1, RC2: 1, C: 2, C2: 2, SPL: -1, CHN: -1,
-    T1: 3, T2: 4, T3: 5, T4: 6, SD: 4, BD: 8, BD2: 8, HF: 9,
-    ST: -1, CB: 0, WB: 0, CL: 0,
+    HH: 0, HF: -1, SPL: -1, CHN: -1, ST: -1,
+    RC: 1, RC2: 1, C: 2, C2: 2,
+    T1: 3, T2: 4, SD: 4, T3: 5, T4: 6,
+    BD: 8, BD2: 8,
+    CB: 0, WB: -1, CL: 0,
   };
-  return staffY + (pos[track] ?? 4) * (ss / 2);
+  const ssPos = pos[track] ?? 4;
+  return staffY + STAFF_SPACE + ssPos * (STAFF_SPACE / 2);
 }
 
-// ── Glyph Mapping ────────────────────────────────────────────────
+// ── Glyphs ───────────────────────────────────────────────────────
 
 function noteGlyph(ev: NormalizedEvent): string {
   const family = trackFamily(ev.track);
-  if (family === "cymbal") return "\u{E0A9}";
+  if (family === "cymbal") return "\u{E0A9}"; // X notehead
   for (const m of ev.modifiers || []) {
     if (m === "open") return "\u{E0B3}";
     if (m === "cross") return "\u{E0A9}";
     if (m === "bell") return "\u{E0DB}";
     if (m === "rim") return "\u{E0CE}";
   }
-  return "\u{E0A4}";
+  return "\u{E0A4}"; // standard black notehead
+}
+
+function restGlyph(ev: NormalizedEvent): string {
+  const d = ev.duration?.denominator ?? 4;
+  if (d >= 32) return "\u{E4E7}";
+  if (d >= 16) return "\u{E4E6}";
+  if (d >= 8)  return "\u{E4E5}";
+  if (d >= 4)  return "\u{E4E4}";
+  return "\u{E4E3}";
+}
+
+function numGlyph(n: number): string {
+  const map: Record<number, string> = {
+    0: "\u{E080}", 1: "\u{E081}", 2: "\u{E082}", 3: "\u{E083}", 4: "\u{E084}",
+    5: "\u{E085}", 6: "\u{E086}", 7: "\u{E087}", 8: "\u{E088}", 9: "\u{E089}",
+  };
+  return map[n] ?? String(n);
 }
 
 function esc(s: string): string {

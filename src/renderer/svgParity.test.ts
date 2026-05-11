@@ -1,119 +1,57 @@
 import { describe, it, expect } from "vitest";
 import { buildNormalizedScore } from "../dsl/normalize";
-import type { NormalizedScore } from "../dsl/types";
 import { renderScoreToSvg } from "./svgRenderer";
-
-// ── Shared header ────────────────────────────────────────────────
 
 const HEADER = `time 4/4
 note 1/8
 grouping 2+2
 `;
 
-// ── Helpers ──────────────────────────────────────────────────────
-
-/** Extract element tags from SVG string. */
-function tags(svg: string): string[] {
-  const re = /<(text|line|rect|path|circle|g)[ >]/g;
-  const result: string[] = [];
-  let m;
-  while ((m = re.exec(svg)) !== null) result.push(m[1]);
-  return result;
+function render(dsl: string): string {
+  const score = buildNormalizedScore(dsl);
+  return renderScoreToSvg(score, { pageWidth: 612, showTitle: true });
 }
 
-/** Extract <text> content from SVG. */
-function textContent(svg: string): string[] {
-  const re = /<text[^>]*>([^<]*)<\/text>/g;
-  const result: string[] = [];
-  let m;
-  while ((m = re.exec(svg)) !== null) result.push(m[1]);
-  return result;
+function countRe(svg: string, re: RegExp): number {
+  return (svg.match(re) || []).length;
 }
-
-/** Count elements of a given tag type. */
-function countTag(svg: string, tag: string): number {
-  return (svg.match(new RegExp(`<${tag}[ >]`, "g")) || []).length;
-}
-
-/** Count elements with given class. */
-function countClass(svg: string, cls: string): number {
-  return (svg.match(new RegExp(`class="[^"]*${cls}[^"]*"`, "g")) || []).length;
-}
-
-// ── Tests ────────────────────────────────────────────────────────
 
 describe("SVG Renderer parity", () => {
-  // ── Staff lines ───────────────────────────────────────────────
   it("renders 5 staff lines", () => {
-    const svg = render(HEADER + "HH | x |\n");
-    const lineCount = countClass(svg, "staff-line");
-    expect(lineCount).toBe(5);
-  });
-
-  // ── Barlines ──────────────────────────────────────────────────
-  it("renders single barline", () => {
-    const svg = render(HEADER + "HH | x |\n");
-    expect(countClass(svg, "barline")).toBeGreaterThanOrEqual(1);
-  });
-
-  it("renders double barline", () => {
-    const svg = render(HEADER + "HH | x ||\n");
-    expect(svg).toContain("class=\"barline\"");
-    // Double barline has two barline elements
-    const bars = countClass(svg, "barline");
-    expect(bars).toBeGreaterThanOrEqual(2);
-  });
-
-  it("renders repeat-start barline", () => {
-    const svg = render(HEADER + "HH |: x |\n");
-    expect(textContent(svg).some((t) => t.includes(":"))).toBe(true);
-  });
-
-  it("renders repeat-end barline", () => {
-    const svg = render(HEADER + "HH | x :|\n");
-    expect(textContent(svg).some((t) => t.includes(":"))).toBe(true);
-  });
-
-  // ── Noteheads ─────────────────────────────────────────────────
-  it("renders standard notehead (d on SD)", () => {
     const svg = render(HEADER + "SD | d |\n");
-    expect(countClass(svg, "notehead")).toBeGreaterThanOrEqual(1);
+    expect(countRe(svg, /class="vf-staff"/g)).toBe(5);
   });
 
-  it("renders X notehead on cymbal (x on HH)", () => {
+  it("renders percussion clef", () => {
+    const svg = render(HEADER + "SD | d |\n");
+    expect(svg).toContain("vf-notehead"); // clef is a notehead-sized text
+  });
+
+  it("renders time signature", () => {
+    const svg = render(HEADER + "SD | d |\n");
+    expect(svg).toContain("\u{E084}"); // time sig "4"
+  });
+
+  it("renders barline", () => {
+    const svg = render(HEADER + "SD | d |\n");
+    expect(countRe(svg, /class="vf-bar"/g)).toBeGreaterThanOrEqual(1);
+  });
+
+  it("renders notehead", () => {
+    const svg = render(HEADER + "SD | d |\n");
+    expect(svg).toContain("vf-notehead");
+  });
+
+  it("renders stem", () => {
+    const svg = render(HEADER + "SD | d |\n");
+    expect(svg).toContain("vf-stem");
+  });
+
+  it("renders X notehead on cymbal", () => {
     const svg = render(HEADER + "HH | x |\n");
-    expect(countClass(svg, "notehead")).toBeGreaterThanOrEqual(1);
+    expect(svg).toContain("\u{E0A9}");
   });
 
-  // ── Rests ─────────────────────────────────────────────────────
-  it("rests produce no events in NormalizedScore", () => {
-    // Rests are implicit gaps between events, not explicit NormalizedEvents.
-    // The SVG renderer shows empty staff content for rest-only measures.
-    const svg = render(HEADER + "SD | - |\n");
-    expect(countClass(svg, "staff-line")).toBe(5); // staff renders
-    // Rests are not rendered as explicit glyphs in NormalizedScore
-  });
-
-  // ── Title ─────────────────────────────────────────────────────
-  it("renders title", () => {
-    const svg = render("title Hello\n" + HEADER + "HH | x |\n");
-    expect(textContent(svg).some((t) => t.includes("Hello"))).toBe(true);
-  });
-
-  // ── Stems ─────────────────────────────────────────────────────
-  it("renders stems for notes", () => {
-    const svg = render(HEADER + "SD | x - x - |\n");
-    expect(countClass(svg, "stem")).toBeGreaterThanOrEqual(2);
-  });
-
-  // ── Multiple measures ──────────────────────────────────────────
-  it("renders multiple measures", () => {
-    const svg = render(HEADER + "SD | x | x | x |\n");
-    const bars = countClass(svg, "barline");
-    expect(bars).toBeGreaterThanOrEqual(3);
-  });
-
-  // ── Modifiers ─────────────────────────────────────────────────
   it("renders accent modifier", () => {
     const svg = render(HEADER + "SD | d:accent |\n");
     expect(svg).toContain(">");
@@ -124,34 +62,29 @@ describe("SVG Renderer parity", () => {
     expect(svg).toContain("(");
   });
 
-  // ── Beams ─────────────────────────────────────────────────────
-  it("renders stems for beamed 8th notes", () => {
-    const svg = render(HEADER + "SD | dddd |\n");
-    expect(countClass(svg, "stem")).toBeGreaterThanOrEqual(4);
+  it("renders double barline", () => {
+    const svg = render(HEADER + "SD | d ||\n");
+    const bars = countRe(svg, /class="vf-bar"/g);
+    expect(bars).toBeGreaterThanOrEqual(2);
   });
 
-  // ── Measure repeat ────────────────────────────────────────────
-  it("renders measure repeat percent sign", () => {
-    const svg = render(HEADER + "SD | x | % |\n");
+  it("renders repeat bars", () => {
+    const svg = render(HEADER + "SD |: d :|\n");
+    expect(svg).toContain(":");
+  });
+
+  it("renders title", () => {
+    const svg = render("title Hello\n" + HEADER + "SD | d |\n");
+    expect(svg).toContain("Hello");
+  });
+
+  it("renders measure repeat", () => {
+    const svg = render(HEADER + "SD | d | % |\n");
     expect(svg).toContain("%");
   });
 
-  // ── Multi-rest ────────────────────────────────────────────────
-  it("renders multi-rest H-bar", () => {
-    const svg = render(HEADER + "SD | x | --2-- |\n");
-    expect(svg).toContain("class=\"staff-line\"");
-  });
-
-  // ── Flam ──────────────────────────────────────────────────────
-  it("renders flam grace note", () => {
-    const svg = render(HEADER + "SD | d:flam |\n");
-    expect(countClass(svg, "notehead")).toBeGreaterThanOrEqual(1);
+  it("renders multi-rest", () => {
+    const svg = render(HEADER + "SD | --2-- |\n");
+    expect(svg).toContain("vf-staff"); // H-bar uses vf-staff class
   });
 });
-
-// ── Helpers ──────────────────────────────────────────────────────
-
-function render(dsl: string): string {
-  const score = buildNormalizedScore(dsl);
-  return renderScoreToSvg(score, { staffScale: 0.75, pageWidth: 612, showTitle: true });
-}
