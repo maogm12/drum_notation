@@ -1,6 +1,17 @@
 /* @ts-self-types="./drummark_core.d.ts" */
 
 /**
+ * @param {string} source
+ * @returns {any}
+ */
+export function build_layout_plan(source) {
+    const ptr0 = passStringToWasm0(source, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.build_layout_plan(ptr0, len0);
+    return takeObject(ret);
+}
+
+/**
  * Parse and normalize a DrumMark source string in one call.
  * Returns the NormalizedScore as a JS object tree.
  * @param {string} source
@@ -10,6 +21,16 @@ export function build_normalized_score(source) {
     const ptr0 = passStringToWasm0(source, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.build_normalized_score(ptr0, len0);
+    return takeObject(ret);
+}
+
+/**
+ * @param {any} _score
+ * @param {any} _options_json
+ * @returns {any}
+ */
+export function layout_plan(_score, _options_json) {
+    const ret = wasm.layout_plan(addHeapObject(_score), addHeapObject(_options_json));
     return takeObject(ret);
 }
 

@@ -1,11 +1,15 @@
 /* tslint:disable */
 /* eslint-disable */
 
+export function build_layout_plan(source: string): any;
+
 /**
  * Parse and normalize a DrumMark source string in one call.
  * Returns the NormalizedScore as a JS object tree.
  */
 export function build_normalized_score(source: string): any;
+
+export function layout_plan(_score: any, _options_json: any): any;
 
 /**
  * Parse a DrumMark source string and return the AST as a JS object.
@@ -16,8 +20,10 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly build_layout_plan: (a: number, b: number) => number;
     readonly build_normalized_score: (a: number, b: number) => number;
     readonly parse: (a: number, b: number) => number;
+    readonly layout_plan: (a: number, b: number) => number;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number) => void;

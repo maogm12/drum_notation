@@ -787,6 +787,7 @@ export function App() {
 
   useEffect(() => {
     localStorage.setItem("drummark-dsl", dsl);
+    import("./renderer/svgRenderer").then(({ setLayoutSource }) => setLayoutSource(dsl));
   }, [dsl]);
 
   useEffect(() => {
