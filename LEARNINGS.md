@@ -414,3 +414,21 @@ The regex parser (`parser.ts`) now has zero production references. All 345 tests
 - Beam thickness below the staff is not part of note geometry alone — stem extents reflect the adjusted stem-to-beam connection, but the beam line itself extends below that. A fixed `BEAM_THICKNESS` buffer (3pt) for beamed down-stem notes closes this gap without requiring separate beam geometry iteration.
 - Hairpin clipping (`clipPath`) height must be dynamic when hairpins are skyline-placed. A hardcoded `+60` was sufficient when `yShift` was user-controlled in a narrow range, but skyline placement (plus stacking) can push hairpins further down. `clipH` should be computed from the final `targetHairpinTopY + HAIRPIN_FULL_HEIGHT`.
 - `hairpinOffsetY` semantics changed from "absolute offset from BELOW position" to "additional breathing room beyond skyline-determined baseline." The range tightened from -40..40 to 0..20 with default 0, since the skyline now handles positioning automatically.
+
+## 2026-05-11
+
+### WASM Parser — Nav Markers Consume Position Slots
+
+Nav markers (`@segno`, `@fine`, `@to-coda`, etc.) were converted to `TokenGlyph::Basic { value: "-" }` (rest tokens) in `to_token_glyph`, causing them to consume weight=1 position slots. This shifted all subsequent events in a measure forward by one 8th-note position for each nav marker present.
+
+**Fix**: Filter out `MeasureExpr::NavMarker` and `MeasureExpr::NavJump` from `es.tokens` BEFORE converting to `TokenGlyph`. Nav metadata is already extracted during the scan phase; the tokens themselves should not produce events. Same applies to `MeasureExpr::MeasureRepeat` and `MeasureExpr::MultiRest` — these are metadata-only and should not consume position slots.
+
+### Known Lezer Normalizer Bugs (WASM matches, Lezer differs)
+
+1. **Nested tuplet groups** (`groups.drum` par 6: `[3: d [2: d d d] d]`): Lezer ignores the outer `[3:` span when nested groups are present, treating all items as regular duration. WASM correctly honors the outer span (compressing to fit) and the inner tuplet. **Lezer bug — WASM is correct.**
+
+2. **Paragraph boundary on blank line before `@fine`** (`full-example.drum`): A blank line between the Coda's `BD *4` and the standalone `|@fine|` creates a paragraph boundary per DSL grammar. WASM splits into 7 paragraphs; Lezer merges into 6 (losing the Coda's music events). **Lezer bug — WASM is correct.**
+
+### CombinedHit Supports Summoned Notes
+
+`CombinedHit` changed from `Vec<NoteExpr>` to `Vec<MeasureExpr>` to allow summoned notes inside combined hits (e.g., `d+BD:d`). A new `parse_single_hit` method handles summon prefixes within combined hits without causing infinite recursion (which would happen if `parse_measure_expr` → `parse_basic_or_combined` → `parse_measure_expr`).

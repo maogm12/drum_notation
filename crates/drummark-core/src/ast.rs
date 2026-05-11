@@ -55,7 +55,7 @@ pub enum MeasureExpr {
     RoutedBracedBlock { track: String, content: Vec<MeasureExpr> },
     InlineBracedBlock(Vec<MeasureExpr>),
     Group(GroupExpr),
-    CombinedHit(Vec<NoteExpr>),
+    CombinedHit(Vec<MeasureExpr>),
     MeasureRepeat(u32),
     MultiRest(u32),
     InlineRepeat(u32),

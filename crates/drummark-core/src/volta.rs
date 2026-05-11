@@ -10,16 +10,12 @@ pub fn propagate_voltas(
     measures: &mut [VoltaMeasure],
 ) {
     let mut active: Option<Vec<u32>> = None;
-    let mut prev_para: Option<u32> = None;
 
     for m in measures.iter_mut() {
-        // Clear active volta at paragraph boundaries
-        if let Some(p) = prev_para {
-            if m.paragraph_index != p {
-                active = None;
-            }
+        // Volta terminator clears active BEFORE applying (the terminator itself gets no volta)
+        if m.volta_terminator {
+            active = None;
         }
-        prev_para = Some(m.paragraph_index);
 
         // Seed: this measure has its own volta indices
         if let Some(ref indices) = m.seed_volta {
@@ -29,8 +25,8 @@ pub fn propagate_voltas(
         // Apply active volta
         m.volta = active.clone().map(|v| VoltaIntent { indices: v });
 
-        // Clear: repeat-end, repeat-both, or volta terminator
-        if m.repeat_end || m.repeat_both || m.volta_terminator {
+        // Clear after applying: repeat-end or repeat-both (the measure still shows the volta)
+        if m.repeat_end || m.repeat_both {
             active = None;
         }
     }

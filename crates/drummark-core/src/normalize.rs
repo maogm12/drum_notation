@@ -146,24 +146,43 @@ fn to_token_glyph(expr: &MeasureExpr) -> TokenGlyph {
             track_override: Some(track.clone()),
         },
         MeasureExpr::CombinedHit(hits) => TokenGlyph::Combined {
-            items: hits.iter().map(|n| TokenGlyph::Basic {
-                value: n.glyph.clone(),
-                dots: n.dots,
-                halves: n.halves,
-                stars: n.stars,
-                modifiers: n.modifiers.clone(),
-                track_override: None,
+            items: hits.iter().map(|e| match e {
+                MeasureExpr::BasicNote(n) => TokenGlyph::Basic {
+                    value: n.glyph.clone(),
+                    dots: n.dots,
+                    halves: n.halves,
+                    stars: n.stars,
+                    modifiers: n.modifiers.clone(),
+                    track_override: None,
+                },
+                MeasureExpr::SummonedNote { track, note } => TokenGlyph::Basic {
+                    value: note.glyph.clone(),
+                    dots: note.dots,
+                    halves: note.halves,
+                    stars: note.stars,
+                    modifiers: note.modifiers.clone(),
+                    track_override: Some(track.clone()),
+                },
+                _ => TokenGlyph::Basic {
+                    value: "-".to_string(), dots: 0, halves: 0, stars: 0,
+                    modifiers: vec![], track_override: None,
+                },
             }).collect(),
         },
-        MeasureExpr::Group(g) => TokenGlyph::Group {
-            // In drummark [N: ...] notation, N is the SPAN (normal duration),
-            // not the tuplet numerator. Items count is the actual note count.
-            // Without N (no ratio): span defaults to 1.
-            count: g.items.len() as u32,
-            span: g.n.unwrap_or(1),
-            items: g.items.iter().map(to_token_glyph).collect(),
-            modifiers: g.modifiers.clone(),
-        },
+        MeasureExpr::Group(g) => {
+            // Check if any item is itself a Group (nested group)
+            let has_nested = g.items.iter().any(|i| matches!(i, MeasureExpr::Group(_)));
+            TokenGlyph::Group {
+                // In drummark [N: ...] notation, N is the SPAN (normal duration),
+                // not the tuplet numerator. Items count is the actual note count.
+                // Without N (no ratio): span defaults to 1.
+                // For nested groups, match Lezer: treat outer as if span=items.len()
+                count: g.items.len() as u32,
+                span: if has_nested { g.items.len() as u32 } else { g.n.unwrap_or(1) },
+                items: g.items.iter().map(to_token_glyph).collect(),
+                modifiers: g.modifiers.clone(),
+            }
+        }
         MeasureExpr::RoutedBracedBlock { track, content } => TokenGlyph::Braced {
             track: track.clone(),
             items: content.iter().map(to_token_glyph).collect(),
@@ -207,7 +226,7 @@ fn barline_type(bl: &Barline) -> Option<String> {
         Barline::Double => Some("double".to_string()),
         Barline::RepeatStart => Some("repeat-start".to_string()),
         Barline::RepeatEnd => Some("repeat-end".to_string()),
-        Barline::VoltaTerminator => None, // handled via volta data
+        Barline::VoltaTerminator => Some("regular".to_string()),
         Barline::DoubleVoltaTerminator => None,
         Barline::VoltaRepeatStart => Some("repeat-start".to_string()),
         Barline::Volta { prefix, numbers } => {
@@ -351,18 +370,14 @@ pub fn normalize_document(doc: &Document) -> NormalizedScore {
                     }
                 }
 
-                // Scan tokens
+                // Scan tokens — filter out zero-time markers before converting
                 let mut tokens: Vec<TokenGlyph> = es.tokens.iter()
+                    .filter(|t| !matches!(t,
+                        MeasureExpr::NavMarker(_) | MeasureExpr::NavJump(_)
+                        | MeasureExpr::MeasureRepeat(_) | MeasureExpr::MultiRest(_)
+                    ))
                     .map(to_token_glyph)
                     .collect();
-
-                // Extract non-display tokens
-                tokens.retain(|t| {
-                    match t {
-                        TokenGlyph::Basic { value, .. } if value == "-" => true,
-                        _ => true,
-                    }
-                });
 
                 // Scan for measure-repeat, multi-rest, nav markers
                 // Skip metadata on padded sections to avoid repeating non-note data

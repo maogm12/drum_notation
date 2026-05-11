@@ -586,19 +586,43 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_basic_or_combined(&mut self) -> Result<MeasureExpr, ParseError> {
-        let first = self.parse_basic_note()?;
+        let first = if let Some(ref t) = self.peek() { if t.is_summon_prefix() {
+            let track = t.track_prefix_name().unwrap().to_string();
+            self.next().ok();
+            let note = self.parse_basic_note()?;
+            MeasureExpr::SummonedNote { track, note }
+        } else {
+            let note = self.parse_basic_note()?;
+            MeasureExpr::BasicNote(note)
+        }} else {
+            return Err(self.error_at(self.last_end, "expected glyph or summon prefix"));
+        };
         if self.peek() == Some(Token::Plus) {
             self.next().ok();
             let mut hits = vec![first];
             loop {
-                hits.push(self.parse_basic_note()?);
+                hits.push(self.parse_single_hit()?);
                 if self.peek() == Some(Token::Plus) { self.next().ok(); }
                 else { break; }
             }
             Ok(MeasureExpr::CombinedHit(hits))
         } else {
-            Ok(MeasureExpr::BasicNote(first))
+            Ok(first)
         }
+    }
+
+    /// Parse a single note or summoned note within a combined hit.
+    fn parse_single_hit(&mut self) -> Result<MeasureExpr, ParseError> {
+        if let Some(ref t) = self.peek() {
+            if t.is_summon_prefix() {
+                let track = t.track_prefix_name().unwrap().to_string();
+                self.next().ok();
+                let note = self.parse_basic_note()?;
+                return Ok(MeasureExpr::SummonedNote { track, note });
+            }
+        }
+        let note = self.parse_basic_note()?;
+        Ok(MeasureExpr::BasicNote(note))
     }
 
     fn parse_basic_note(&mut self) -> Result<NoteExpr, ParseError> {

@@ -128,7 +128,7 @@ fn expr_to_js(e: &MeasureExpr) -> JsValue {
         }
         MeasureExpr::CombinedHit(hits) => {
             set(&obj, "kind", &JsValue::from_str("combinedHit"));
-            set(&obj, "hits", &notes_to_js(hits));
+            set(&obj, "hits", &exprs_to_js(hits));
         }
         MeasureExpr::MeasureRepeat(count) => {
             set(&obj, "kind", &JsValue::from_str("measureRepeat"));
