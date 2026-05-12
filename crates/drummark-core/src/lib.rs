@@ -283,7 +283,7 @@ pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
     let center_x = page_w / 2.0;
     let content_start = margin + 114.0; // clef + time sig + gap
     // VexFlow-compatible Y offset: accounts for title area + stave internal margin  
-    let header_area_h = 170.0;
+    let header_area_h = 164.0;
     let mut sys_y = opts.top_margin_pt as f64 + header_area_h;
 
     // ── Title / Subtitle / Composer / Tempo ────────────────────
