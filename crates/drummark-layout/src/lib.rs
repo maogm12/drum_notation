@@ -251,6 +251,7 @@ impl StaffSpace {
 /// Vertical position of each drum kit element in staff-space units
 /// (0 = top staff line, positive = downward).
 pub fn staff_y_for_track(track: &str) -> f32 {
+    // VexFlow-compatible percussion clef positions (staff-space units from top staff line)
     match track {
         "HH" => 0.0,   // top line — cymbal
         "RC" | "RC2" => 1.0,
@@ -261,12 +262,12 @@ pub fn staff_y_for_track(track: &str) -> f32 {
         "T2" => 4.0,
         "T3" => 5.0,
         "T4" => 6.0,
-        "SD" => 4.0,   // snare — middle line
-        "BD" | "BD2" => 8.0, // bass drum — bottom space
+        "SD" => 3.0,   // snare — third space (between lines 3-4 from top)
+        "BD" | "BD2" => 6.0, // bass drum — first space (between lines 4-5)
         "HF" => 9.0,   // hi-hat foot — below staff
         "ST" => 0.0,   // sticking — above staff
         "CB" | "WB" | "CL" => 0.0, // percussion
-        _ => 4.0,
+        _ => 3.0,
     }
 }
 
@@ -312,8 +313,8 @@ mod tests {
     #[test]
     fn test_staff_y() {
         assert_eq!(staff_y_for_track("HH"), 0.0);
-        assert_eq!(staff_y_for_track("SD"), 4.0);
-        assert_eq!(staff_y_for_track("BD"), 8.0);
+        assert_eq!(staff_y_for_track("SD"), 3.0);
+        assert_eq!(staff_y_for_track("BD"), 6.0);
         assert_eq!(staff_y_for_track("T1"), 3.0);
     }
 

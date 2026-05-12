@@ -26,10 +26,10 @@ export function renderScoreToSvg(
       const opts = {
         pageWidth: logicalW,
         pageHeight: logicalH,
-        topMargin: (_options?.topMargin ?? 30) / ss,
-        bottomMargin: (_options?.bottomMargin ?? 30) / ss,
-        leftMargin: (_options?.leftMargin ?? 30) / ss,
-        rightMargin: (_options?.rightMargin ?? 30) / ss,
+        topMargin: (_options?.topMargin ?? 40) / ss,
+        bottomMargin: (_options?.bottomMargin ?? 40) / ss,
+        leftMargin: (_options?.leftMargin ?? 40) / ss,
+        rightMargin: (_options?.rightMargin ?? 40) / ss,
         staffScale: 1.0,  // layout engine now receives pre-scaled dimensions
         pxPerQuarter: 80,
       };

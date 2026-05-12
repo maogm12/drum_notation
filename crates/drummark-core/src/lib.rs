@@ -281,9 +281,9 @@ pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
     let margin = opts.left_margin_pt as f64;
     let staff_ss = 10.0_f64;
     let center_x = page_w / 2.0;
-    let content_start = margin + 114.0; // clef + time sig + gap
+    let content_start = margin + 103.0; // clef + time sig + gap
     // VexFlow-compatible Y offset: accounts for title area + stave internal margin  
-    let header_area_h = 164.0;
+    let header_area_h = 151.0;
     let mut sys_y = opts.top_margin_pt as f64 + header_area_h;
 
     // ── Title / Subtitle / Composer / Tempo ────────────────────
@@ -319,11 +319,11 @@ pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
         }
 
         // Percussion clef — dominant-baseline="central" centers on y
-        append_text(&sys_arr, margin + 30.0, s_mid, "\u{E069}", "Bravura,Academico", 30.0, "#333");
+        append_text(&sys_arr, margin + 18.0, s_mid, "\u{E069}", "Bravura,Academico", 30.0, "#333");
 
         // Time signature — fills spaces 1-4 (full staff height)
         if is_first_system {
-            let tsx = margin + 70.0;
+            let tsx = margin + 62.0;
             let beats = layout_score.header.time_beats;
             let unit = layout_score.header.time_beat_unit;
             append_text(&sys_arr, tsx, sy + staff_ss * 2.0, &num_to_glyph(beats), "Bravura,Academico", 30.0, "#333");
@@ -348,10 +348,15 @@ pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
             for ev in &m.events {
                 if ev.kind == drummark_layout::EventKind::Hit {
                     let nx = mx + 12.0 + note_spacing * note_idx as f64;
-                    let ny = s_top + staff_ss * 2.0;
+                    let track_ss = drummark_layout::staff_y_for_track(&ev.track);
+                    let ny = s_top + track_ss as f64 * staff_ss;
                     let cp = 0xE0A4u32;
                     append_text(&sys_arr, nx - 7.0, ny, &char::from_u32(cp).unwrap_or('?').to_string(), "Bravura,Academico", 30.0, "#333");
-                    append_line(&sys_arr, nx + 9.0, ny - staff_ss * 3.5, nx + 9.0, ny, "#333", 1.2);
+                    // Up-stem (above notehead) for most drums; down-stem for BD/HF
+                    let stem_up = !matches!(ev.track.as_str(), "BD" | "BD2" | "HF");
+                    let stem_y1 = if stem_up { ny - staff_ss * 3.5 } else { ny };
+                    let stem_y2 = if stem_up { ny } else { ny + staff_ss * 3.5 };
+                    append_line(&sys_arr, nx + 9.0, stem_y1, nx + 9.0, stem_y2, "#333", 1.2);
                     note_idx += 1;
                 }
             }
