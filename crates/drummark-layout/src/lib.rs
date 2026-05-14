@@ -262,8 +262,8 @@ pub fn staff_y_for_track(track: &str) -> f32 {
         "T2" => 4.0,
         "T3" => 5.0,
         "T4" => 6.0,
-        "SD" => 3.0,   // snare — third space (between lines 3-4 from top)
-        "BD" | "BD2" => 6.0, // bass drum — first space (between lines 4-5)
+        "SD" => 1.5,   // snare — third space from bottom (space 2 from top)
+        "BD" | "BD2" => 4.5, // bass drum — below staff
         "HF" => 9.0,   // hi-hat foot — below staff
         "ST" => 0.0,   // sticking — above staff
         "CB" | "WB" | "CL" => 0.0, // percussion
@@ -313,8 +313,8 @@ mod tests {
     #[test]
     fn test_staff_y() {
         assert_eq!(staff_y_for_track("HH"), 0.0);
-        assert_eq!(staff_y_for_track("SD"), 3.0);
-        assert_eq!(staff_y_for_track("BD"), 6.0);
+        assert_eq!(staff_y_for_track("SD"), 1.5);
+        assert_eq!(staff_y_for_track("BD"), 4.5);
         assert_eq!(staff_y_for_track("T1"), 3.0);
     }
 

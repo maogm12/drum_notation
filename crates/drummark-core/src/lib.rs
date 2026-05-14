@@ -172,6 +172,7 @@ fn set(obj: &js_sys::Object, key: &str, val: &JsValue) {
 #[wasm_bindgen]
 pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
     // 0. Parse layout options from JS
+    let mut show_debug_bbox = false;
     let opts = if options.is_object() {
         let get_f64 = |key: &str| -> f64 {
             js_sys::Reflect::get(&options, &JsValue::from_str(key))
@@ -185,6 +186,7 @@ pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
         let right = get_f64("rightMargin");
         let scale = get_f64("staffScale");
         let px_q = get_f64("pxPerQuarter");
+        show_debug_bbox = get_f64("debug") > 0.0;
         if width > 0.0 && height > 0.0 {
             drummark_layout::LayoutOptions {
                 page_width_pt: width as f32,
@@ -283,23 +285,25 @@ pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
     let center_x = page_w / 2.0;
     let content_start = margin + 103.0; // clef + time sig + gap
     // VexFlow-compatible Y offset: accounts for title area + stave internal margin  
-    let header_area_h = 151.0;
+    let header_area_h = 130.0;
     let mut sys_y = opts.top_margin_pt as f64 + header_area_h;
 
     // ── Title / Subtitle / Composer / Tempo ────────────────────
 
     if let Some(ref t) = layout_score.header.title {
-        append_text_anchor(&sys_arr, center_x, 25.0, t, "Academico,serif", 18.0, "#333", "middle");
+        append_text_bold(&sys_arr, center_x, 72.0, t, "Academico", 24.0, "#333", "middle");
     }
     if let Some(ref t) = layout_score.header.subtitle {
-        append_text_anchor(&sys_arr, center_x, 42.0, t, "Academico,serif", 12.0, "#333", "middle");
+        append_text_anchor(&sys_arr, center_x, 96.0, t, "Academico", 12.0, "#333", "middle");
     }
     if let Some(ref t) = layout_score.header.composer {
-        append_text_anchor(&sys_arr, page_w - margin, 25.0, t, "Academico,serif", 10.0, "#333", "end");
+        append_text_anchor(&sys_arr, page_w - margin, 72.0, t, "Academico", 10.0, "#333", "end");
     }
     if layout_score.header.tempo > 0 {
-        let tempo_text = format!("♩ = {}", layout_score.header.tempo);
-        append_text_anchor(&sys_arr, margin, sys_y - 10.0, &tempo_text, "Academico,serif", 12.0, "#333", "start");
+        let tempo_y = 160.0;
+        append_text(&sys_arr, margin + 32.0, tempo_y, "\u{E0A4}", "Bravura,Academico", 25.0, "#333");
+        append_text(&sys_arr, margin + 57.0, tempo_y, "=", "Academico", 14.0, "#333");
+        append_text(&sys_arr, margin + 68.0, tempo_y, &layout_score.header.tempo.to_string(), "Academico", 14.0, "#333");
     }
 
     let mut sys_idx = 0;
@@ -307,7 +311,7 @@ pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
         let is_first_system = sys_idx == 0;
         sys_idx += 1;
         let sy = sys_y;
-        sys_y += staff_ss * 8.0; // staff height + gap
+        sys_y += 130.0; // staff height (40) + inter-system gap (90) = 130
         let s_top = sy + staff_ss;
         let s_bot = sy + staff_ss * 5.0;
         let s_mid = sy + staff_ss * 3.0;
@@ -315,7 +319,7 @@ pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
         // Staff lines
         for i in 0..5 {
             let ly = sy + staff_ss * (1.0 + i as f64);
-            append_line(&sys_arr, margin, ly, page_w - margin, ly, "#999", 0.6);
+            append_line(&sys_arr, margin, ly, page_w - margin, ly, "#333", 1.0);
         }
 
         // Percussion clef — dominant-baseline="central" centers on y
@@ -335,10 +339,18 @@ pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
         let mw = available_w / measures.len().max(1) as f64;
         let mut mx = content_start;
 
+        // Left barline (opening) — 1pt extra height to match VexFlow
+        append_rect(&sys_arr, margin, s_top, 1.0, s_bot - s_top + 1.0, "#333");
+
+        // Measure number for non-first systems
+        if !is_first_system {
+            append_text(&sys_arr, margin, sy - staff_ss, &format!("{}", measures[0].paragraph_index + 1), "Academico", 11.0, "#333");
+        }
+
         for (mi, m) in measures.iter().enumerate() {
-            // Barline between measures (skip first — clef/ts area is the left boundary)
+            // Barline between measures (rect)
             if mi > 0 {
-                append_line(&sys_arr, mx, s_top, mx, s_bot, "#333", 1.0);
+                append_rect(&sys_arr, mx, s_top, 1.0, s_bot - s_top + 1.0, "#333");
             }
 
             // Notes — distribute evenly across measure width
@@ -351,12 +363,45 @@ pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
                     let track_ss = drummark_layout::staff_y_for_track(&ev.track);
                     let ny = s_top + track_ss as f64 * staff_ss;
                     let cp = 0xE0A4u32;
-                    append_text(&sys_arr, nx - 7.0, ny, &char::from_u32(cp).unwrap_or('?').to_string(), "Bravura,Academico", 30.0, "#333");
-                    // Up-stem (above notehead) for most drums; down-stem for BD/HF
+                    let nh_x = nx - 7.0;
+                    // SMuFL noteheadBlack anchors in staff-space units (Bravura metadata)
+                    //   stemUpSE:  (1.18,  0.168) — stem-up connection at top-right
+                    //   stemDownNW:(0.0,  -0.168) — stem-down connection at bottom-left
+                    // Fallback to glyphBBoxes if anchor not available:
+                    //   bBoxNE: (1.18, 0.5), bBoxSW: (0.0, -0.5)
+                    let nh_font_size = 30.0;
+                    let smufl_ss = nh_font_size / 4.0; // 1 SMuFL ss in pt = font-size / 4
                     let stem_up = !matches!(ev.track.as_str(), "BD" | "BD2" | "HF");
-                    let stem_y1 = if stem_up { ny - staff_ss * 3.5 } else { ny };
-                    let stem_y2 = if stem_up { ny } else { ny + staff_ss * 3.5 };
-                    append_line(&sys_arr, nx + 9.0, stem_y1, nx + 9.0, stem_y2, "#333", 1.2);
+                    // Anchor-based stem connection point (preferred over bbox edges)
+                    let (anchor_x, anchor_y) = if stem_up {
+                        (1.18, 0.168)  // stemUpSE
+                    } else {
+                        (0.0, -0.168)  // stemDownNW
+                    };
+                    // Connection point in our coordinates:
+                    //   x = origin + anchor_x * smufl_ss  (both use positive-x = rightward)
+                    //   y = origin - anchor_y * smufl_ss  (SMuFL y-up, SVG y-down: negate)
+                    let stem_cx = nh_x + anchor_x * smufl_ss;
+                    let stem_cy = ny - anchor_y * smufl_ss;
+                    // Stem length: 3.5 staff spaces (~one octave)
+                    let stem_len = staff_ss * 3.5;
+                    let stem_y1 = if stem_up { stem_cy - stem_len } else { stem_cy };
+                    let stem_y2 = if stem_up { stem_cy } else { stem_cy + stem_len };
+
+                    // Debug bounding box (glyphBBoxes-based, outline only)
+                    if show_debug_bbox {
+                        // bBoxSW: (0.0, -0.5), bBoxNE: (1.18, 0.5) from Bravura metadata
+                        let bb_x = nh_x + 0.0 * smufl_ss;
+                        let bb_w = (1.18 - 0.0) * smufl_ss;
+                        let bb_top = ny - 0.5 * smufl_ss;
+                        let bb_h = (0.5 - (-0.5)) * smufl_ss;
+                        append_rect_stroke(&sys_arr, bb_x, bb_top, bb_w, bb_h, "red", 1.0);
+                    }
+                    // Group notehead + stem
+                    append_group_start(&sys_arr);
+                    append_text(&sys_arr, nh_x, ny, &char::from_u32(cp).unwrap_or('?').to_string(), "Bravura,Academico", 30.0, "#333");
+                    append_line(&sys_arr, stem_cx, stem_y1, stem_cx, stem_y2, "#333", 1.5);
+                    append_group_end(&sys_arr);
                     note_idx += 1;
                 }
             }
@@ -364,9 +409,13 @@ pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
             mx += mw;
         }
 
-        // Closing barline
-        append_line(&sys_arr, mx, s_top, mx, s_bot, "#333", 1.0);
-        append_line(&sys_arr, mx + 3.0, s_top, mx + 3.0, s_bot, "#333", 3.0);
+        // Closing barline (single for non-last, double for last system)
+        let is_last = sys_idx as usize == para_systems.len();
+        let bar_h = s_bot - s_top + 1.0;
+        append_rect(&sys_arr, mx, s_top, 1.0, bar_h, "#333");
+        if is_last {
+            append_rect(&sys_arr, mx + 4.0, s_top, 3.0, bar_h, "#333");
+        }
     }
 
     let pages_arr = Array::new();
@@ -393,6 +442,42 @@ fn append_line(arr: &Array, x1: f64, y1: f64, x2: f64, y2: f64, stroke: &str, sw
     arr.push(&obj);
 }
 
+fn append_rect(arr: &Array, x: f64, y: f64, w: f64, h: f64, fill: &str) {
+    let obj = Object::new();
+    set(&obj, "tag", &JsValue::from_str("rect"));
+    set(&obj, "x", &JsValue::from_f64(x));
+    set(&obj, "y", &JsValue::from_f64(y));
+    set(&obj, "width", &JsValue::from_f64(w));
+    set(&obj, "height", &JsValue::from_f64(h));
+    set(&obj, "fill", &JsValue::from_str(fill));
+    arr.push(&obj);
+}
+
+fn append_rect_stroke(arr: &Array, x: f64, y: f64, w: f64, h: f64, stroke: &str, sw: f64) {
+    let obj = Object::new();
+    set(&obj, "tag", &JsValue::from_str("rect"));
+    set(&obj, "x", &JsValue::from_f64(x));
+    set(&obj, "y", &JsValue::from_f64(y));
+    set(&obj, "width", &JsValue::from_f64(w));
+    set(&obj, "height", &JsValue::from_f64(h));
+    set(&obj, "stroke", &JsValue::from_str(stroke));
+    set(&obj, "strokeWidth", &JsValue::from_f64(sw));
+    set(&obj, "fill", &JsValue::from_str("none"));
+    arr.push(&obj);
+}
+
+fn append_group_start(arr: &Array) {
+    let obj = Object::new();
+    set(&obj, "tag", &JsValue::from_str("g_open"));
+    arr.push(&obj);
+}
+
+fn append_group_end(arr: &Array) {
+    let obj = Object::new();
+    set(&obj, "tag", &JsValue::from_str("g_close"));
+    arr.push(&obj);
+}
+
 fn append_text(arr: &Array, x: f64, y: f64, text: &str, font: &str, size: f64, fill: &str) {
     let obj = Object::new();
     set(&obj, "tag", &JsValue::from_str("text"));
@@ -415,6 +500,20 @@ fn append_text_anchor(arr: &Array, x: f64, y: f64, text: &str, font: &str, size:
     set(&obj, "fontSize", &JsValue::from_f64(size));
     set(&obj, "fill", &JsValue::from_str(fill));
     set(&obj, "textAnchor", &JsValue::from_str(anchor));
+    arr.push(&obj);
+}
+
+fn append_text_bold(arr: &Array, x: f64, y: f64, text: &str, font: &str, size: f64, fill: &str, anchor: &str) {
+    let obj = Object::new();
+    set(&obj, "tag", &JsValue::from_str("text"));
+    set(&obj, "x", &JsValue::from_f64(x));
+    set(&obj, "y", &JsValue::from_f64(y));
+    set(&obj, "text", &JsValue::from_str(text));
+    set(&obj, "fontFamily", &JsValue::from_str(font));
+    set(&obj, "fontSize", &JsValue::from_f64(size));
+    set(&obj, "fill", &JsValue::from_str(fill));
+    set(&obj, "textAnchor", &JsValue::from_str(anchor));
+    set(&obj, "fontWeight", &JsValue::from_str("bold"));
     arr.push(&obj);
 }
 

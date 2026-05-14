@@ -8,19 +8,20 @@ export function setLayoutSource(src: string) { _cachedSource = src; }
 interface DrawCmd {
   tag: string;
   x?: number; y?: number; x1?: number; y1?: number; x2?: number; y2?: number;
+  width?: number; height?: number;
   text?: string; fontFamily?: string; fontSize?: number; fill?: string;
+  textAnchor?: string; fontWeight?: string;
   stroke?: string; strokeWidth?: number;
 }
 
 export function renderScoreToSvg(
   _score: any,
-  _options?: { staffScale?: number; pageWidth?: number; showTitle?: boolean; topMargin?: number; bottomMargin?: number; leftMargin?: number; rightMargin?: number },
+  _options?: { staffScale?: number; pageWidth?: number; showTitle?: boolean; topMargin?: number; bottomMargin?: number; leftMargin?: number; rightMargin?: number; debug?: boolean },
 ): string {
   let plan: any = { pages: [] };
   try {
     if (_cachedSource) {
       const ss = _options?.staffScale ?? 0.75;
-      // Use VexFlow-compatible logical coordinates (divided by staffScale)
       const logicalW = (_options?.pageWidth ?? 612) / ss;
       const logicalH = 792 / ss;
       const opts = {
@@ -30,8 +31,9 @@ export function renderScoreToSvg(
         bottomMargin: (_options?.bottomMargin ?? 40) / ss,
         leftMargin: (_options?.leftMargin ?? 40) / ss,
         rightMargin: (_options?.rightMargin ?? 40) / ss,
-        staffScale: 1.0,  // layout engine now receives pre-scaled dimensions
+        staffScale: 1.0,
         pxPerQuarter: 80,
+        debug: _options?.debug ? 1 : 0,
       };
       plan = build_layout_plan(_cachedSource, opts as any) as any;
     }
@@ -54,8 +56,22 @@ export function renderScoreToSvg(
       case "line":
         svg += `<line x1="${cmd.x1}" y1="${cmd.y1}" x2="${cmd.x2}" y2="${cmd.y2}" stroke="${cmd.stroke || '#333'}" stroke-width="${cmd.strokeWidth || 1}"/>`;
         break;
-      case "text":
-        svg += `<text x="${cmd.x}" y="${cmd.y}" dominant-baseline="central" font-family="${cmd.fontFamily || 'Bravura'}" font-size="${cmd.fontSize || 30}pt" fill="${cmd.fill || '#333'}"${(cmd as any).textAnchor ? ` text-anchor="${(cmd as any).textAnchor}"` : ""}>${esc(cmd.text || '')}</text>`;
+      case "rect": {
+        const f = cmd.fill || "none";
+        const s = (cmd as any).stroke ? ` stroke="${(cmd as any).stroke}" stroke-width="${(cmd as any).strokeWidth || 1}"` : "";
+        svg += `<rect x="${cmd.x}" y="${cmd.y}" width="${cmd.width}" height="${cmd.height}" fill="${f}"${s}/>`;
+        break;
+      }
+      case "text": {
+        const fw = (cmd as any).fontWeight ? ` font-weight="${(cmd as any).fontWeight}"` : "";
+        svg += `<text x="${cmd.x}" y="${cmd.y}" dominant-baseline="central" font-family="${cmd.fontFamily || 'Bravura'}" font-size="${cmd.fontSize || 30}pt" fill="${cmd.fill || '#333'}"${fw}${(cmd as any).textAnchor ? ` text-anchor="${(cmd as any).textAnchor}"` : ""}>${esc(cmd.text || '')}</text>`;
+        break;
+      }
+      case "g_open":
+        svg += `<g>`;
+        break;
+      case "g_close":
+        svg += `</g>`;
         break;
     }
   }

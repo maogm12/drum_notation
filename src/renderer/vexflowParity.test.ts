@@ -2,7 +2,7 @@
 
 import { describe, it, expect } from "vitest";
 import { buildNormalizedScore } from "../dsl/normalize";
-import { renderScoreToSvg } from "./svgRenderer";
+import { renderScoreToSvg, setLayoutSource } from "./svgRenderer";
 import { renderScoreToSvg as vexRender } from "../vexflow/renderer";
 
 const HEADER = `time 4/4
@@ -31,6 +31,7 @@ function textEls(svg: string): { x: number; y: number; content: string }[] {
 describe("VexFlow position parity", () => {
   it("staff lines start at same Y", async () => {
     const dsl = HEADER + "SD | dddd |\n";
+    setLayoutSource(dsl);
     const score = buildNormalizedScore(dsl);
     const vexSvg = await vexRender(score, { staffScale: 0.75 });
     const ourSvg = renderScoreToSvg(score, { staffScale: 0.75, pageWidth: 612, showTitle: false });
@@ -49,6 +50,7 @@ describe("VexFlow position parity", () => {
 
   it("first notehead X position is reasonable", async () => {
     const dsl = HEADER + "SD | d |\n";
+    setLayoutSource(dsl);
     const score = buildNormalizedScore(dsl);
     const vexSvg = await vexRender(score, { staffScale: 0.75 });
     const ourSvg = renderScoreToSvg(score, { staffScale: 0.75, pageWidth: 612, showTitle: false });
@@ -63,4 +65,3 @@ describe("VexFlow position parity", () => {
     expect(ourText.length).toBeGreaterThanOrEqual(1);
   });
 });
-
