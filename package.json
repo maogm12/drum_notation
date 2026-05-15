@@ -4,8 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "npm run build-docs",
+    "wasm:build": "node scripts/build_wasm.mjs",
+    "predev": "npm run build-docs && npm run wasm:build",
     "dev": "vite --host",
+    "prebuild": "npm run wasm:build",
     "build": "tsc -b && npm run build-docs && vite build && npm run bundle:report",
     "build-docs": "tsx build-docs.ts",
     "bundle:report": "node scripts/report_bundle.mjs",

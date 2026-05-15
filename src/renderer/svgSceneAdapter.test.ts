@@ -36,7 +36,7 @@ describe("SVG scene adapter", () => {
               role: "title",
               kind: "textRun",
               zIndex: 0,
-              primitive: { xPt: 50, yPt: 12, text: "Smoke", fontFamily: "Academico", fontSizePt: 24, fill: "#333", textAnchor: "middle" },
+              primitive: { xPt: 50, yPt: 12, text: "Smoke", fontFamily: "Bravura", fontSizePt: 24, fill: "#333", textAnchor: "middle" },
             },
             {
               id: "item-3",
@@ -44,7 +44,7 @@ describe("SVG scene adapter", () => {
               kind: "textRun",
               zIndex: 1,
               anchorItemId: "item-2",
-              primitive: { xPt: 50, yPt: 20, text: ">", fontFamily: "Academico", fontSizePt: 12, fill: "#333", textAnchor: "middle" },
+              primitive: { xPt: 50, yPt: 20, text: ">", fontFamily: "Bravura", fontSizePt: 12, fill: "#333", textAnchor: "middle" },
             },
           ],
           composites: [
@@ -133,7 +133,7 @@ describe("SVG scene adapter", () => {
     expect((svg.match(/data-role="repeat-span-end"/g) || []).length).toBe(1);
   });
 
-  it("renders glyphRun and polyline items", () => {
+  it("renders glyphRun, path, and polyline items", () => {
     const scene = {
       version: "1",
       metricsVersion: "test",
@@ -152,6 +152,13 @@ describe("SVG scene adapter", () => {
               primitive: { xPt: 20, yPt: 20, codepoint: 0xe0a4, fontFamily: "Bravura", fontSizePt: 18, fill: "#333" },
             },
             {
+              id: "path-1",
+              role: "beam",
+              kind: "path",
+              zIndex: 0,
+              primitive: { d: "M 10 10 L 30 10 L 30 14 L 10 14 Z", fill: "#333" },
+            },
+            {
               id: "poly-1",
               role: "shape",
               kind: "polyline",
@@ -166,7 +173,9 @@ describe("SVG scene adapter", () => {
 
     const svg = renderSceneToSvg(scene, { staffScale: 1 });
     expect(svg).toContain('data-role="glyph-note"');
+    expect(svg).toContain('data-role="beam"');
     expect(svg).toContain('data-role="shape"');
+    expect(svg).toContain("<path");
     expect(svg).toContain("<polyline");
   });
 });

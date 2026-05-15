@@ -157,7 +157,8 @@ pub enum GlyphRole {
     RestSixteenth,
     RestThirtySecond,
     RepeatDot,
-    MeasureRepeatMark,
+    MeasureRepeatMark1Bar,
+    MeasureRepeatMark2Bars,
     MultiRestBar,
     NavigationSegno,
     NavigationCoda,
@@ -250,6 +251,7 @@ pub enum SceneItemKind {
     LineSegment,
     Rect,
     Polyline,
+    Path,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -270,6 +272,7 @@ pub enum ScenePrimitive {
     LineSegment(LineSegment),
     Rect(RectShape),
     Polyline(Polyline),
+    Path(PathShape),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -321,6 +324,14 @@ pub struct RectShape {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Polyline {
     pub points_pt: Vec<(f32, f32)>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PathShape {
+    pub d: String,
+    pub fill: String,
+    pub stroke: Option<String>,
+    pub stroke_width: Option<f32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -461,6 +472,12 @@ enum WireScenePrimitive {
     Polyline {
         points_pt: Vec<(f32, f32)>,
     },
+    Path {
+        d: String,
+        fill: String,
+        stroke: Option<String>,
+        stroke_width: Option<f32>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -511,7 +528,8 @@ pub fn canonical_glyph_metric(role: GlyphRole) -> CanonicalGlyphMetric {
         GlyphRole::RestSixteenth => CanonicalGlyphMetric { role, smufl_codepoint: 0xE4E7, width_pt: 6.4, height_pt: 9.6, anchor_x_pt: 3.2, anchor_y_pt: 4.8, stem_offset_y_pt: 0.0 },
         GlyphRole::RestThirtySecond => CanonicalGlyphMetric { role, smufl_codepoint: 0xE4E8, width_pt: 6.4, height_pt: 9.6, anchor_x_pt: 3.2, anchor_y_pt: 4.8, stem_offset_y_pt: 0.0 },
         GlyphRole::RepeatDot => CanonicalGlyphMetric { role, smufl_codepoint: 0xE044, width_pt: 3.0, height_pt: 3.0, anchor_x_pt: 1.5, anchor_y_pt: 1.5, stem_offset_y_pt: 0.0 },
-        GlyphRole::MeasureRepeatMark => CanonicalGlyphMetric { role, smufl_codepoint: 0xE500, width_pt: 10.0, height_pt: 10.0, anchor_x_pt: 5.0, anchor_y_pt: 5.0, stem_offset_y_pt: 0.0 },
+        GlyphRole::MeasureRepeatMark1Bar => CanonicalGlyphMetric { role, smufl_codepoint: 0xE500, width_pt: 10.0, height_pt: 10.0, anchor_x_pt: 5.0, anchor_y_pt: 5.0, stem_offset_y_pt: 0.0 },
+        GlyphRole::MeasureRepeatMark2Bars => CanonicalGlyphMetric { role, smufl_codepoint: 0xE501, width_pt: 12.0, height_pt: 10.0, anchor_x_pt: 6.0, anchor_y_pt: 5.0, stem_offset_y_pt: 0.0 },
         GlyphRole::MultiRestBar => CanonicalGlyphMetric { role, smufl_codepoint: 0xE4EE, width_pt: 20.0, height_pt: 8.0, anchor_x_pt: 10.0, anchor_y_pt: 4.0, stem_offset_y_pt: 0.0 },
         GlyphRole::NavigationSegno => CanonicalGlyphMetric { role, smufl_codepoint: 0xE047, width_pt: 12.0, height_pt: 18.0, anchor_x_pt: 6.0, anchor_y_pt: 9.0, stem_offset_y_pt: 0.0 },
         GlyphRole::NavigationCoda => CanonicalGlyphMetric { role, smufl_codepoint: 0xE048, width_pt: 14.0, height_pt: 14.0, anchor_x_pt: 7.0, anchor_y_pt: 7.0, stem_offset_y_pt: 0.0 },
@@ -520,15 +538,15 @@ pub fn canonical_glyph_metric(role: GlyphRole) -> CanonicalGlyphMetric {
 
 pub fn canonical_text_metric(role: TextRole) -> CanonicalTextMetric {
     match role {
-        TextRole::Title => CanonicalTextMetric { role, font_family: "Bravura Text", font_size_pt: 24.0, line_height_pt: 28.0, average_advance_pt: 11.0, ascent_pt: 18.0, descent_pt: 6.0 },
-        TextRole::Subtitle => CanonicalTextMetric { role, font_family: "Bravura Text", font_size_pt: 18.0, line_height_pt: 22.0, average_advance_pt: 8.0, ascent_pt: 14.0, descent_pt: 4.0 },
-        TextRole::Composer => CanonicalTextMetric { role, font_family: "Bravura Text", font_size_pt: 14.0, line_height_pt: 18.0, average_advance_pt: 7.0, ascent_pt: 11.0, descent_pt: 3.0 },
-        TextRole::Tempo => CanonicalTextMetric { role, font_family: "Bravura Text", font_size_pt: 14.0, line_height_pt: 18.0, average_advance_pt: 7.0, ascent_pt: 11.0, descent_pt: 3.0 },
-        TextRole::PercussionClef => CanonicalTextMetric { role, font_family: "Bravura Text", font_size_pt: 30.0, line_height_pt: 32.0, average_advance_pt: 14.0, ascent_pt: 24.0, descent_pt: 6.0 },
-        TextRole::TimeSignatureDigit => CanonicalTextMetric { role, font_family: "Bravura Text", font_size_pt: 30.0, line_height_pt: 32.0, average_advance_pt: 10.0, ascent_pt: 24.0, descent_pt: 6.0 },
-        TextRole::Sticking => CanonicalTextMetric { role, font_family: "Bravura Text", font_size_pt: 12.0, line_height_pt: 14.0, average_advance_pt: 6.0, ascent_pt: 9.0, descent_pt: 3.0 },
-        TextRole::CountLabel => CanonicalTextMetric { role, font_family: "Bravura Text", font_size_pt: 12.0, line_height_pt: 14.0, average_advance_pt: 6.0, ascent_pt: 9.0, descent_pt: 3.0 },
-        TextRole::MeasureNumber => CanonicalTextMetric { role, font_family: "Bravura Text", font_size_pt: 10.0, line_height_pt: 12.0, average_advance_pt: 5.0, ascent_pt: 8.0, descent_pt: 2.0 },
+        TextRole::Title => CanonicalTextMetric { role, font_family: "Bravura", font_size_pt: 24.0, line_height_pt: 28.0, average_advance_pt: 11.0, ascent_pt: 18.0, descent_pt: 6.0 },
+        TextRole::Subtitle => CanonicalTextMetric { role, font_family: "Bravura", font_size_pt: 18.0, line_height_pt: 22.0, average_advance_pt: 8.0, ascent_pt: 14.0, descent_pt: 4.0 },
+        TextRole::Composer => CanonicalTextMetric { role, font_family: "Bravura", font_size_pt: 14.0, line_height_pt: 18.0, average_advance_pt: 7.0, ascent_pt: 11.0, descent_pt: 3.0 },
+        TextRole::Tempo => CanonicalTextMetric { role, font_family: "Bravura", font_size_pt: 14.0, line_height_pt: 18.0, average_advance_pt: 7.0, ascent_pt: 11.0, descent_pt: 3.0 },
+        TextRole::PercussionClef => CanonicalTextMetric { role, font_family: "Bravura", font_size_pt: 30.0, line_height_pt: 32.0, average_advance_pt: 14.0, ascent_pt: 24.0, descent_pt: 6.0 },
+        TextRole::TimeSignatureDigit => CanonicalTextMetric { role, font_family: "Bravura", font_size_pt: 30.0, line_height_pt: 32.0, average_advance_pt: 10.0, ascent_pt: 24.0, descent_pt: 6.0 },
+        TextRole::Sticking => CanonicalTextMetric { role, font_family: "Bravura", font_size_pt: 12.0, line_height_pt: 14.0, average_advance_pt: 6.0, ascent_pt: 9.0, descent_pt: 3.0 },
+        TextRole::CountLabel => CanonicalTextMetric { role, font_family: "Bravura", font_size_pt: 12.0, line_height_pt: 14.0, average_advance_pt: 6.0, ascent_pt: 9.0, descent_pt: 3.0 },
+        TextRole::MeasureNumber => CanonicalTextMetric { role, font_family: "Bravura", font_size_pt: 10.0, line_height_pt: 12.0, average_advance_pt: 5.0, ascent_pt: 8.0, descent_pt: 2.0 },
     }
 }
 
@@ -624,6 +642,7 @@ fn scene_item_kind_name(kind: SceneItemKind) -> &'static str {
         SceneItemKind::LineSegment => "lineSegment",
         SceneItemKind::Rect => "rect",
         SceneItemKind::Polyline => "polyline",
+        SceneItemKind::Path => "path",
     }
 }
 
@@ -649,7 +668,8 @@ fn glyph_role_name(role: GlyphRole) -> &'static str {
         GlyphRole::RestSixteenth => "restSixteenth",
         GlyphRole::RestThirtySecond => "restThirtySecond",
         GlyphRole::RepeatDot => "repeatDot",
-        GlyphRole::MeasureRepeatMark => "measureRepeatMark",
+        GlyphRole::MeasureRepeatMark1Bar => "measureRepeatMark1Bar",
+        GlyphRole::MeasureRepeatMark2Bars => "measureRepeatMark2Bars",
         GlyphRole::MultiRestBar => "multiRestBar",
         GlyphRole::NavigationSegno => "navigationSegno",
         GlyphRole::NavigationCoda => "navigationCoda",
@@ -710,8 +730,8 @@ pub struct GlyphMetrics {
 pub fn notehead_glyph(track: &str, modifiers: &[String], _glyph: &str) -> GlyphMetrics {
     let family = track_family(track);
 
-    // Cymbal tracks use X notehead
-    if family == "cymbal" {
+    // Cymbal tracks and hi-hat pedal use X notehead
+    if family == "cymbal" || track == "HF" {
         let metric = canonical_glyph_metric(GlyphRole::NoteheadX);
         return GlyphMetrics { codepoint: metric.smufl_codepoint, width_ss: 1.0, height_ss: 1.0, stem_offset_y: 0.0 };
     }
@@ -959,6 +979,8 @@ mod tests {
     fn test_notehead_glyph() {
         let g = notehead_glyph("HH", &[], "x");
         assert_eq!(g.codepoint, 0xE0A9); // cymbal → X notehead
+        let g = notehead_glyph("HF", &[], "d");
+        assert_eq!(g.codepoint, 0xE0A9); // hi-hat pedal → X notehead
         let g = notehead_glyph("SD", &[], "d");
         assert_eq!(g.codepoint, 0xE0A4); // drum → standard notehead
         let g = notehead_glyph("SD", &["cross".to_string()], "d");
@@ -1598,6 +1620,38 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
             .collect()
     }
 
+    fn test_hit(track: &str, start: Fraction, duration: Fraction, voice: u8) -> RenderEvent {
+        RenderEvent {
+            track: track.into(),
+            track_family: track_family(track).into(),
+            start,
+            duration,
+            kind: EventKind::Hit,
+            glyph: if track_family(track) == "cymbal" { "x".into() } else { "d".into() },
+            modifiers: vec![],
+            modifier: None,
+            voice,
+            beam: "none".into(),
+            tuplet: None,
+        }
+    }
+
+    fn test_rest(start: Fraction, duration: Fraction, voice: u8) -> RenderEvent {
+        RenderEvent {
+            track: "HH".into(),
+            track_family: "cymbal".into(),
+            start,
+            duration,
+            kind: EventKind::Rest,
+            glyph: "r".into(),
+            modifiers: vec![],
+            modifier: None,
+            voice,
+            beam: "none".into(),
+            tuplet: None,
+        }
+    }
+
     #[test]
     fn test_simple_four_four_spacing_is_even() {
         let measure = RenderMeasure {
@@ -1796,6 +1850,39 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
         assert_eq!(xs.len(), 4);
         assert!(xs[2] > midpoint, "the beat-3 note should start past the visual midpoint when the first group is denser");
         assert!(first_group_gap > second_group_gap + 1.0, "dense first-half grouping should allocate wider beat spacing: {xs:?}");
+    }
+
+    #[test]
+    fn test_beams_follow_grouping_segments() {
+        let mut measure = regular_measure(0, 0, 0);
+        measure.events = vec![
+            test_hit("HH", Fraction { numerator: 0, denominator: 1 }, Fraction { numerator: 1, denominator: 8 }, 1),
+            test_hit("HH", Fraction { numerator: 1, denominator: 8 }, Fraction { numerator: 1, denominator: 8 }, 1),
+            test_hit("HH", Fraction { numerator: 1, denominator: 2 }, Fraction { numerator: 1, denominator: 8 }, 1),
+            test_hit("HH", Fraction { numerator: 5, denominator: 8 }, Fraction { numerator: 1, denominator: 8 }, 1),
+        ];
+        let mut score = simple_layout_score(vec![measure]);
+        score.header.grouping = vec![2, 2];
+
+        let scene = build_layout_scene(&score, &LayoutOptions::default());
+        assert_eq!(items_by_role(&scene, "beam").len(), 2);
+        assert_eq!(items_by_role(&scene, "flag").len(), 0);
+    }
+
+    #[test]
+    fn test_rests_break_grouping_beams() {
+        let mut measure = regular_measure(0, 0, 0);
+        measure.events = vec![
+            test_hit("HH", Fraction { numerator: 0, denominator: 1 }, Fraction { numerator: 1, denominator: 8 }, 1),
+            test_rest(Fraction { numerator: 1, denominator: 8 }, Fraction { numerator: 1, denominator: 8 }, 1),
+            test_hit("HH", Fraction { numerator: 1, denominator: 4 }, Fraction { numerator: 1, denominator: 8 }, 1),
+        ];
+        let mut score = simple_layout_score(vec![measure]);
+        score.header.grouping = vec![4];
+
+        let scene = build_layout_scene(&score, &LayoutOptions::default());
+        assert_eq!(items_by_role(&scene, "beam").len(), 0);
+        assert_eq!(items_by_role(&scene, "flag").len(), 2);
     }
 
     #[test]
@@ -2216,10 +2303,10 @@ struct BeamAnchor {
     stem_x: f32,
     stem_tip_y: f32,
     voice: u8,
+    group: u32,
     level: u8,
     up: bool,
     stem_item_id: String,
-    beam_kind: String,
 }
 
 #[derive(Clone)]
@@ -2227,6 +2314,12 @@ struct SlotEvent<'a> {
     slot: u32,
     event_x: f32,
     event: &'a RenderEvent,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct BeamRunState {
+    segment: usize,
+    group: u32,
 }
 
 #[derive(Clone)]
@@ -2323,8 +2416,34 @@ fn system_start_reservation(is_first_system: bool) -> SystemStartReservation {
 
 #[derive(Debug)]
 struct PlannedSystem<'a> {
-    measures: Vec<&'a RenderMeasure>,
+    measures: Vec<&'a DisplayMeasure<'a>>,
     widths: Vec<f32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MeasureRepeatDisplayPart {
+    Single,
+    TwoBarStart,
+    TwoBarStop,
+}
+
+#[derive(Debug, Clone)]
+struct DisplayMeasure<'a> {
+    measure: &'a RenderMeasure,
+    global_index: u32,
+    paragraph_index: u32,
+    barline: Option<String>,
+    closing_barline: Option<String>,
+    start_nav: Option<NavMarker>,
+    end_nav: Option<NavJump>,
+    hairpins: Vec<HairpinSpan>,
+    repeat_part: Option<MeasureRepeatDisplayPart>,
+}
+
+#[derive(Debug, Clone)]
+struct ExpandedLayoutData<'a> {
+    measures: Vec<DisplayMeasure<'a>>,
+    repeat_spans: Vec<RepeatSpan>,
 }
 
 fn normalized_grouping(header: &RenderHeader) -> Vec<u32> {
@@ -2362,6 +2481,33 @@ fn event_count_in_slot_range(measure: &RenderMeasure, header: &RenderHeader, sta
         );
         slot >= start_slot && slot < end_slot
     }).count()
+}
+
+fn grouping_segment_index_for_slot(header: &RenderHeader, slot: u32) -> usize {
+    let grouping = normalized_grouping(header);
+    let slots_per_beat_unit = (header.divisions / header.time_beats.max(1)).max(1);
+    let mut boundary = 0_u32;
+    for (index, beat_units) in grouping.iter().enumerate() {
+        boundary += (*beat_units).max(1) * slots_per_beat_unit;
+        if slot < boundary {
+            return index;
+        }
+    }
+    grouping.len().saturating_sub(1)
+}
+
+fn is_beamable_duration(duration: Fraction) -> bool {
+    let divisor = gcd_u32(duration.numerator, duration.denominator).max(1);
+    duration.denominator / divisor >= 8
+}
+
+fn gcd_u32(mut a: u32, mut b: u32) -> u32 {
+    while b != 0 {
+        let remainder = a % b;
+        a = b;
+        b = remainder;
+    }
+    a
 }
 
 fn measure_geometry(
@@ -2480,9 +2626,129 @@ fn estimated_measure_width(
         .sum()
 }
 
+fn left_edge_barline(barline: Option<&str>) -> Option<String> {
+    match barline {
+        Some("repeat-start") | Some("repeat-both") => Some("repeat-start".to_string()),
+        _ => None,
+    }
+}
+
+fn right_edge_barline(barline: Option<&str>) -> Option<String> {
+    match barline {
+        Some("repeat-end") | Some("repeat-both") => Some("repeat-end".to_string()),
+        Some("double") => Some("double".to_string()),
+        Some("final") => Some("final".to_string()),
+        _ => None,
+    }
+}
+
+fn expand_layout_data<'a>(score: &'a RenderScore) -> ExpandedLayoutData<'a> {
+    let mut display_slots: Vec<Vec<u32>> = Vec::with_capacity(score.measures.len());
+    let mut next_index = 0_u32;
+    for measure in &score.measures {
+        if measure.measure_repeat_slashes == Some(2) {
+            display_slots.push(vec![next_index, next_index + 1]);
+            next_index += 2;
+        } else {
+            display_slots.push(vec![next_index]);
+            next_index += 1;
+        }
+    }
+
+    let map_start = |original: u32| -> u32 {
+        display_slots
+            .get(original as usize)
+            .and_then(|slots| slots.first().copied())
+            .unwrap_or(original)
+    };
+    let map_end = |original: u32| -> u32 {
+        display_slots
+            .get(original as usize)
+            .and_then(|slots| slots.last().copied())
+            .unwrap_or(original)
+    };
+    let map_hairpins = |hairpins: &[HairpinSpan]| -> Vec<HairpinSpan> {
+        hairpins
+            .iter()
+            .map(|hairpin| HairpinSpan {
+                kind: hairpin.kind,
+                start: hairpin.start,
+                end: hairpin.end,
+                start_measure_index: map_start(hairpin.start_measure_index),
+                end_measure_index: map_end(hairpin.end_measure_index),
+            })
+            .collect()
+    };
+
+    let mut measures = Vec::new();
+    let mut paragraph_measure_counts: std::collections::BTreeMap<u32, u32> = std::collections::BTreeMap::new();
+    for (measure_index, measure) in score.measures.iter().enumerate() {
+        let slots = &display_slots[measure_index];
+        for (slot_index, display_index) in slots.iter().enumerate() {
+            let paragraph_counter = paragraph_measure_counts.entry(measure.paragraph_index).or_insert(0);
+            *paragraph_counter += 1;
+
+            let repeat_part = match measure.measure_repeat_slashes {
+                Some(1) => Some(MeasureRepeatDisplayPart::Single),
+                Some(2) if slot_index == 0 => Some(MeasureRepeatDisplayPart::TwoBarStart),
+                Some(2) => Some(MeasureRepeatDisplayPart::TwoBarStop),
+                _ => None,
+            };
+
+            let (barline, closing_barline, start_nav, end_nav, hairpins) = match repeat_part {
+                Some(MeasureRepeatDisplayPart::TwoBarStart) => (
+                    left_edge_barline(measure.barline.as_deref()),
+                    left_edge_barline(measure.closing_barline.as_deref()),
+                    measure.start_nav.clone(),
+                    None,
+                    map_hairpins(&measure.hairpins),
+                ),
+                Some(MeasureRepeatDisplayPart::TwoBarStop) => (
+                    right_edge_barline(measure.barline.as_deref()),
+                    right_edge_barline(measure.closing_barline.as_deref()),
+                    None,
+                    measure.end_nav.clone(),
+                    Vec::new(),
+                ),
+                _ => (
+                    measure.barline.clone(),
+                    measure.closing_barline.clone(),
+                    measure.start_nav.clone(),
+                    measure.end_nav.clone(),
+                    map_hairpins(&measure.hairpins),
+                ),
+            };
+
+            measures.push(DisplayMeasure {
+                measure,
+                global_index: *display_index,
+                paragraph_index: measure.paragraph_index,
+                barline,
+                closing_barline,
+                start_nav,
+                end_nav,
+                hairpins,
+                repeat_part,
+            });
+        }
+    }
+
+    let repeat_spans = score
+        .repeat_spans
+        .iter()
+        .map(|repeat| RepeatSpan {
+            start_measure: map_start(repeat.start_measure),
+            end_measure: map_end(repeat.end_measure),
+            times: repeat.times,
+        })
+        .collect();
+
+    ExpandedLayoutData { measures, repeat_spans }
+}
+
 fn finalize_planned_system<'a>(
     systems: &mut Vec<PlannedSystem<'a>>,
-    current_measures: Vec<&'a RenderMeasure>,
+    current_measures: Vec<&'a DisplayMeasure<'a>>,
     current_inner_estimates: Vec<f32>,
     is_first_system: bool,
     available_width: f32,
@@ -2521,17 +2787,21 @@ fn finalize_planned_system<'a>(
     });
 }
 
-fn plan_scene_systems<'a>(score: &'a RenderScore, opts: &LayoutOptions) -> Vec<PlannedSystem<'a>> {
+fn plan_scene_systems<'a>(
+    header: &RenderHeader,
+    measures: &'a [DisplayMeasure<'a>],
+    opts: &LayoutOptions,
+) -> Vec<PlannedSystem<'a>> {
     let mapper = SlotMapper::new(opts.px_per_quarter);
     let available_width = (opts.page_width_pt - opts.left_margin_pt - opts.right_margin_pt).max(100.0);
     let mut systems: Vec<PlannedSystem<'a>> = Vec::new();
-    let mut current_measures: Vec<&'a RenderMeasure> = Vec::new();
+    let mut current_measures: Vec<&'a DisplayMeasure<'a>> = Vec::new();
     let mut current_inner_estimates: Vec<f32> = Vec::new();
     let mut current_paragraph: Option<u32> = None;
     let mut next_is_first_system = true;
 
-    for measure in &score.measures {
-        let estimate = estimated_measure_width(&score.header, measure, &mapper);
+    for measure in measures {
+        let estimate = estimated_measure_width(header, measure.measure, &mapper);
         let paragraph_break = current_paragraph.is_some() && current_paragraph != Some(measure.paragraph_index);
         if !current_measures.is_empty() && paragraph_break {
             finalize_planned_system(
@@ -2576,8 +2846,9 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
     let mut sys_y = opts.top_margin_pt + header_area_h;
     let mut item_counter = 0usize;
     let mapper = SlotMapper::new(opts.px_per_quarter);
+    let expanded = expand_layout_data(score);
 
-    let planned_systems = plan_scene_systems(score, opts);
+    let planned_systems = plan_scene_systems(&score.header, &expanded.measures, opts);
 
     let mut page = ScenePage {
         index: 0,
@@ -2643,7 +2914,7 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
         let tempo_equals_x = tempo_glyph_x + tempo_glyph_width + 8.0;
         let tempo_value_text = score.header.tempo.to_string();
         let tempo_value_x = tempo_equals_x + canonical_text_width(TextRole::Tempo, "=") + 6.0;
-        let tempo_glyph_id = push_text_item(&mut page.items, &mut item_counter, None, "tempo-glyph", tempo_glyph_x, tempo_y, TextRole::Tempo, "\u{E0A4}".to_string(), "Bravura,Academico", 25.0, "#333", None, None);
+        let tempo_glyph_id = push_text_item(&mut page.items, &mut item_counter, None, "tempo-glyph", tempo_glyph_x, tempo_y, TextRole::Tempo, "\u{E0A4}".to_string(), "Bravura", 25.0, "#333", None, None);
         let tempo_equals_id = push_text_item(&mut page.items, &mut item_counter, None, "tempo-equals", tempo_equals_x, tempo_y, TextRole::Tempo, "=".to_string(), tempo_metric.font_family, tempo_metric.font_size_pt, "#333", None, None);
         let tempo_value_id = push_text_item(&mut page.items, &mut item_counter, None, "tempo", tempo_value_x, tempo_y, TextRole::Tempo, tempo_value_text, tempo_metric.font_family, tempo_metric.font_size_pt, "#333", None, None);
         page.composites.push(SceneComposite {
@@ -2678,15 +2949,29 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
         }
         let clef_metric = canonical_text_metric(TextRole::PercussionClef);
         let count_metric = canonical_text_metric(TextRole::CountLabel);
-        push_text_item(&mut page.items, &mut item_counter, None, "percussion-clef", margin + 18.0, s_mid, TextRole::PercussionClef, "\u{E069}".to_string(), "Bravura,Academico", clef_metric.font_size_pt, "#333", None, None);
+        push_text_item(&mut page.items, &mut item_counter, None, "percussion-clef", margin + 18.0, s_mid, TextRole::PercussionClef, "\u{E069}".to_string(), "Bravura", clef_metric.font_size_pt, "#333", None, None);
         if is_first_system {
             let tsx = margin + 62.0;
             let time_sig_metric = canonical_text_metric(TextRole::TimeSignatureDigit);
-            push_text_item(&mut page.items, &mut item_counter, None, "time-signature-digit", tsx, sy + staff_ss * 2.0, TextRole::TimeSignatureDigit, num_to_glyph(score.header.time_beats), "Bravura,Academico", time_sig_metric.font_size_pt, "#333", None, None);
-            push_text_item(&mut page.items, &mut item_counter, None, "time-signature-digit", tsx, sy + staff_ss * 4.0, TextRole::TimeSignatureDigit, num_to_glyph(score.header.time_beat_unit), "Bravura,Academico", time_sig_metric.font_size_pt, "#333", None, None);
+            push_text_item(&mut page.items, &mut item_counter, None, "time-signature-digit", tsx, sy + staff_ss * 2.0, TextRole::TimeSignatureDigit, num_to_glyph(score.header.time_beats), "Bravura", time_sig_metric.font_size_pt, "#333", None, None);
+            push_text_item(&mut page.items, &mut item_counter, None, "time-signature-digit", tsx, sy + staff_ss * 4.0, TextRole::TimeSignatureDigit, num_to_glyph(score.header.time_beat_unit), "Bravura", time_sig_metric.font_size_pt, "#333", None, None);
         }
         if !is_first_system {
-            push_text_item(&mut page.items, &mut item_counter, None, "measure-number", margin, sy - staff_ss, TextRole::MeasureNumber, format!("{}", system.measures[0].global_index + 1), "Academico", 11.0, "#333", None, None);
+            push_text_item(
+                &mut page.items,
+                &mut item_counter,
+                None,
+                "measure-number",
+                margin,
+                sy - staff_ss,
+                TextRole::MeasureNumber,
+                format!("{}", system.measures[0].measure.global_index + 1),
+                "Bravura",
+                11.0,
+                "#333",
+                None,
+                None,
+            );
         }
 
         for (mi, (measure, mw)) in system.measures.iter().zip(system.widths.iter()).enumerate() {
@@ -2701,7 +2986,7 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
 
             page.measures.push(SceneMeasure {
                 id: measure_id.clone(),
-                index: measure.index,
+                index: measure.global_index,
                 global_index: measure.global_index,
                 system_id: system_id.clone(),
                 x_pt: mx,
@@ -2710,7 +2995,7 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
                 height_pt: s_bot - sy,
             });
 
-            if let Some(count) = measure.multi_rest_count {
+            if let Some(count) = measure.measure.multi_rest_count {
                 let center_y = s_top + (s_bot - s_top) * 0.5;
                 let bar_id = push_line_item(&mut page.items, &mut item_counter, Some(&measure_id), "multi-rest-bar", mx + 14.0, center_y, mx + *mw - 14.0, center_y, "#333", 3.0);
                 let count_id = push_text_item(&mut page.items, &mut item_counter, Some(&measure_id), "multi-rest-count", mx + *mw * 0.5, center_y - count_metric.ascent_pt, TextRole::CountLabel, count.to_string(), count_metric.font_family, count_metric.font_size_pt, "#333", Some("middle"), Some("bold"));
@@ -2724,19 +3009,63 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
                     start_anchor_id: Some(measure_id.clone()),
                     end_anchor_id: Some(measure_id.clone()),
                 });
-            } else if let Some(slashes) = measure.measure_repeat_slashes {
-                let repeat_text = if slashes >= 2 { "%%" } else { "%" };
-                let repeat_id = push_text_item(&mut page.items, &mut item_counter, Some(&measure_id), "measure-repeat", mx + *mw * 0.5, s_top + count_metric.ascent_pt + 8.0, TextRole::CountLabel, repeat_text.to_string(), count_metric.font_family, count_metric.font_size_pt, "#333", Some("middle"), Some("bold"));
-                page.composites.push(SceneComposite {
-                    id: format!("measure-repeat-{}", measure.global_index),
-                    kind: CompositeKind::MeasureRepeat,
-                    fragment: SpanFragmentKind::SingleSegment,
-                    child_item_ids: vec![repeat_id],
-                    label: None,
-                    count: Some(slashes),
-                    start_anchor_id: Some(measure_id.clone()),
-                    end_anchor_id: Some(measure_id.clone()),
-                });
+            } else if let Some(repeat_part) = measure.repeat_part {
+                match repeat_part {
+                    MeasureRepeatDisplayPart::Single => {
+                        let repeat_metric = canonical_glyph_metric(GlyphRole::MeasureRepeatMark1Bar);
+                        let repeat_id = push_glyph_item(
+                            &mut page.items,
+                            &mut item_counter,
+                            Some(&measure_id),
+                            "measure-repeat",
+                            mx + *mw * 0.5 - repeat_metric.anchor_x_pt,
+                            s_top + count_metric.ascent_pt + 8.0,
+                            GlyphRole::MeasureRepeatMark1Bar,
+                            "Bravura",
+                            20.0,
+                            "#333",
+                        );
+                        page.composites.push(SceneComposite {
+                            id: format!("measure-repeat-{}", measure.global_index),
+                            kind: CompositeKind::MeasureRepeat,
+                            fragment: SpanFragmentKind::SingleSegment,
+                            child_item_ids: vec![repeat_id],
+                            label: None,
+                            count: Some(1),
+                            start_anchor_id: Some(measure_id.clone()),
+                            end_anchor_id: Some(measure_id.clone()),
+                        });
+                    }
+                    MeasureRepeatDisplayPart::TwoBarStart => {
+                        let next_width = system.widths.get(mi + 1).copied().unwrap_or(*mw);
+                        let span_center_x = mx + (*mw + next_width) * 0.5;
+                        let repeat_metric = canonical_glyph_metric(GlyphRole::MeasureRepeatMark2Bars);
+                        let repeat_id = push_glyph_item(
+                            &mut page.items,
+                            &mut item_counter,
+                            Some(&measure_id),
+                            "measure-repeat",
+                            span_center_x - repeat_metric.anchor_x_pt,
+                            s_top + count_metric.ascent_pt + 8.0,
+                            GlyphRole::MeasureRepeatMark2Bars,
+                            "Bravura",
+                            20.0,
+                            "#333",
+                        );
+                        let end_anchor_id = format!("measure-{}", measure.global_index + 1);
+                        page.composites.push(SceneComposite {
+                            id: format!("measure-repeat-{}", measure.global_index),
+                            kind: CompositeKind::MeasureRepeat,
+                            fragment: SpanFragmentKind::SingleSegment,
+                            child_item_ids: vec![repeat_id],
+                            label: None,
+                            count: Some(2),
+                            start_anchor_id: Some(measure_id.clone()),
+                            end_anchor_id: Some(end_anchor_id),
+                        });
+                    }
+                    MeasureRepeatDisplayPart::TwoBarStop => {}
+                }
             } else {
                 let left_pad = if mi == 0 { first_measure_left_pad } else { other_measure_left_pad };
                 render_measure_events(
@@ -2744,7 +3073,7 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
                     &mut item_counter,
                     &measure_id,
                     &score.header,
-                    measure,
+                    measure.measure,
                     mx,
                     *mw,
                     left_pad,
@@ -2781,14 +3110,14 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
         });
     }
 
-    push_repeat_span_composites(&mut page.items, &mut page.composites, &mut item_counter, &page.measures, &score.repeat_spans, opts);
-    push_volta_composites(&mut page.items, &mut page.composites, &mut item_counter, &page.measures, &score.measures, opts);
+    push_repeat_span_composites(&mut page.items, &mut page.composites, &mut item_counter, &page.measures, &expanded.repeat_spans, opts);
+    push_volta_composites(&mut page.items, &mut page.composites, &mut item_counter, &page.measures, &expanded.measures, opts);
     render_hairpin_fragments(
         &mut page.items,
         &mut page.composites,
         &mut item_counter,
         &page.measures,
-        &score.measures,
+        &expanded.measures,
         opts.hairpin_offset_y,
     );
     stack_scene_structural_items(&mut page.items, &page.composites, opts.edge_padding);
@@ -2852,19 +3181,19 @@ fn push_volta_composites(
     composites: &mut Vec<SceneComposite>,
     counter: &mut usize,
     page_measures: &[SceneMeasure],
-    measures: &[RenderMeasure],
+    measures: &[DisplayMeasure<'_>],
     opts: &LayoutOptions,
 ) {
     let mut current_label: Option<Vec<u32>> = None;
     let mut current_start: Option<u32> = None;
 
     for measure in measures {
-        if measure.volta_indices != current_label {
+        if measure.measure.volta_indices != current_label {
             if let (Some(start), Some(label)) = (current_start.take(), current_label.take()) {
                 push_volta_segment(items, composites, counter, page_measures, start, measure.global_index.saturating_sub(1), &label, opts);
             }
-            current_label = measure.volta_indices.clone();
-            current_start = measure.volta_indices.as_ref().map(|_| measure.global_index);
+            current_label = measure.measure.volta_indices.clone();
+            current_start = measure.measure.volta_indices.as_ref().map(|_| measure.global_index);
         }
     }
 
@@ -2992,6 +3321,35 @@ fn push_line_item(items: &mut Vec<SceneItem>, counter: &mut usize, measure_id: O
     id
 }
 
+fn push_path_item(
+    items: &mut Vec<SceneItem>,
+    counter: &mut usize,
+    measure_id: Option<&str>,
+    role: &str,
+    d: String,
+    fill: &str,
+    stroke: Option<&str>,
+    stroke_width: Option<f32>,
+) -> String {
+    let id = format!("item-{counter}");
+    items.push(SceneItem {
+        id: id.clone(),
+        measure_id: measure_id.map(ToString::to_string),
+        anchor_item_id: None,
+        role: role.to_string(),
+        kind: SceneItemKind::Path,
+        z_index: 0,
+        primitive: ScenePrimitive::Path(PathShape {
+            d,
+            fill: fill.to_string(),
+            stroke: stroke.map(ToString::to_string),
+            stroke_width,
+        }),
+    });
+    *counter += 1;
+    id
+}
+
 fn push_glyph_item(
     items: &mut Vec<SceneItem>,
     counter: &mut usize,
@@ -3066,6 +3424,8 @@ fn render_measure_events(
     });
 
     let mut index = 0usize;
+    let mut beam_states_by_voice: std::collections::BTreeMap<u8, BeamRunState> = std::collections::BTreeMap::new();
+    let mut next_beam_group = 0_u32;
     while index < slot_events.len() {
         let slot = slot_events[index].slot;
         let event_x = slot_events[index].event_x;
@@ -3074,11 +3434,19 @@ fn render_measure_events(
             index += 1;
         }
         let slot_group = &slot_events[slot_start..index];
+        let beam_groups_by_voice = beam_groups_for_slot(
+            header,
+            slot,
+            slot_group,
+            &mut beam_states_by_voice,
+            &mut next_beam_group,
+        );
         render_slot_group(
             items,
             counter,
             measure_id,
             slot_group,
+            &beam_groups_by_voice,
             event_x,
             staff_top,
             &mut beam_anchors,
@@ -3093,6 +3461,7 @@ fn render_slot_group(
     counter: &mut usize,
     measure_id: &str,
     slot_group: &[SlotEvent<'_>],
+    beam_groups_by_voice: &std::collections::BTreeMap<u8, u32>,
     event_x: f32,
     staff_top: f32,
     beam_anchors: &mut Vec<BeamAnchor>,
@@ -3125,6 +3494,7 @@ fn render_slot_group(
                 voice_shift,
                 staff_top,
                 &voice_hits,
+                beam_groups_by_voice.get(&voice).copied(),
                 beam_anchors,
             );
             note_anchors_by_voice.insert(voice, placements);
@@ -3137,7 +3507,7 @@ fn render_slot_group(
             let rest_metric = rest_glyph_for_fraction(rest.event.duration);
             let rest_glyph_char = char::from_u32(rest_metric.codepoint).unwrap_or('?').to_string();
             let rest_y = if rest.event.voice == 2 { staff_top + 30.0 } else { staff_top + 20.0 };
-            push_text_item(items, counter, Some(measure_id), "rest", event_x, rest_y, TextRole::CountLabel, rest_glyph_char, "Bravura,Academico", 28.0, "#333", Some("middle"), None);
+            push_text_item(items, counter, Some(measure_id), "rest", event_x, rest_y, TextRole::CountLabel, rest_glyph_char, "Bravura", 28.0, "#333", Some("middle"), None);
         }
     }
 
@@ -3163,6 +3533,53 @@ fn render_slot_group(
     }
 }
 
+fn beam_groups_for_slot(
+    header: &RenderHeader,
+    slot: u32,
+    slot_group: &[SlotEvent<'_>],
+    states_by_voice: &mut std::collections::BTreeMap<u8, BeamRunState>,
+    next_group: &mut u32,
+) -> std::collections::BTreeMap<u8, u32> {
+    let mut result = std::collections::BTreeMap::new();
+    let voices = slot_group
+        .iter()
+        .map(|slot_event| slot_event.event.voice)
+        .collect::<std::collections::BTreeSet<_>>();
+
+    for voice in voices {
+        let voice_events = slot_group
+            .iter()
+            .filter(|slot_event| slot_event.event.voice == voice)
+            .collect::<Vec<_>>();
+        let has_rest = voice_events
+            .iter()
+            .any(|slot_event| matches!(slot_event.event.kind, EventKind::Rest));
+        let beamable_hit = voice_events
+            .iter()
+            .filter(|slot_event| matches!(slot_event.event.kind, EventKind::Hit))
+            .find(|slot_event| is_beamable_duration(slot_event.event.duration));
+
+        if has_rest || beamable_hit.is_none() {
+            states_by_voice.remove(&voice);
+            continue;
+        }
+
+        let segment = grouping_segment_index_for_slot(header, slot);
+        let group = match states_by_voice.get(&voice).copied() {
+            Some(state) if state.segment == segment => state.group,
+            _ => {
+                let group = *next_group;
+                *next_group += 1;
+                group
+            }
+        };
+        states_by_voice.insert(voice, BeamRunState { segment, group });
+        result.insert(voice, group);
+    }
+
+    result
+}
+
 fn render_hit_cluster(
     items: &mut Vec<SceneItem>,
     counter: &mut usize,
@@ -3171,6 +3588,7 @@ fn render_hit_cluster(
     voice_shift: f32,
     staff_top: f32,
     voice_hits: &[&SlotEvent<'_>],
+    beam_group: Option<u32>,
     beam_anchors: &mut Vec<BeamAnchor>,
 ) -> Vec<NotePlacement> {
     let note_font_size = 30.0_f32;
@@ -3191,7 +3609,7 @@ fn render_hit_cluster(
         let glyph_metric = notehead_glyph(&slot_event.event.track, &slot_event.event.modifiers, &slot_event.event.glyph);
         let note_glyph = char::from_u32(glyph_metric.codepoint).unwrap_or('?').to_string();
         let actual_note_y = staff_top + *note_y_offset;
-        let note_id = push_text_item(items, counter, Some(measure_id), "notehead", base_note_x, actual_note_y, TextRole::Tempo, note_glyph, "Bravura,Academico", note_font_size, "#333", None, None);
+        let note_id = push_text_item(items, counter, Some(measure_id), "notehead", base_note_x, actual_note_y, TextRole::Tempo, note_glyph, "Bravura", note_font_size, "#333", None, None);
         let ledger_half_overhang_pt = 3.0_f32;
         for ledger_y_offset in ledger_line_offsets_for_staff_position(*note_y_offset / 10.0) {
             let ledger_y = staff_top + ledger_y_offset * 10.0;
@@ -3246,7 +3664,7 @@ fn render_hit_cluster(
                 } else {
                     attach_note.note_x + 0.12 * smufl_ss
                 };
-                let stem_len = 35.0_f32;
+                let stem_len = 31.0_f32;
                 let stem_y1 = if stem_up { attach_note.note_y - stem_len } else { attach_note.note_y };
                 let stem_y2 = if stem_up { attach_note.note_y } else { attach_note.note_y + stem_len };
                 let stem_id = push_line_item(items, counter, Some(measure_id), "stem", stem_x, stem_y1, stem_x, stem_y2, "#333", 1.5);
@@ -3262,16 +3680,16 @@ fn render_hit_cluster(
                 } else {
                     0
                 };
-                if beam_level > 0 {
+                if let Some(group) = beam_group.filter(|_| beam_level > 0) {
                     beam_anchors.push(BeamAnchor {
                         x: event_x,
                         stem_x,
                         stem_tip_y: if stem_up { stem_y1 } else { stem_y2 },
                         voice: first_hit.event.voice,
+                        group,
                         level: beam_level,
                         up: stem_up,
                         stem_item_id: stem_id,
-                        beam_kind: first_hit.event.beam.clone(),
                     });
                 }
             }
@@ -3320,6 +3738,7 @@ fn render_beam_groups(
     anchors.sort_by(|a, b| {
         a.voice
             .cmp(&b.voice)
+            .then_with(|| a.group.cmp(&b.group))
             .then_with(|| a.x.partial_cmp(&b.x).unwrap_or(std::cmp::Ordering::Equal))
     });
 
@@ -3348,7 +3767,7 @@ fn render_beam_groups(
                 flag_x,
                 anchor.stem_tip_y,
                 flag_role,
-                "Bravura,Academico",
+                "Bravura",
                 flag_metric.height_pt,
                 "#333",
             );
@@ -3364,25 +3783,41 @@ fn render_beam_groups(
         let last = group.last().unwrap().clone();
         let primary_y = first.stem_tip_y;
         let end_y = last.stem_tip_y;
-        push_line_item(items, counter, Some(measure_id), "beam", first.stem_x, primary_y, last.stem_x, end_y, "#333", 4.0);
+        let beam_id = push_path_item(
+            items,
+            counter,
+            Some(measure_id),
+            "beam",
+            beam_path_d(first.stem_x, primary_y, last.stem_x, end_y, first.up, 4.0),
+            "#333",
+            None,
+            None,
+        );
         if let Some(item) = items.last_mut() {
             item.anchor_item_id = Some(first.stem_item_id.clone());
+            debug_assert_eq!(item.id, beam_id);
         }
         if group.iter().any(|anchor| anchor.level >= 2) {
-            push_line_item(
+            let secondary_id = push_path_item(
                 items,
                 counter,
                 Some(measure_id),
                 "beam-secondary",
-                first.stem_x,
-                primary_y + if first.up { 6.0 } else { -6.0 },
-                last.stem_x,
-                end_y + if last.up { 6.0 } else { -6.0 },
+                beam_path_d(
+                    first.stem_x,
+                    primary_y + if first.up { 6.0 } else { -6.0 },
+                    last.stem_x,
+                    end_y + if last.up { 6.0 } else { -6.0 },
+                    first.up,
+                    4.0,
+                ),
                 "#333",
-                4.0,
+                None,
+                None,
             );
             if let Some(item) = items.last_mut() {
                 item.anchor_item_id = Some(first.stem_item_id.clone());
+                debug_assert_eq!(item.id, secondary_id);
             }
         }
         group.clear();
@@ -3390,28 +3825,35 @@ fn render_beam_groups(
 
     for anchor in anchors {
         let starts_new_group = current.is_empty()
-            || anchor.beam_kind == "begin"
-            || anchor.beam_kind == "none"
             || current
                 .last()
-                .map(|prev| prev.voice != anchor.voice || prev.up != anchor.up || prev.beam_kind == "end")
+                .map(|prev| prev.voice != anchor.voice || prev.up != anchor.up || prev.group != anchor.group)
                 .unwrap_or(false);
         if starts_new_group {
             if !current.is_empty() {
                 flush_group(&mut current);
             }
             current.push(anchor.clone());
-            if anchor.beam_kind == "end" || anchor.beam_kind == "none" {
-                flush_group(&mut current);
-            }
         } else {
             current.push(anchor.clone());
-            if anchor.beam_kind == "end" {
-                flush_group(&mut current);
-            }
         }
     }
     flush_group(&mut current);
+}
+
+fn beam_path_d(x1: f32, y1: f32, x2: f32, y2: f32, up: bool, thickness: f32) -> String {
+    let offset = if up { thickness } else { -thickness };
+    format!(
+        "M {:.3} {:.3} L {:.3} {:.3} L {:.3} {:.3} L {:.3} {:.3} Z",
+        x1,
+        y1,
+        x2,
+        y2,
+        x2,
+        y2 + offset,
+        x1,
+        y1 + offset,
+    )
 }
 
 fn render_left_barline(
@@ -3479,7 +3921,7 @@ fn render_nav_markers(
     composites: &mut Vec<SceneComposite>,
     counter: &mut usize,
     measure_id: &str,
-    measure: &RenderMeasure,
+    measure: &DisplayMeasure<'_>,
     x: f32,
     width: f32,
     system_y: f32,
@@ -3534,7 +3976,7 @@ fn render_hairpin_fragments(
     composites: &mut Vec<SceneComposite>,
     counter: &mut usize,
     page_measures: &[SceneMeasure],
-    measures: &[RenderMeasure],
+    measures: &[DisplayMeasure<'_>],
     hairpin_offset_y: f32,
 ) {
     for measure in measures {
@@ -3711,6 +4153,7 @@ fn item_bounds(item: &SceneItem) -> Option<(f32, f32, f32, f32)> {
             let max_y = polyline.points_pt.iter().map(|(_, y)| *y).fold(f32::NEG_INFINITY, f32::max);
             Some((min_x, min_y, max_x - min_x, max_y - min_y))
         }
+        ScenePrimitive::Path(path) => path_bounds(&path.d),
         ScenePrimitive::GlyphRun(glyph) => Some((glyph.x_pt, glyph.y_pt, canonical_glyph_metric(glyph.glyph_role).width_pt, canonical_glyph_metric(glyph.glyph_role).height_pt)),
     }
 }
@@ -3741,8 +4184,52 @@ fn translate_item(item: &mut SceneItem, dy: f32) {
                 *y += dy;
             }
         }
+        ScenePrimitive::Path(path) => translate_path_y(&mut path.d, dy),
         ScenePrimitive::GlyphRun(glyph) => glyph.y_pt += dy,
     }
+}
+
+fn path_bounds(d: &str) -> Option<(f32, f32, f32, f32)> {
+    let numbers = d
+        .split(|ch: char| !(ch.is_ascii_digit() || ch == '.' || ch == '-'))
+        .filter(|segment| !segment.is_empty())
+        .filter_map(|segment| segment.parse::<f32>().ok())
+        .collect::<Vec<_>>();
+    if numbers.len() < 2 {
+        return None;
+    }
+    let mut min_x = f32::INFINITY;
+    let mut min_y = f32::INFINITY;
+    let mut max_x = f32::NEG_INFINITY;
+    let mut max_y = f32::NEG_INFINITY;
+    for pair in numbers.chunks(2) {
+        if let [x, y] = pair {
+            min_x = min_x.min(*x);
+            min_y = min_y.min(*y);
+            max_x = max_x.max(*x);
+            max_y = max_y.max(*y);
+        }
+    }
+    Some((min_x, min_y, max_x - min_x, max_y - min_y))
+}
+
+fn translate_path_y(d: &mut String, dy: f32) {
+    let tokens = d.split_whitespace().collect::<Vec<_>>();
+    if tokens.is_empty() {
+        return;
+    }
+    let mut translated = Vec::with_capacity(tokens.len());
+    let mut coordinate_index = 0usize;
+    for token in tokens {
+        if let Ok(value) = token.parse::<f32>() {
+            let adjusted = if coordinate_index % 2 == 1 { value + dy } else { value };
+            translated.push(format!("{adjusted:.3}"));
+            coordinate_index += 1;
+        } else {
+            translated.push(token.to_string());
+        }
+    }
+    *d = translated.join(" ");
 }
 
 fn fraction_to_f32(fraction: Fraction) -> f32 {
@@ -3903,6 +4390,12 @@ fn to_wire_scene(scene: &LayoutScene) -> WireLayoutScene {
                             ScenePrimitive::Polyline(polyline) => WireScenePrimitive::Polyline {
                                 points_pt: polyline.points_pt.clone(),
                             },
+                            ScenePrimitive::Path(path) => WireScenePrimitive::Path {
+                                d: path.d.clone(),
+                                fill: path.fill.clone(),
+                                stroke: path.stroke.clone(),
+                                stroke_width: path.stroke_width,
+                            },
                         },
                     })
                     .collect(),
@@ -4031,6 +4524,15 @@ pub fn layout_scene_snapshot(scene: &LayoutScene) -> String {
                         .collect::<Vec<_>>()
                         .join(" ");
                     out.push_str(&format!(" primitive={{pointsPt=[{}]}}", points));
+                }
+                WireScenePrimitive::Path { d, fill, stroke, stroke_width } => {
+                    out.push_str(&format!(
+                        " primitive={{d={:?} fill={} stroke={} strokeWidth={}}}",
+                        d,
+                        fill,
+                        stroke.as_deref().unwrap_or("-"),
+                        stroke_width.map(|value| format!("{value:.3}")).unwrap_or_else(|| "-".to_string())
+                    ));
                 }
             }
             out.push('\n');
@@ -4171,6 +4673,16 @@ pub fn layout_scene_to_js(scene: &LayoutScene) -> JsValue {
                         points.push(&point.into());
                     }
                     js_sys::Reflect::set(&primitive, &JsValue::from_str("pointsPt"), &points.into()).unwrap();
+                }
+                WireScenePrimitive::Path { d, fill, stroke, stroke_width } => {
+                    js_sys::Reflect::set(&primitive, &JsValue::from_str("d"), &JsValue::from_str(&d)).unwrap();
+                    js_sys::Reflect::set(&primitive, &JsValue::from_str("fill"), &JsValue::from_str(&fill)).unwrap();
+                    if let Some(stroke) = stroke {
+                        js_sys::Reflect::set(&primitive, &JsValue::from_str("stroke"), &JsValue::from_str(&stroke)).unwrap();
+                    }
+                    if let Some(stroke_width) = stroke_width {
+                        js_sys::Reflect::set(&primitive, &JsValue::from_str("strokeWidth"), &JsValue::from_f64(stroke_width as f64)).unwrap();
+                    }
                 }
             }
             js_sys::Reflect::set(&item_obj, &JsValue::from_str("primitive"), &primitive.into()).unwrap();
@@ -4416,6 +4928,86 @@ fn test_volta_composites_are_emitted() {
 }
 
 #[test]
+fn test_two_bar_measure_repeat_expands_into_two_display_measures() {
+    let score = RenderScore {
+        version: RENDER_SCORE_VERSION.to_string(),
+        header: RenderHeader {
+            tempo: 120,
+            time_beats: 4,
+            time_beat_unit: 4,
+            divisions: 16,
+            note_value: 8,
+            grouping: vec![1, 1, 1, 1],
+            title: None,
+            subtitle: None,
+            composer: None,
+        },
+        tracks: vec![RenderTrack { id: "HH".into(), family: "cymbal".into() }],
+        measures: vec![
+            RenderMeasure {
+                index: 0,
+                global_index: 0,
+                paragraph_index: 0,
+                measure_in_paragraph: 0,
+                source_line: 1,
+                events: vec![],
+                barline: Some("regular".into()),
+                closing_barline: Some("regular".into()),
+                start_nav: None,
+                end_nav: None,
+                volta_indices: None,
+                hairpins: vec![],
+                measure_repeat_slashes: None,
+                multi_rest_count: None,
+                note_value: 8,
+                volta_terminator: false,
+            },
+            RenderMeasure {
+                index: 1,
+                global_index: 1,
+                paragraph_index: 0,
+                measure_in_paragraph: 1,
+                source_line: 1,
+                events: vec![],
+                barline: Some("regular".into()),
+                closing_barline: Some("final".into()),
+                start_nav: None,
+                end_nav: None,
+                volta_indices: None,
+                hairpins: vec![],
+                measure_repeat_slashes: Some(2),
+                multi_rest_count: None,
+                note_value: 8,
+                volta_terminator: false,
+            },
+        ],
+        errors: vec![],
+        repeat_spans: vec![],
+    };
+
+    let scene = build_layout_scene(&score, &LayoutOptions::default());
+    assert_eq!(scene.pages[0].measures.len(), 3);
+    let repeat_items = scene.pages[0]
+        .items
+        .iter()
+        .filter_map(|item| match &item.primitive {
+            ScenePrimitive::GlyphRun(glyph) if item.role == "measure-repeat" => Some(glyph),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(repeat_items.len(), 1);
+    assert_eq!(repeat_items[0].glyph_role, GlyphRole::MeasureRepeatMark2Bars);
+    let repeat_composite = scene.pages[0]
+        .composites
+        .iter()
+        .find(|composite| composite.kind == CompositeKind::MeasureRepeat)
+        .expect("expected measure-repeat composite");
+    assert_eq!(repeat_composite.count, Some(2));
+    assert_eq!(repeat_composite.start_anchor_id.as_deref(), Some("measure-1"));
+    assert_eq!(repeat_composite.end_anchor_id.as_deref(), Some("measure-2"));
+}
+
+#[test]
 fn test_structural_composites_are_emitted() {
     let score = RenderScore {
         version: RENDER_SCORE_VERSION.to_string(),
@@ -4488,7 +5080,7 @@ fn test_structural_composites_are_emitted() {
     assert_eq!(hairpin.fragment, SpanFragmentKind::SingleSegment);
     assert_eq!(hairpin.label.as_deref(), Some("crescendo"));
     assert_eq!(hairpin.start_anchor_id.as_deref(), Some("measure-0"));
-    assert_eq!(hairpin.end_anchor_id.as_deref(), Some("measure-1"));
+    assert_eq!(hairpin.end_anchor_id.as_deref(), Some("measure-2"));
     assert!(scene.pages[0].composites.iter().any(|c| c.kind == CompositeKind::MeasureRepeat && c.count == Some(2)));
     assert!(scene.pages[0].composites.iter().any(|c| c.kind == CompositeKind::MultiRest && c.count == Some(4)));
 }

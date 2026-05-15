@@ -472,19 +472,19 @@ pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
     // ── Title / Subtitle / Composer / Tempo ────────────────────
 
     if let Some(ref t) = layout_score.header.title {
-        append_text_bold(&sys_arr, center_x, 72.0, t, "Academico", 24.0, "#333", "middle");
+        append_text_bold(&sys_arr, center_x, 72.0, t, "Bravura", 24.0, "#333", "middle");
     }
     if let Some(ref t) = layout_score.header.subtitle {
-        append_text_anchor(&sys_arr, center_x, 96.0, t, "Academico", 12.0, "#333", "middle");
+        append_text_anchor(&sys_arr, center_x, 96.0, t, "Bravura", 12.0, "#333", "middle");
     }
     if let Some(ref t) = layout_score.header.composer {
-        append_text_anchor(&sys_arr, page_w - margin, 72.0, t, "Academico", 10.0, "#333", "end");
+        append_text_anchor(&sys_arr, page_w - margin, 72.0, t, "Bravura", 10.0, "#333", "end");
     }
     if layout_score.header.tempo > 0 {
         let tempo_y = 160.0;
-        append_text(&sys_arr, margin + 32.0, tempo_y, "\u{E0A4}", "Bravura,Academico", 25.0, "#333");
-        append_text(&sys_arr, margin + 57.0, tempo_y, "=", "Academico", 14.0, "#333");
-        append_text(&sys_arr, margin + 68.0, tempo_y, &layout_score.header.tempo.to_string(), "Academico", 14.0, "#333");
+        append_text(&sys_arr, margin + 32.0, tempo_y, "\u{E0A4}", "Bravura", 25.0, "#333");
+        append_text(&sys_arr, margin + 57.0, tempo_y, "=", "Bravura", 14.0, "#333");
+        append_text(&sys_arr, margin + 68.0, tempo_y, &layout_score.header.tempo.to_string(), "Bravura", 14.0, "#333");
     }
 
     let mut sys_idx = 0;
@@ -504,15 +504,15 @@ pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
         }
 
         // Percussion clef — dominant-baseline="central" centers on y
-        append_text(&sys_arr, margin + 18.0, s_mid, "\u{E069}", "Bravura,Academico", 30.0, "#333");
+        append_text(&sys_arr, margin + 18.0, s_mid, "\u{E069}", "Bravura", 30.0, "#333");
 
         // Time signature — fills spaces 1-4 (full staff height)
         if is_first_system {
             let tsx = margin + 62.0;
             let beats = layout_score.header.time_beats;
             let unit = layout_score.header.time_beat_unit;
-            append_text(&sys_arr, tsx, sy + staff_ss * 2.0, &num_to_glyph(beats), "Bravura,Academico", 30.0, "#333");
-            append_text(&sys_arr, tsx, sy + staff_ss * 4.0, &num_to_glyph(unit), "Bravura,Academico", 30.0, "#333");
+            append_text(&sys_arr, tsx, sy + staff_ss * 2.0, &num_to_glyph(beats), "Bravura", 30.0, "#333");
+            append_text(&sys_arr, tsx, sy + staff_ss * 4.0, &num_to_glyph(unit), "Bravura", 30.0, "#333");
         }
 
         // Measures — equal width. No barline between clef/ts and first measure.
@@ -525,7 +525,7 @@ pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
 
         // Measure number for non-first systems
         if !is_first_system {
-            append_text(&sys_arr, margin, sy - staff_ss, &format!("{}", measures[0].paragraph_index + 1), "Academico", 11.0, "#333");
+            append_text(&sys_arr, margin, sy - staff_ss, &format!("{}", measures[0].paragraph_index + 1), "Bravura", 11.0, "#333");
         }
 
         for (mi, m) in measures.iter().enumerate() {
@@ -580,7 +580,7 @@ pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
                     }
                     // Group notehead + stem
                     append_group_start(&sys_arr);
-                    append_text(&sys_arr, nh_x, ny, &char::from_u32(cp).unwrap_or('?').to_string(), "Bravura,Academico", 30.0, "#333");
+                    append_text(&sys_arr, nh_x, ny, &char::from_u32(cp).unwrap_or('?').to_string(), "Bravura", 30.0, "#333");
                     append_line(&sys_arr, stem_cx, stem_y1, stem_cx, stem_y2, "#333", 1.5);
                     append_group_end(&sys_arr);
                     note_idx += 1;

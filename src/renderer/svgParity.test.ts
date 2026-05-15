@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildNormalizedScore } from "../dsl/normalize";
-import { renderSceneToSvg, renderScoreToSvg, setLayoutSource } from "./svgRenderer";
+import { buildLayoutSceneFromSource, renderSceneToSvg, renderScoreToSvg, setLayoutSource } from "./svgRenderer";
 
 const HEADER = `time 4/4
 note 1/8
@@ -72,7 +72,7 @@ describe("SVG Renderer parity", () => {
   it("renders unbeamed flags as SMuFL glyphs", () => {
     const svg = renderPrecomputedScene([
       { id: "stem-0", measureId: "measure-0", role: "stem", kind: "lineSegment", zIndex: 0, primitive: { x1Pt: 18, y1Pt: 10, x2Pt: 18, y2Pt: 40, stroke: "#333", strokeWidth: 1.5 } },
-      { id: "flag-0", measureId: "measure-0", anchorItemId: "stem-0", role: "flag", kind: "glyphRun", zIndex: 1, primitive: { xPt: 18, yPt: 10, glyphRole: "flag8thUp", glyphCount: 1, codepoint: 0xE240, fontFamily: "Bravura,Academico", fontSizePt: 16, fill: "#333" } },
+      { id: "flag-0", measureId: "measure-0", anchorItemId: "stem-0", role: "flag", kind: "glyphRun", zIndex: 1, primitive: { xPt: 18, yPt: 10, glyphRole: "flag8thUp", glyphCount: 1, codepoint: 0xE240, fontFamily: "Bravura", fontSizePt: 16, fill: "#333" } },
     ]);
     expect(countRole(svg, "flag")).toBe(1);
     expect(svg).toContain("\u{E240}");
@@ -81,15 +81,16 @@ describe("SVG Renderer parity", () => {
 
   it("renders eighth-note beams", () => {
     const svg = renderPrecomputedScene([
-      { id: "beam-0", measureId: "measure-0", role: "beam", kind: "lineSegment", zIndex: 0, primitive: { x1Pt: 10, y1Pt: 20, x2Pt: 40, y2Pt: 20, stroke: "#333", strokeWidth: 4 } },
+      { id: "beam-0", measureId: "measure-0", role: "beam", kind: "path", zIndex: 0, primitive: { d: "M 10 20 L 40 20 L 40 24 L 10 24 Z", fill: "#333" } },
     ]);
     expect(countRole(svg, "beam")).toBeGreaterThanOrEqual(1);
+    expect(svg).toContain("<path");
   });
 
   it("renders sixteenth-note secondary beams", () => {
     const svg = renderPrecomputedScene([
-      { id: "beam-0", measureId: "measure-0", role: "beam", kind: "lineSegment", zIndex: 0, primitive: { x1Pt: 10, y1Pt: 20, x2Pt: 40, y2Pt: 20, stroke: "#333", strokeWidth: 4 } },
-      { id: "beam-1", measureId: "measure-0", role: "beam-secondary", kind: "lineSegment", zIndex: 0, primitive: { x1Pt: 10, y1Pt: 26, x2Pt: 40, y2Pt: 26, stroke: "#333", strokeWidth: 4 } },
+      { id: "beam-0", measureId: "measure-0", role: "beam", kind: "path", zIndex: 0, primitive: { d: "M 10 20 L 40 20 L 40 24 L 10 24 Z", fill: "#333" } },
+      { id: "beam-1", measureId: "measure-0", role: "beam-secondary", kind: "path", zIndex: 0, primitive: { d: "M 10 26 L 40 26 L 40 30 L 10 30 Z", fill: "#333" } },
     ]);
     expect(countRole(svg, "beam-secondary")).toBeGreaterThanOrEqual(1);
   });
@@ -139,6 +140,15 @@ describe("SVG Renderer parity", () => {
   it("renders measure repeat", () => {
     const svg = render(HEADER + "SD | d | % |\n");
     expect(countRole(svg, "measure-repeat")).toBe(1);
+  });
+
+  it("expands two-bar repeats into two display measures and uses the dedicated glyph", () => {
+    const source = HEADER + "HH | x - - - | x x - - | %% |\n";
+    const scene = buildLayoutSceneFromSource(source, { pageWidth: 612, staffScale: 1 });
+    expect(scene.pages[0]?.measures).toHaveLength(4);
+    const svg = renderSceneToSvg(scene, { staffScale: 1 });
+    expect(countRole(svg, "measure-repeat")).toBe(1);
+    expect(svg).toContain("\u{E501}");
   });
 
   it("renders multi-rest", () => {

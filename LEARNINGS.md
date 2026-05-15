@@ -734,3 +734,39 @@ Nav markers (`@segno`, `@fine`, `@to-coda`, etc.) were converted to `TokenGlyph:
 - Drum staff position mapping alone is not enough for out-of-staff notes. When a track lands on an integer staff position above the top line (`-1`, `-2`, ...) or below the bottom line (`5`, `6`, ...), layout must emit explicit short `ledger-line` segments centered on the notehead.
 
 - Space positions just outside the staff (`-0.5`, `4.5`, `5.5`, ...) do not create new ledger lines by themselves; they inherit the nearest already-required ledger lines. Example: crash at `-1.0` needs one top ledger line, and a bottom note at `6.5` needs lines at `5.0` and `6.0`.
+
+## 2026-05-15 Addendum: Score Text Font Ownership Lives in the Scene Contract
+
+- In this branch, score-font assignment is not just an SVG adapter concern. The authoritative source for most score text is `crates/drummark-layout/src/lib.rs` via `canonical_text_metric()` plus a few explicit `push_text_item(..., font_family, ...)` call sites for noteheads, rests, clef, time signature, and tempo glyphs.
+
+- There is also a parallel legacy WASM/JS scene serializer in `crates/drummark-core/src/lib.rs` that still hardcodes score text fonts. If score-font policy changes, both paths need to move together or the app bundle and layout goldens drift apart.
+
+## 2026-05-15 Addendum: Dev and Build Need a Checked-In WASM Rebuild Step
+
+- This repo's frontend imports the generated package in `src/wasm/pkg` rather than Rust sources directly. Rust changes in `crates/drummark-core` or `crates/drummark-layout` do not show up in `npm run dev` until the checked-in WASM bundle is regenerated.
+
+- The practical fix is to make WASM rebuild a first-class npm script and hook it into `predev` / `prebuild`, rather than relying on contributors to remember an external two-command cargo + wasm-bindgen sequence.
+
+## 2026-05-15 Addendum: Mixed Homebrew and rustup Toolchains Break WASM Builds
+
+- On this machine, PATH resolves `rustc` to Homebrew Rust (`/Users/gmao/brew/bin/rustc` 1.94), while `cargo` and installed targets are managed by rustup (`stable-aarch64-apple-darwin` 1.95). That split causes `cargo build --target wasm32-unknown-unknown` to fail with `can't find crate for core` even though `rust-std-wasm32-unknown-unknown` is installed.
+
+- The reliable repo-local fix is to force the WASM build script to use a matched rustup pair: resolve `cargo` via `rustup which cargo`, derive the sibling `rustc`, and run cargo with `RUSTC=<same-toolchain-rustc>`. Rebuilding `src/wasm/pkg` succeeds once both binaries come from the same toolchain.
+
+## 2026-05-15 Addendum: Slanted Beams Need Filled Path Primitives, Not Thick Lines
+
+- In the layout scene contract, beams should be emitted as filled quadrilateral `path` items rather than thick `lineSegment`s. A thick line looks acceptable only for horizontal beams; once the beam is slanted, the stem-to-beam joint reads as a stroked cap instead of a solid engraved beam.
+
+- The practical shape for this repo is a simple four-point polygon from the first stem tip to the last stem tip plus a constant vertical thickness offset (`+thickness` for up-stems, `-thickness` for down-stems). The SVG adapter must render this as `<path fill=...>` so no stroke cap or join artifacts leak through.
+
+## 2026-05-15 Addendum: `%%` Must Expand Display Measures But Preserve Source Measure Semantics
+
+- A two-bar repeat shorthand cannot stay inside one display slot. Layout must expand one source measure with `measure_repeat_slashes == Some(2)` into two display measures, emit the dedicated SMuFL repeat-2-bars glyph once, and anchor the composite from the first display measure to the second.
+
+- That expansion is display-only. Source-facing semantics such as later-system measure numbers still need to use the underlying source measure index (`measure.measure.global_index`), not the expanded display index, or every following system number drifts after the first `%%`.
+
+## 2026-05-15 Addendum: Beam Grouping Mirrors VexFlow Grouping Segments
+
+- VexFlow does not rely on the normalized event `beam` string for ordinary automatic beaming. It builds `VoiceEntry` runs and creates a `Beam` only while consecutive beamable notes remain in the same `groupingSegmentIndex()` result. A rest or non-beamable duration flushes the current run.
+
+- The Rust layout engine should use the same rule: assign beam groups per voice from the canonical grouping slot boundaries, render groups with more than one anchor as filled beam paths, and render single-anchor runs as flag glyphs. This keeps `grouping 2+2` visually aligned with the VexFlow path and prevents accidental beaming across rests.

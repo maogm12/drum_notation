@@ -62,7 +62,7 @@ type SceneItem = {
   measureId?: string;
   anchorItemId?: string;
   role: string;
-  kind: "glyphRun" | "lineSegment" | "polyline" | "rect" | "textRun";
+  kind: "glyphRun" | "lineSegment" | "path" | "polyline" | "rect" | "textRun";
   zIndex: number;
   primitive: Record<string, unknown>;
 };
@@ -158,6 +158,17 @@ export function renderSceneToSvg(scene: Scene, options?: RenderOptions): string 
         };
         const stroke = p.stroke ? ` stroke="${p.stroke}" stroke-width="${p.strokeWidth || 1}"` : "";
         svg += `<rect${roleAttr}${measureAttr}${anchorAttr} x="${p.xPt}" y="${p.yPt}" width="${p.widthPt}" height="${p.heightPt}" fill="${p.fill || "none"}"${stroke}/>`;
+        break;
+      }
+      case "path": {
+        const p = item.primitive as {
+          d: string;
+          fill?: string;
+          stroke?: string;
+          strokeWidth?: number;
+        };
+        const stroke = p.stroke ? ` stroke="${p.stroke}" stroke-width="${p.strokeWidth || 1}"` : "";
+        svg += `<path${roleAttr}${measureAttr}${anchorAttr} d="${esc(p.d)}" fill="${p.fill || "none"}"${stroke}/>`;
         break;
       }
       case "polyline": {
@@ -274,7 +285,7 @@ function renderRepeatSpanComposite(
     svg += `<line data-role="repeat-span-end" x1="${x2}" y1="${y}" x2="${x2}" y2="${y + 8}" stroke="#333" stroke-width="1.2"/>`;
   }
   if (countText) {
-    svg += `<text data-role="repeat-span-count" x="${(x1 + x2) / 2}" y="${y - 4}" dominant-baseline="central" font-family="Academico" font-size="10pt" fill="#333" text-anchor="middle">${esc(countText)}</text>`;
+    svg += `<text data-role="repeat-span-count" x="${(x1 + x2) / 2}" y="${y - 4}" dominant-baseline="central" font-family="Bravura" font-size="10pt" fill="#333" text-anchor="middle">${esc(countText)}</text>`;
   }
   return svg;
 }
@@ -296,7 +307,7 @@ function renderVoltaComposite(
     svg += `<line data-role="volta-end-hook" x1="${x2}" y1="${y}" x2="${x2}" y2="${y + 10}" stroke="#333" stroke-width="1.2"/>`;
   }
   if (composite.label && composite.fragment !== "continuation" && composite.fragment !== "end") {
-    svg += `<text data-role="volta-label" x="${x1 + 4}" y="${y - 4}" dominant-baseline="central" font-family="Academico" font-size="10pt" fill="#333">${esc(composite.label)}</text>`;
+    svg += `<text data-role="volta-label" x="${x1 + 4}" y="${y - 4}" dominant-baseline="central" font-family="Bravura" font-size="10pt" fill="#333">${esc(composite.label)}</text>`;
   }
   return svg;
 }
