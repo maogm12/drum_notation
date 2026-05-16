@@ -770,3 +770,11 @@ Nav markers (`@segno`, `@fine`, `@to-coda`, etc.) were converted to `TokenGlyph:
 - VexFlow does not rely on the normalized event `beam` string for ordinary automatic beaming. It builds `VoiceEntry` runs and creates a `Beam` only while consecutive beamable notes remain in the same `groupingSegmentIndex()` result. A rest or non-beamable duration flushes the current run.
 
 - The Rust layout engine should use the same rule: assign beam groups per voice from the canonical grouping slot boundaries, render groups with more than one anchor as filled beam paths, and render single-anchor runs as flag glyphs. This keeps `grouping 2+2` visually aligned with the VexFlow path and prevents accidental beaming across rests.
+
+## 2026-05-16 Addendum: SMuFL Glyph Anchors Are Not Visual Centers
+
+- Bravura's `bravura_metadata.json` separates glyph geometry into `glyphBBoxes` and optional `glyphsWithAnchors`. Layout code should preserve that split: bbox center may be used for visual centering, but it is not a stem or flag attachment anchor.
+
+- For noteheads, real stem attachment comes from anchors such as `stemUpSE` and `stemDownNW`. For flags, the corresponding anchors are `stemUpNW` and `stemDownSW`. Rests, repeat marks, clefs, navigation glyphs, and time-signature digits in the current table do not expose stem anchors and should store `None` rather than synthetic bbox centers.
+
+- The checked-in Bravura metadata does not expose advance widths. Until a separate font advance source is introduced, `CanonicalGlyphMetric.width_ss` is the bbox width for the glyphs this layout engine uses.

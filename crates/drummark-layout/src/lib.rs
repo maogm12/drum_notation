@@ -4,6 +4,7 @@ use wasm_bindgen::prelude::*;
 pub const RENDER_SCORE_VERSION: &str = "1";
 pub const LAYOUT_SCENE_VERSION: &str = "1";
 pub const CANONICAL_METRICS_VERSION: &str = "2026-05-13";
+const BASE_FONT_SIZE_PT: f32 = 30.0;
 
 // ── Core Render Contract ────────────────────────────────────────
 
@@ -179,14 +180,88 @@ pub enum TextRole {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GlyphPoint {
+    pub x_ss: f32,
+    pub y_ss: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CanonicalGlyphMetric {
     pub role: GlyphRole,
     pub smufl_codepoint: u32,
-    pub width_pt: f32,
-    pub height_pt: f32,
-    pub anchor_x_pt: f32,
-    pub anchor_y_pt: f32,
-    pub stem_offset_y_pt: f32,
+    /// Glyph width used by layout, in staff-space units.
+    ///
+    /// Bravura's checked-in SMuFL metadata exposes bounding boxes and anchors,
+    /// but not advance widths, so this is currently the bbox width for each
+    /// glyph we use.
+    pub width_ss: f32,
+    /// Bounding box bottom-left (staff-space units, from SMuFL metadata).
+    pub bbox_sw_x_ss: f32,
+    pub bbox_sw_y_ss: f32,
+    /// Bounding box top-right (staff-space units, from SMuFL metadata).
+    pub bbox_ne_x_ss: f32,
+    pub bbox_ne_y_ss: f32,
+    /// SMuFL `glyphsWithAnchors.stemUpSE` / `stemUpNW`, when present.
+    pub stem_up_anchor_ss: Option<GlyphPoint>,
+    /// SMuFL `glyphsWithAnchors.stemDownNW` / `stemDownSW`, when present.
+    pub stem_down_anchor_ss: Option<GlyphPoint>,
+}
+
+impl CanonicalGlyphMetric {
+    /// Convert a staff-space value to points at the given font size.
+    /// SMuFL is designed at 4 staff-spaces per em.
+    fn ss_to_pt(ss: f32, font_size_pt: f32) -> f32 {
+        ss * font_size_pt / 4.0
+    }
+
+    /// Width used by layout (staff-space units).
+    pub fn width_ss(&self) -> f32 {
+        self.width_ss
+    }
+
+    /// Width derived from the bounding box (staff-space units).
+    pub fn bbox_width_ss(&self) -> f32 {
+        self.bbox_ne_x_ss - self.bbox_sw_x_ss
+    }
+
+    /// Height derived from the bounding box (staff-space units).
+    pub fn bbox_height_ss(&self) -> f32 {
+        self.bbox_ne_y_ss - self.bbox_sw_y_ss
+    }
+
+    /// Visual center X (staff-space units) — midpoint of the bbox.
+    pub fn bbox_center_x_ss(&self) -> f32 {
+        (self.bbox_sw_x_ss + self.bbox_ne_x_ss) / 2.0
+    }
+
+    /// Visual center Y (staff-space units) — midpoint of the bbox.
+    pub fn bbox_center_y_ss(&self) -> f32 {
+        (self.bbox_sw_y_ss + self.bbox_ne_y_ss) / 2.0
+    }
+
+    pub fn width_pt(&self, font_size_pt: f32) -> f32 {
+        Self::ss_to_pt(self.width_ss(), font_size_pt)
+    }
+
+    pub fn bbox_height_pt(&self, font_size_pt: f32) -> f32 {
+        Self::ss_to_pt(self.bbox_height_ss(), font_size_pt)
+    }
+
+    pub fn bbox_center_x_pt(&self, font_size_pt: f32) -> f32 {
+        Self::ss_to_pt(self.bbox_center_x_ss(), font_size_pt)
+    }
+
+    pub fn bbox_center_y_pt(&self, font_size_pt: f32) -> f32 {
+        Self::ss_to_pt(self.bbox_center_y_ss(), font_size_pt)
+    }
+
+    pub fn stem_anchor_for_direction(&self, stem_up: bool) -> Option<GlyphPoint> {
+        if stem_up {
+            self.stem_up_anchor_ss
+        } else {
+            self.stem_down_anchor_ss
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -509,52 +584,260 @@ pub fn track_family(track: &str) -> &str {
 
 // ── Canonical Metrics ────────────────────────────────────────────
 
+fn glyph_metric(
+    role: GlyphRole,
+    smufl_codepoint: u32,
+    bbox_sw: [f32; 2],
+    bbox_ne: [f32; 2],
+    stem_up_anchor: Option<[f32; 2]>,
+    stem_down_anchor: Option<[f32; 2]>,
+) -> CanonicalGlyphMetric {
+    CanonicalGlyphMetric {
+        role,
+        smufl_codepoint,
+        width_ss: bbox_ne[0] - bbox_sw[0],
+        bbox_sw_x_ss: bbox_sw[0],
+        bbox_sw_y_ss: bbox_sw[1],
+        bbox_ne_x_ss: bbox_ne[0],
+        bbox_ne_y_ss: bbox_ne[1],
+        stem_up_anchor_ss: stem_up_anchor.map(|point| GlyphPoint {
+            x_ss: point[0],
+            y_ss: point[1],
+        }),
+        stem_down_anchor_ss: stem_down_anchor.map(|point| GlyphPoint {
+            x_ss: point[0],
+            y_ss: point[1],
+        }),
+    }
+}
+
 pub fn canonical_glyph_metric(role: GlyphRole) -> CanonicalGlyphMetric {
     match role {
-        GlyphRole::NoteheadBlack => CanonicalGlyphMetric { role, smufl_codepoint: 0xE0A4, width_pt: 8.0, height_pt: 8.0, anchor_x_pt: 4.0, anchor_y_pt: 4.0, stem_offset_y_pt: 0.0 },
-        GlyphRole::NoteheadX => CanonicalGlyphMetric { role, smufl_codepoint: 0xE0A9, width_pt: 8.0, height_pt: 8.0, anchor_x_pt: 4.0, anchor_y_pt: 4.0, stem_offset_y_pt: 0.0 },
-        GlyphRole::NoteheadDiamond => CanonicalGlyphMetric { role, smufl_codepoint: 0xE0B3, width_pt: 8.0, height_pt: 8.0, anchor_x_pt: 4.0, anchor_y_pt: 4.0, stem_offset_y_pt: 0.0 },
-        GlyphRole::NoteheadCircleX => CanonicalGlyphMetric { role, smufl_codepoint: 0xE0DB, width_pt: 8.0, height_pt: 8.0, anchor_x_pt: 4.0, anchor_y_pt: 4.0, stem_offset_y_pt: 0.0 },
-        GlyphRole::NoteheadRim => CanonicalGlyphMetric { role, smufl_codepoint: 0xE0CE, width_pt: 8.0, height_pt: 8.0, anchor_x_pt: 4.0, anchor_y_pt: 4.0, stem_offset_y_pt: 0.0 },
-        GlyphRole::Flag8thUp => CanonicalGlyphMetric { role, smufl_codepoint: 0xE240, width_pt: 10.0, height_pt: 16.0, anchor_x_pt: 0.0, anchor_y_pt: 0.0, stem_offset_y_pt: 0.0 },
-        GlyphRole::Flag8thDown => CanonicalGlyphMetric { role, smufl_codepoint: 0xE241, width_pt: 10.0, height_pt: 16.0, anchor_x_pt: 0.0, anchor_y_pt: 0.0, stem_offset_y_pt: 0.0 },
-        GlyphRole::Flag16thUp => CanonicalGlyphMetric { role, smufl_codepoint: 0xE242, width_pt: 10.0, height_pt: 20.0, anchor_x_pt: 0.0, anchor_y_pt: 0.0, stem_offset_y_pt: 0.0 },
-        GlyphRole::Flag16thDown => CanonicalGlyphMetric { role, smufl_codepoint: 0xE243, width_pt: 10.0, height_pt: 20.0, anchor_x_pt: 0.0, anchor_y_pt: 0.0, stem_offset_y_pt: 0.0 },
-        GlyphRole::Flag32ndUp => CanonicalGlyphMetric { role, smufl_codepoint: 0xE244, width_pt: 10.0, height_pt: 24.0, anchor_x_pt: 0.0, anchor_y_pt: 0.0, stem_offset_y_pt: 0.0 },
-        GlyphRole::Flag32ndDown => CanonicalGlyphMetric { role, smufl_codepoint: 0xE245, width_pt: 10.0, height_pt: 24.0, anchor_x_pt: 0.0, anchor_y_pt: 0.0, stem_offset_y_pt: 0.0 },
-        GlyphRole::PercussionClef => CanonicalGlyphMetric { role, smufl_codepoint: 0xE069, width_pt: 14.0, height_pt: 20.0, anchor_x_pt: 7.0, anchor_y_pt: 10.0, stem_offset_y_pt: 0.0 },
-        GlyphRole::TimeSignatureDigit => CanonicalGlyphMetric { role, smufl_codepoint: 0xE080, width_pt: 10.0, height_pt: 20.0, anchor_x_pt: 5.0, anchor_y_pt: 10.0, stem_offset_y_pt: 0.0 },
-        GlyphRole::RestWhole => CanonicalGlyphMetric { role, smufl_codepoint: 0xE4E3, width_pt: 6.4, height_pt: 8.0, anchor_x_pt: 3.2, anchor_y_pt: 4.0, stem_offset_y_pt: 0.0 },
-        GlyphRole::RestHalf => CanonicalGlyphMetric { role, smufl_codepoint: 0xE4E4, width_pt: 6.4, height_pt: 16.0, anchor_x_pt: 3.2, anchor_y_pt: 8.0, stem_offset_y_pt: 0.0 },
-        GlyphRole::RestQuarter => CanonicalGlyphMetric { role, smufl_codepoint: 0xE4E5, width_pt: 6.4, height_pt: 12.0, anchor_x_pt: 3.2, anchor_y_pt: 6.0, stem_offset_y_pt: 0.0 },
-        GlyphRole::RestEighth => CanonicalGlyphMetric { role, smufl_codepoint: 0xE4E6, width_pt: 6.4, height_pt: 9.6, anchor_x_pt: 3.2, anchor_y_pt: 4.8, stem_offset_y_pt: 0.0 },
-        GlyphRole::RestSixteenth => CanonicalGlyphMetric { role, smufl_codepoint: 0xE4E7, width_pt: 6.4, height_pt: 9.6, anchor_x_pt: 3.2, anchor_y_pt: 4.8, stem_offset_y_pt: 0.0 },
-        GlyphRole::RestThirtySecond => CanonicalGlyphMetric { role, smufl_codepoint: 0xE4E8, width_pt: 6.4, height_pt: 9.6, anchor_x_pt: 3.2, anchor_y_pt: 4.8, stem_offset_y_pt: 0.0 },
-        GlyphRole::RepeatDot => CanonicalGlyphMetric { role, smufl_codepoint: 0xE044, width_pt: 3.0, height_pt: 3.0, anchor_x_pt: 1.5, anchor_y_pt: 1.5, stem_offset_y_pt: 0.0 },
-        GlyphRole::MeasureRepeatMark1Bar => CanonicalGlyphMetric { role, smufl_codepoint: 0xE500, width_pt: 10.0, height_pt: 10.0, anchor_x_pt: 5.0, anchor_y_pt: 5.0, stem_offset_y_pt: 0.0 },
-        GlyphRole::MeasureRepeatMark2Bars => CanonicalGlyphMetric { role, smufl_codepoint: 0xE501, width_pt: 12.0, height_pt: 10.0, anchor_x_pt: 6.0, anchor_y_pt: 5.0, stem_offset_y_pt: 0.0 },
-        GlyphRole::MultiRestBar => CanonicalGlyphMetric { role, smufl_codepoint: 0xE4EE, width_pt: 20.0, height_pt: 8.0, anchor_x_pt: 10.0, anchor_y_pt: 4.0, stem_offset_y_pt: 0.0 },
-        GlyphRole::NavigationSegno => CanonicalGlyphMetric { role, smufl_codepoint: 0xE047, width_pt: 12.0, height_pt: 18.0, anchor_x_pt: 6.0, anchor_y_pt: 9.0, stem_offset_y_pt: 0.0 },
-        GlyphRole::NavigationCoda => CanonicalGlyphMetric { role, smufl_codepoint: 0xE048, width_pt: 14.0, height_pt: 14.0, anchor_x_pt: 7.0, anchor_y_pt: 7.0, stem_offset_y_pt: 0.0 },
-        GlyphRole::MetNoteQuarterUp => CanonicalGlyphMetric { role, smufl_codepoint: 0xE1D5, width_pt: 8.0, height_pt: 16.0, anchor_x_pt: 4.0, anchor_y_pt: 8.0, stem_offset_y_pt: 0.0 },
+        GlyphRole::NoteheadBlack => glyph_metric(
+            role,
+            0xE0A4,
+            [0.0, -0.5],
+            [1.18, 0.5],
+            Some([1.18, 0.168]),
+            Some([0.0, -0.168]),
+        ),
+        GlyphRole::NoteheadX => glyph_metric(
+            role,
+            0xE0A9,
+            [0.0, -0.5],
+            [1.16, 0.5],
+            Some([1.16, 0.444]),
+            Some([0.0, -0.44]),
+        ),
+        GlyphRole::NoteheadDiamond => glyph_metric(
+            role,
+            0xE0B3,
+            [0.0, -0.5],
+            [1.0, 0.5],
+            Some([1.0, 0.0]),
+            Some([0.0, 0.0]),
+        ),
+        GlyphRole::NoteheadCircleX => glyph_metric(
+            role,
+            0xE0DB,
+            [0.0, -0.5],
+            [0.996, 0.5],
+            Some([0.996, 0.0]),
+            Some([0.0, 0.0]),
+        ),
+        GlyphRole::NoteheadRim => glyph_metric(
+            role,
+            0xE0CE,
+            [-0.32, -0.66],
+            [1.5, 0.668],
+            Some([1.18, 0.164]),
+            Some([0.0, -0.172]),
+        ),
+        GlyphRole::Flag8thUp => glyph_metric(
+            role,
+            0xE240,
+            [0.0, -3.2407685],
+            [1.056, 0.036],
+            Some([0.0, -0.04]),
+            None,
+        ),
+        GlyphRole::Flag8thDown => glyph_metric(
+            role,
+            0xE241,
+            [0.0, -0.056],
+            [1.224, 3.2328966],
+            None,
+            Some([0.0, 0.132]),
+        ),
+        GlyphRole::Flag16thUp => glyph_metric(
+            role,
+            0xE242,
+            [0.0, -3.252],
+            [1.116, 0.008],
+            Some([0.0, -0.088]),
+            None,
+        ),
+        GlyphRole::Flag16thDown => glyph_metric(
+            role,
+            0xE243,
+            [0.0, -0.036],
+            [1.1635807, 3.2480257],
+            None,
+            Some([0.0, 0.128]),
+        ),
+        GlyphRole::Flag32ndUp => glyph_metric(
+            role,
+            0xE244,
+            [0.0, -3.248],
+            [1.044, 0.596],
+            Some([0.0, 0.376]),
+            None,
+        ),
+        GlyphRole::Flag32ndDown => glyph_metric(
+            role,
+            0xE245,
+            [0.0, -0.688],
+            [1.092, 3.248],
+            None,
+            Some([0.0, -0.448]),
+        ),
+        GlyphRole::PercussionClef => {
+            glyph_metric(role, 0xE069, [0.0, -1.0], [1.528, 1.0], None, None)
+        }
+        GlyphRole::TimeSignatureDigit => {
+            glyph_metric(role, 0xE080, [0.08, -1.0], [1.8, 1.004], None, None)
+        }
+        GlyphRole::RestWhole => {
+            glyph_metric(role, 0xE4E3, [0.0, -0.54], [1.128, 0.036], None, None)
+        }
+        GlyphRole::RestHalf => {
+            glyph_metric(role, 0xE4E4, [0.0, -0.008], [1.128, 0.568], None, None)
+        }
+        GlyphRole::RestQuarter => {
+            glyph_metric(role, 0xE4E5, [0.004, -1.5], [1.08, 1.492], None, None)
+        }
+        GlyphRole::RestEighth => {
+            glyph_metric(role, 0xE4E6, [0.0, -1.004], [0.988, 0.696], None, None)
+        }
+        GlyphRole::RestSixteenth => {
+            glyph_metric(role, 0xE4E7, [0.0, -2.0], [1.28, 0.716], None, None)
+        }
+        GlyphRole::RestThirtySecond => {
+            glyph_metric(role, 0xE4E8, [0.0, -2.0], [1.452, 1.704], None, None)
+        }
+        GlyphRole::RepeatDot => glyph_metric(role, 0xE044, [0.0, -0.2], [0.4, 0.2], None, None),
+        GlyphRole::MeasureRepeatMark1Bar => {
+            glyph_metric(role, 0xE500, [0.0, -1.0], [2.128, 1.116], None, None)
+        }
+        GlyphRole::MeasureRepeatMark2Bars => {
+            glyph_metric(role, 0xE501, [0.0, -1.0], [3.048, 1.116], None, None)
+        }
+        GlyphRole::MultiRestBar => {
+            glyph_metric(role, 0xE4EE, [0.0, -1.084], [3.128, 1.044], None, None)
+        }
+        GlyphRole::NavigationSegno => {
+            glyph_metric(role, 0xE047, [0.016, -0.108], [2.2, 3.036], None, None)
+        }
+        GlyphRole::NavigationCoda => {
+            glyph_metric(role, 0xE048, [-0.016, -0.632], [3.82, 3.592], None, None)
+        }
+        GlyphRole::MetNoteQuarterUp => {
+            glyph_metric(role, 0xE1D5, [0.0, -0.564], [1.328, 2.752], None, None)
+        }
     }
 }
 
 pub fn canonical_text_metric(role: TextRole) -> CanonicalTextMetric {
     match role {
-        TextRole::Title => CanonicalTextMetric { role, font_family: "Academico", font_size_pt: 24.0, line_height_pt: 28.0, average_advance_pt: 11.0, ascent_pt: 18.0, descent_pt: 6.0 },
-        TextRole::Subtitle => CanonicalTextMetric { role, font_family: "Academico", font_size_pt: 18.0, line_height_pt: 22.0, average_advance_pt: 8.0, ascent_pt: 14.0, descent_pt: 4.0 },
-        TextRole::Composer => CanonicalTextMetric { role, font_family: "Academico", font_size_pt: 14.0, line_height_pt: 18.0, average_advance_pt: 7.0, ascent_pt: 11.0, descent_pt: 3.0 },
-        TextRole::Tempo => CanonicalTextMetric { role, font_family: "Academico", font_size_pt: 14.0, line_height_pt: 18.0, average_advance_pt: 7.0, ascent_pt: 11.0, descent_pt: 3.0 },
-        TextRole::PercussionClef => CanonicalTextMetric { role, font_family: "Bravura", font_size_pt: 30.0, line_height_pt: 32.0, average_advance_pt: 14.0, ascent_pt: 24.0, descent_pt: 6.0 },
-        TextRole::TimeSignatureDigit => CanonicalTextMetric { role, font_family: "Bravura", font_size_pt: 30.0, line_height_pt: 32.0, average_advance_pt: 10.0, ascent_pt: 24.0, descent_pt: 6.0 },
-        TextRole::Sticking => CanonicalTextMetric { role, font_family: "Academico", font_size_pt: 12.0, line_height_pt: 14.0, average_advance_pt: 6.0, ascent_pt: 9.0, descent_pt: 3.0 },
-        TextRole::CountLabel => CanonicalTextMetric { role, font_family: "Bravura", font_size_pt: 12.0, line_height_pt: 14.0, average_advance_pt: 6.0, ascent_pt: 9.0, descent_pt: 3.0 },
-        TextRole::MeasureNumber => CanonicalTextMetric { role, font_family: "Academico", font_size_pt: 10.0, line_height_pt: 12.0, average_advance_pt: 5.0, ascent_pt: 8.0, descent_pt: 2.0 },
+        TextRole::Title => CanonicalTextMetric {
+            role,
+            font_family: "Academico",
+            font_size_pt: 24.0,
+            line_height_pt: 28.0,
+            average_advance_pt: 11.0,
+            ascent_pt: 18.0,
+            descent_pt: 6.0,
+        },
+        TextRole::Subtitle => CanonicalTextMetric {
+            role,
+            font_family: "Academico",
+            font_size_pt: 18.0,
+            line_height_pt: 22.0,
+            average_advance_pt: 8.0,
+            ascent_pt: 14.0,
+            descent_pt: 4.0,
+        },
+        TextRole::Composer => CanonicalTextMetric {
+            role,
+            font_family: "Academico",
+            font_size_pt: 14.0,
+            line_height_pt: 18.0,
+            average_advance_pt: 7.0,
+            ascent_pt: 11.0,
+            descent_pt: 3.0,
+        },
+        TextRole::Tempo => CanonicalTextMetric {
+            role,
+            font_family: "Academico",
+            font_size_pt: 14.0,
+            line_height_pt: 18.0,
+            average_advance_pt: 7.0,
+            ascent_pt: 11.0,
+            descent_pt: 3.0,
+        },
+        TextRole::PercussionClef => CanonicalTextMetric {
+            role,
+            font_family: "Bravura",
+            font_size_pt: 30.0,
+            line_height_pt: 32.0,
+            average_advance_pt: 14.0,
+            ascent_pt: 24.0,
+            descent_pt: 6.0,
+        },
+        TextRole::TimeSignatureDigit => CanonicalTextMetric {
+            role,
+            font_family: "Bravura",
+            font_size_pt: 30.0,
+            line_height_pt: 32.0,
+            average_advance_pt: 10.0,
+            ascent_pt: 24.0,
+            descent_pt: 6.0,
+        },
+        TextRole::Sticking => CanonicalTextMetric {
+            role,
+            font_family: "Academico",
+            font_size_pt: 12.0,
+            line_height_pt: 14.0,
+            average_advance_pt: 6.0,
+            ascent_pt: 9.0,
+            descent_pt: 3.0,
+        },
+        TextRole::CountLabel => CanonicalTextMetric {
+            role,
+            font_family: "Bravura",
+            font_size_pt: 12.0,
+            line_height_pt: 14.0,
+            average_advance_pt: 6.0,
+            ascent_pt: 9.0,
+            descent_pt: 3.0,
+        },
+        TextRole::MeasureNumber => CanonicalTextMetric {
+            role,
+            font_family: "Academico",
+            font_size_pt: 10.0,
+            line_height_pt: 12.0,
+            average_advance_pt: 5.0,
+            ascent_pt: 8.0,
+            descent_pt: 2.0,
+        },
     }
 }
 
-pub fn canonical_flag_path(role: FlagPathRole, stem_x: f32, stem_tip_y: f32) -> Vec<Vec<(f32, f32)>> {
+pub fn canonical_flag_path(
+    role: FlagPathRole,
+    stem_x: f32,
+    stem_tip_y: f32,
+) -> Vec<Vec<(f32, f32)>> {
     match role {
         FlagPathRole::EighthUp => vec![vec![
             (stem_x, stem_tip_y),
@@ -718,109 +1001,52 @@ fn fragment_kind_name(kind: SpanFragmentKind) -> &'static str {
 
 // ── SMuFL Glyph Metrics ──────────────────────────────────────────
 
-/// SMuFL codepoint identifier for a notehead or rest glyph.
-#[derive(Debug, Clone, Copy)]
-pub struct GlyphMetrics {
-    /// SMuFL codepoint (e.g., `\u{E0A4}` for black notehead).
-    pub codepoint: u32,
-    /// Width in staff-space units.
-    pub width_ss: f32,
-    /// Height in staff-space units.
-    pub height_ss: f32,
-    /// Stem connection offset in pt from notehead edge (positive = gap, stem shorter).
-    pub stem_offset_y: f32,
-}
-
 /// Returns SMuFL glyph metrics for a notehead given track + modifiers.
-pub fn notehead_glyph(track: &str, modifiers: &[String], _glyph: &str) -> GlyphMetrics {
+pub fn notehead_glyph(track: &str, modifiers: &[String], _glyph: &str) -> CanonicalGlyphMetric {
     let family = track_family(track);
 
     // Cymbal tracks and hi-hat pedal use X notehead
     if family == "cymbal" || track == "HF" {
-        let metric = canonical_glyph_metric(GlyphRole::NoteheadX);
-        return GlyphMetrics { codepoint: metric.smufl_codepoint, width_ss: 1.0, height_ss: 1.0, stem_offset_y: 4.0 };
+        return canonical_glyph_metric(GlyphRole::NoteheadX);
     }
 
     // Drum tracks: check modifiers for special noteheads
     for m in modifiers {
         match m.as_str() {
-            "open" => {
-                let metric = canonical_glyph_metric(GlyphRole::NoteheadDiamond);
-                return GlyphMetrics { codepoint: metric.smufl_codepoint, width_ss: 1.0, height_ss: 1.0, stem_offset_y: 0.0 };
-            }
-            "cross" => {
-                let metric = canonical_glyph_metric(GlyphRole::NoteheadX);
-                return GlyphMetrics { codepoint: metric.smufl_codepoint, width_ss: 1.0, height_ss: 1.0, stem_offset_y: 4.0 };
-            }
-            "bell" => {
-                let metric = canonical_glyph_metric(GlyphRole::NoteheadCircleX);
-                return GlyphMetrics { codepoint: metric.smufl_codepoint, width_ss: 1.0, height_ss: 1.0, stem_offset_y: 0.0 };
-            }
-            "rim" => {
-                let metric = canonical_glyph_metric(GlyphRole::NoteheadRim);
-                return GlyphMetrics { codepoint: metric.smufl_codepoint, width_ss: 1.0, height_ss: 1.0, stem_offset_y: 0.0 };
-            }
+            "open" => return canonical_glyph_metric(GlyphRole::NoteheadDiamond),
+            "cross" => return canonical_glyph_metric(GlyphRole::NoteheadX),
+            "bell" => return canonical_glyph_metric(GlyphRole::NoteheadCircleX),
+            "rim" => return canonical_glyph_metric(GlyphRole::NoteheadRim),
             _ => {}
         }
     }
 
     // Standard drum notehead
-    let metric = canonical_glyph_metric(GlyphRole::NoteheadBlack);
-    GlyphMetrics { codepoint: metric.smufl_codepoint, width_ss: 1.0, height_ss: 1.0, stem_offset_y: 2.0 }
+    canonical_glyph_metric(GlyphRole::NoteheadBlack)
 }
 
 /// Returns SMuFL metrics for a rest glyph by duration denominator.
-pub fn rest_glyph_for_fraction(duration: Fraction) -> GlyphMetrics {
+pub fn rest_glyph_for_fraction(duration: Fraction) -> CanonicalGlyphMetric {
     match (duration.numerator, duration.denominator) {
-        (1, 1) => {
-            let metric = canonical_glyph_metric(GlyphRole::RestWhole);
-            GlyphMetrics { codepoint: metric.smufl_codepoint, width_ss: 0.8, height_ss: 1.0, stem_offset_y: 0.0 }
-        }
-        (1, 2) => {
-            let metric = canonical_glyph_metric(GlyphRole::RestHalf);
-            GlyphMetrics { codepoint: metric.smufl_codepoint, width_ss: 0.8, height_ss: 2.0, stem_offset_y: 0.0 }
-        }
-        (1, 4) => {
-            let metric = canonical_glyph_metric(GlyphRole::RestQuarter);
-            GlyphMetrics { codepoint: metric.smufl_codepoint, width_ss: 0.8, height_ss: 1.5, stem_offset_y: 0.0 }
-        }
-        (1, 8) => {
-            let metric = canonical_glyph_metric(GlyphRole::RestEighth);
-            GlyphMetrics { codepoint: metric.smufl_codepoint, width_ss: 0.8, height_ss: 1.2, stem_offset_y: 0.0 }
-        }
-        (1, 16) => {
-            let metric = canonical_glyph_metric(GlyphRole::RestSixteenth);
-            GlyphMetrics { codepoint: metric.smufl_codepoint, width_ss: 0.8, height_ss: 1.2, stem_offset_y: 0.0 }
-        }
-        (1, 32) => {
-            let metric = canonical_glyph_metric(GlyphRole::RestThirtySecond);
-            GlyphMetrics { codepoint: metric.smufl_codepoint, width_ss: 0.8, height_ss: 1.2, stem_offset_y: 0.0 }
-        }
-        (_, d) if d >= 32 => {
-            let metric = canonical_glyph_metric(GlyphRole::RestThirtySecond);
-            GlyphMetrics { codepoint: metric.smufl_codepoint, width_ss: 0.8, height_ss: 1.2, stem_offset_y: 0.0 }
-        }
-        (_, d) if d >= 16 => {
-            let metric = canonical_glyph_metric(GlyphRole::RestEighth);
-            GlyphMetrics { codepoint: metric.smufl_codepoint, width_ss: 0.8, height_ss: 1.2, stem_offset_y: 0.0 }
-        }
-        (_, d) if d >= 8  => {
-            let metric = canonical_glyph_metric(GlyphRole::RestQuarter);
-            GlyphMetrics { codepoint: metric.smufl_codepoint, width_ss: 0.8, height_ss: 1.5, stem_offset_y: 0.0 }
-        }
-        (_, d) if d >= 4  => {
-            let metric = canonical_glyph_metric(GlyphRole::RestHalf);
-            GlyphMetrics { codepoint: metric.smufl_codepoint, width_ss: 0.8, height_ss: 2.0, stem_offset_y: 0.0 }
-        }
-        _ => {
-            let metric = canonical_glyph_metric(GlyphRole::RestWhole);
-            GlyphMetrics { codepoint: metric.smufl_codepoint, width_ss: 0.8, height_ss: 1.0, stem_offset_y: 0.0 }
-        }
+        (1, 1) => canonical_glyph_metric(GlyphRole::RestWhole),
+        (1, 2) => canonical_glyph_metric(GlyphRole::RestHalf),
+        (1, 4) => canonical_glyph_metric(GlyphRole::RestQuarter),
+        (1, 8) => canonical_glyph_metric(GlyphRole::RestEighth),
+        (1, 16) => canonical_glyph_metric(GlyphRole::RestSixteenth),
+        (1, 32) => canonical_glyph_metric(GlyphRole::RestThirtySecond),
+        (_, d) if d >= 32 => canonical_glyph_metric(GlyphRole::RestThirtySecond),
+        (_, d) if d >= 16 => canonical_glyph_metric(GlyphRole::RestEighth),
+        (_, d) if d >= 8 => canonical_glyph_metric(GlyphRole::RestQuarter),
+        (_, d) if d >= 4 => canonical_glyph_metric(GlyphRole::RestHalf),
+        _ => canonical_glyph_metric(GlyphRole::RestWhole),
     }
 }
 
-pub fn rest_glyph(denominator: u32) -> GlyphMetrics {
-    rest_glyph_for_fraction(Fraction { numerator: 1, denominator })
+pub fn rest_glyph(denominator: u32) -> CanonicalGlyphMetric {
+    rest_glyph_for_fraction(Fraction {
+        numerator: 1,
+        denominator,
+    })
 }
 
 // ── Layout Options ───────────────────────────────────────────────
@@ -986,31 +1212,61 @@ mod tests {
     #[test]
     fn test_notehead_glyph() {
         let g = notehead_glyph("HH", &[], "x");
-        assert_eq!(g.codepoint, 0xE0A9); // cymbal → X notehead
+        assert_eq!(g.smufl_codepoint, 0xE0A9); // cymbal → X notehead
         let g = notehead_glyph("HF", &[], "d");
-        assert_eq!(g.codepoint, 0xE0A9); // hi-hat pedal → X notehead
+        assert_eq!(g.smufl_codepoint, 0xE0A9); // hi-hat pedal → X notehead
         let g = notehead_glyph("SD", &[], "d");
-        assert_eq!(g.codepoint, 0xE0A4); // drum → standard notehead
+        assert_eq!(g.smufl_codepoint, 0xE0A4); // drum → standard notehead
         let g = notehead_glyph("SD", &["cross".to_string()], "d");
-        assert_eq!(g.codepoint, 0xE0A9); // cross mod → X notehead
+        assert_eq!(g.smufl_codepoint, 0xE0A9); // cross mod → X notehead
     }
 
     #[test]
     fn test_ledger_line_offsets_cover_top_and_bottom_positions() {
-        assert_eq!(ledger_line_offsets_for_staff_position(-0.5), Vec::<f32>::new());
+        assert_eq!(
+            ledger_line_offsets_for_staff_position(-0.5),
+            Vec::<f32>::new()
+        );
         assert_eq!(ledger_line_offsets_for_staff_position(-1.0), vec![-1.0]);
         assert_eq!(ledger_line_offsets_for_staff_position(-1.5), vec![-1.0]);
-        assert_eq!(ledger_line_offsets_for_staff_position(-2.0), vec![-1.0, -2.0]);
-        assert_eq!(ledger_line_offsets_for_staff_position(4.5), Vec::<f32>::new());
+        assert_eq!(
+            ledger_line_offsets_for_staff_position(-2.0),
+            vec![-1.0, -2.0]
+        );
+        assert_eq!(
+            ledger_line_offsets_for_staff_position(4.5),
+            Vec::<f32>::new()
+        );
         assert_eq!(ledger_line_offsets_for_staff_position(5.0), vec![5.0]);
         assert_eq!(ledger_line_offsets_for_staff_position(6.5), vec![5.0, 6.0]);
     }
 
     #[test]
     fn test_rest_glyph_by_fraction() {
-        assert_eq!(rest_glyph_for_fraction(Fraction { numerator: 1, denominator: 8 }).codepoint, 0xE4E6);
-        assert_eq!(rest_glyph_for_fraction(Fraction { numerator: 1, denominator: 16 }).codepoint, 0xE4E7);
-        assert_eq!(rest_glyph_for_fraction(Fraction { numerator: 1, denominator: 32 }).codepoint, 0xE4E8);
+        assert_eq!(
+            rest_glyph_for_fraction(Fraction {
+                numerator: 1,
+                denominator: 8
+            })
+            .smufl_codepoint,
+            0xE4E6
+        );
+        assert_eq!(
+            rest_glyph_for_fraction(Fraction {
+                numerator: 1,
+                denominator: 16
+            })
+            .smufl_codepoint,
+            0xE4E7
+        );
+        assert_eq!(
+            rest_glyph_for_fraction(Fraction {
+                numerator: 1,
+                denominator: 32
+            })
+            .smufl_codepoint,
+            0xE4E8
+        );
     }
 
     #[test]
@@ -1046,12 +1302,64 @@ mod tests {
 
     #[test]
     fn test_canonical_flag_glyphs_exist() {
-        assert_eq!(canonical_glyph_metric(GlyphRole::Flag8thUp).smufl_codepoint, 0xE240);
-        assert_eq!(canonical_glyph_metric(GlyphRole::Flag8thDown).smufl_codepoint, 0xE241);
-        assert_eq!(canonical_glyph_metric(GlyphRole::Flag16thUp).smufl_codepoint, 0xE242);
-        assert_eq!(canonical_glyph_metric(GlyphRole::Flag16thDown).smufl_codepoint, 0xE243);
-        assert_eq!(canonical_glyph_metric(GlyphRole::Flag32ndUp).smufl_codepoint, 0xE244);
-        assert_eq!(canonical_glyph_metric(GlyphRole::Flag32ndDown).smufl_codepoint, 0xE245);
+        assert_eq!(
+            canonical_glyph_metric(GlyphRole::Flag8thUp).smufl_codepoint,
+            0xE240
+        );
+        assert_eq!(
+            canonical_glyph_metric(GlyphRole::Flag8thDown).smufl_codepoint,
+            0xE241
+        );
+        assert_eq!(
+            canonical_glyph_metric(GlyphRole::Flag16thUp).smufl_codepoint,
+            0xE242
+        );
+        assert_eq!(
+            canonical_glyph_metric(GlyphRole::Flag16thDown).smufl_codepoint,
+            0xE243
+        );
+        assert_eq!(
+            canonical_glyph_metric(GlyphRole::Flag32ndUp).smufl_codepoint,
+            0xE244
+        );
+        assert_eq!(
+            canonical_glyph_metric(GlyphRole::Flag32ndDown).smufl_codepoint,
+            0xE245
+        );
+    }
+
+    #[test]
+    fn test_canonical_glyph_metrics_preserve_metadata_anchors() {
+        let notehead = canonical_glyph_metric(GlyphRole::NoteheadBlack);
+        assert_eq!(notehead.bbox_sw_x_ss, 0.0);
+        assert_eq!(notehead.bbox_ne_x_ss, 1.18);
+        assert_eq!(
+            notehead.stem_up_anchor_ss,
+            Some(GlyphPoint {
+                x_ss: 1.18,
+                y_ss: 0.168
+            })
+        );
+        assert_eq!(
+            notehead.stem_down_anchor_ss,
+            Some(GlyphPoint {
+                x_ss: 0.0,
+                y_ss: -0.168
+            })
+        );
+
+        let rest = canonical_glyph_metric(GlyphRole::RestQuarter);
+        assert_eq!(rest.stem_up_anchor_ss, None);
+        assert_eq!(rest.stem_down_anchor_ss, None);
+
+        let flag = canonical_glyph_metric(GlyphRole::Flag8thDown);
+        assert_eq!(
+            flag.stem_down_anchor_ss,
+            Some(GlyphPoint {
+                x_ss: 0.0,
+                y_ss: 0.132
+            })
+        );
     }
 
     #[test]
@@ -1084,8 +1392,14 @@ mod tests {
                 composer: Some("Codex".into()),
             },
             tracks: vec![
-                RenderTrack { id: "HH".into(), family: "cymbal".into() },
-                RenderTrack { id: "SD".into(), family: "drum".into() },
+                RenderTrack {
+                    id: "HH".into(),
+                    family: "cymbal".into(),
+                },
+                RenderTrack {
+                    id: "SD".into(),
+                    family: "drum".into(),
+                },
             ],
             measures: vec![
                 RenderMeasure {
@@ -1094,21 +1408,25 @@ mod tests {
                     paragraph_index: 0,
                     measure_in_paragraph: 0,
                     source_line: 1,
-                    events: vec![
-                        RenderEvent {
-                            track: "HH".into(),
-                            track_family: "cymbal".into(),
-                            start: Fraction { numerator: 0, denominator: 1 },
-                            duration: Fraction { numerator: 1, denominator: 32 },
-                            kind: EventKind::Hit,
-                            glyph: "x".into(),
-                            modifiers: vec![],
-                            modifier: None,
-                            voice: 1,
-                            beam: "none".into(),
-                            tuplet: None,
+                    events: vec![RenderEvent {
+                        track: "HH".into(),
+                        track_family: "cymbal".into(),
+                        start: Fraction {
+                            numerator: 0,
+                            denominator: 1,
                         },
-                    ],
+                        duration: Fraction {
+                            numerator: 1,
+                            denominator: 32,
+                        },
+                        kind: EventKind::Hit,
+                        glyph: "x".into(),
+                        modifiers: vec![],
+                        modifier: None,
+                        voice: 1,
+                        beam: "none".into(),
+                        tuplet: None,
+                    }],
                     barline: Some("regular".into()),
                     closing_barline: Some("regular".into()),
                     start_nav: Some(NavMarker::Segno),
@@ -1116,8 +1434,14 @@ mod tests {
                     volta_indices: Some(vec![1]),
                     hairpins: vec![HairpinSpan {
                         kind: HairpinKind::Crescendo,
-                        start: Fraction { numerator: 0, denominator: 1 },
-                        end: Fraction { numerator: 3, denominator: 4 },
+                        start: Fraction {
+                            numerator: 0,
+                            denominator: 1,
+                        },
+                        end: Fraction {
+                            numerator: 3,
+                            denominator: 4,
+                        },
                         start_measure_index: 0,
                         end_measure_index: 3,
                     }],
@@ -1136,8 +1460,14 @@ mod tests {
                         RenderEvent {
                             track: "HH".into(),
                             track_family: "cymbal".into(),
-                            start: Fraction { numerator: 0, denominator: 1 },
-                            duration: Fraction { numerator: 1, denominator: 16 },
+                            start: Fraction {
+                                numerator: 0,
+                                denominator: 1,
+                            },
+                            duration: Fraction {
+                                numerator: 1,
+                                denominator: 16,
+                            },
                             kind: EventKind::Hit,
                             glyph: "x".into(),
                             modifiers: vec![],
@@ -1149,8 +1479,14 @@ mod tests {
                         RenderEvent {
                             track: "SD".into(),
                             track_family: "drum".into(),
-                            start: Fraction { numerator: 1, denominator: 16 },
-                            duration: Fraction { numerator: 1, denominator: 16 },
+                            start: Fraction {
+                                numerator: 1,
+                                denominator: 16,
+                            },
+                            duration: Fraction {
+                                numerator: 1,
+                                denominator: 16,
+                            },
                             kind: EventKind::Hit,
                             glyph: "d".into(),
                             modifiers: vec![],
@@ -1177,21 +1513,25 @@ mod tests {
                     paragraph_index: 2,
                     measure_in_paragraph: 0,
                     source_line: 3,
-                    events: vec![
-                        RenderEvent {
-                            track: "HH".into(),
-                            track_family: "cymbal".into(),
-                            start: Fraction { numerator: 0, denominator: 1 },
-                            duration: Fraction { numerator: 1, denominator: 4 },
-                            kind: EventKind::Hit,
-                            glyph: "x".into(),
-                            modifiers: vec![],
-                            modifier: None,
-                            voice: 1,
-                            beam: "none".into(),
-                            tuplet: None,
+                    events: vec![RenderEvent {
+                        track: "HH".into(),
+                        track_family: "cymbal".into(),
+                        start: Fraction {
+                            numerator: 0,
+                            denominator: 1,
                         },
-                    ],
+                        duration: Fraction {
+                            numerator: 1,
+                            denominator: 4,
+                        },
+                        kind: EventKind::Hit,
+                        glyph: "x".into(),
+                        modifiers: vec![],
+                        modifier: None,
+                        voice: 1,
+                        beam: "none".into(),
+                        tuplet: None,
+                    }],
                     barline: Some("regular".into()),
                     closing_barline: Some("regular".into()),
                     start_nav: None,
@@ -1209,21 +1549,25 @@ mod tests {
                     paragraph_index: 3,
                     measure_in_paragraph: 0,
                     source_line: 4,
-                    events: vec![
-                        RenderEvent {
-                            track: "SD".into(),
-                            track_family: "drum".into(),
-                            start: Fraction { numerator: 0, denominator: 1 },
-                            duration: Fraction { numerator: 1, denominator: 4 },
-                            kind: EventKind::Hit,
-                            glyph: "d".into(),
-                            modifiers: vec!["accent".into()],
-                            modifier: Some("accent".into()),
-                            voice: 1,
-                            beam: "none".into(),
-                            tuplet: None,
+                    events: vec![RenderEvent {
+                        track: "SD".into(),
+                        track_family: "drum".into(),
+                        start: Fraction {
+                            numerator: 0,
+                            denominator: 1,
                         },
-                    ],
+                        duration: Fraction {
+                            numerator: 1,
+                            denominator: 4,
+                        },
+                        kind: EventKind::Hit,
+                        glyph: "d".into(),
+                        modifiers: vec!["accent".into()],
+                        modifier: Some("accent".into()),
+                        voice: 1,
+                        beam: "none".into(),
+                        tuplet: None,
+                    }],
                     barline: Some("regular".into()),
                     closing_barline: Some("final".into()),
                     start_nav: None,
@@ -1302,7 +1646,10 @@ mod tests {
                 subtitle: None,
                 composer: None,
             },
-            tracks: vec![RenderTrack { id: "HH".into(), family: "cymbal".into() }],
+            tracks: vec![RenderTrack {
+                id: "HH".into(),
+                family: "cymbal".into(),
+            }],
             measures,
             errors: vec![],
             repeat_spans: vec![],
@@ -1312,22 +1659,19 @@ mod tests {
     #[test]
     fn test_scene_fixture_supports_span_fragments_across_system_breaks() {
         let scene = build_layout_scene(&cross_system_fixture_score(), &LayoutOptions::default());
-        let repeat_fragments = scene
-            .pages[0]
+        let repeat_fragments = scene.pages[0]
             .composites
             .iter()
             .filter(|composite| composite.kind == CompositeKind::RepeatSpan)
             .map(|composite| composite.fragment)
             .collect::<Vec<_>>();
-        let volta_fragments = scene
-            .pages[0]
+        let volta_fragments = scene.pages[0]
             .composites
             .iter()
             .filter(|composite| composite.kind == CompositeKind::Volta)
             .map(|composite| composite.fragment)
             .collect::<Vec<_>>();
-        let hairpin_fragments = scene
-            .pages[0]
+        let hairpin_fragments = scene.pages[0]
             .composites
             .iter()
             .filter(|composite| composite.kind == CompositeKind::Hairpin)
@@ -1374,7 +1718,9 @@ mod tests {
             .filter(|composite| composite.kind == CompositeKind::RepeatSpan)
             .collect::<Vec<_>>();
         assert!(!repeat_fragments.is_empty());
-        assert!(repeat_fragments.iter().all(|fragment| !fragment.child_item_ids.is_empty()));
+        assert!(repeat_fragments
+            .iter()
+            .all(|fragment| !fragment.child_item_ids.is_empty()));
 
         let volta_fragments = page
             .composites
@@ -1382,7 +1728,9 @@ mod tests {
             .filter(|composite| composite.kind == CompositeKind::Volta)
             .collect::<Vec<_>>();
         assert!(!volta_fragments.is_empty());
-        assert!(volta_fragments.iter().all(|fragment| !fragment.child_item_ids.is_empty()));
+        assert!(volta_fragments
+            .iter()
+            .all(|fragment| !fragment.child_item_ids.is_empty()));
 
         let navigation = page
             .composites
@@ -1392,7 +1740,9 @@ mod tests {
         assert_eq!(navigation.len(), 2);
         assert_eq!(navigation[0].label.as_deref(), Some("@segno"));
         assert_eq!(navigation[1].label.as_deref(), Some("@ds-al-coda"));
-        assert!(navigation.iter().all(|composite| !composite.child_item_ids.is_empty()));
+        assert!(navigation
+            .iter()
+            .all(|composite| !composite.child_item_ids.is_empty()));
     }
 
     #[test]
@@ -1401,7 +1751,13 @@ mod tests {
         let page = &scene.pages[0];
         let count_metric = canonical_text_metric(TextRole::CountLabel);
 
-        for role in ["nav-start", "nav-end", "repeat-span-count", "volta-label", "accent"] {
+        for role in [
+            "nav-start",
+            "nav-end",
+            "repeat-span-count",
+            "volta-label",
+            "accent",
+        ] {
             let text_item = page
                 .items
                 .iter()
@@ -1428,7 +1784,10 @@ mod tests {
                 subtitle: None,
                 composer: None,
             },
-            tracks: vec![RenderTrack { id: "HH".into(), family: "cymbal".into() }],
+            tracks: vec![RenderTrack {
+                id: "HH".into(),
+                family: "cymbal".into(),
+            }],
             measures: vec![RenderMeasure {
                 index: 0,
                 global_index: 0,
@@ -1439,8 +1798,14 @@ mod tests {
                     RenderEvent {
                         track: "HH".into(),
                         track_family: "cymbal".into(),
-                        start: Fraction { numerator: 0, denominator: 1 },
-                        duration: Fraction { numerator: 1, denominator: 8 },
+                        start: Fraction {
+                            numerator: 0,
+                            denominator: 1,
+                        },
+                        duration: Fraction {
+                            numerator: 1,
+                            denominator: 8,
+                        },
                         kind: EventKind::Hit,
                         glyph: "x".into(),
                         modifiers: vec![],
@@ -1452,8 +1817,14 @@ mod tests {
                     RenderEvent {
                         track: "HH".into(),
                         track_family: "cymbal".into(),
-                        start: Fraction { numerator: 0, denominator: 1 },
-                        duration: Fraction { numerator: 1, denominator: 8 },
+                        start: Fraction {
+                            numerator: 0,
+                            denominator: 1,
+                        },
+                        duration: Fraction {
+                            numerator: 1,
+                            denominator: 8,
+                        },
                         kind: EventKind::Sticking,
                         glyph: "R".into(),
                         modifiers: vec![],
@@ -1561,15 +1932,15 @@ mod tests {
 
         let scene = build_layout_scene(&score, &opts);
         assert_eq!(scene.pages[0].systems.len(), 1);
-        assert_eq!(scene.pages[0].systems[0].measure_ids, vec!["measure-0", "measure-1", "measure-2"]);
+        assert_eq!(
+            scene.pages[0].systems[0].measure_ids,
+            vec!["measure-0", "measure-1", "measure-2"]
+        );
     }
 
     #[test]
     fn test_each_paragraph_becomes_its_own_system() {
-        let score = simple_layout_score(vec![
-            regular_measure(0, 0, 1),
-            regular_measure(1, 1, 1),
-        ]);
+        let score = simple_layout_score(vec![regular_measure(0, 0, 1), regular_measure(1, 1, 1)]);
         let mut opts = LayoutOptions::default();
         opts.page_width_pt = 240.0;
         opts.left_margin_pt = 20.0;
@@ -1577,13 +1948,17 @@ mod tests {
         opts.px_per_quarter = 10.0;
 
         let scene = build_layout_scene(&score, &opts);
-        assert_eq!(scene.pages[0].systems.len(), 2, "each paragraph must map to its own system");
+        assert_eq!(
+            scene.pages[0].systems.len(),
+            2,
+            "each paragraph must map to its own system"
+        );
         assert_eq!(scene.pages[0].systems[0].measure_ids, vec!["measure-0"]);
         assert_eq!(scene.pages[0].systems[1].measure_ids, vec!["measure-1"]);
     }
 
     #[test]
-fn test_compact_structural_measure_is_narrower_than_regular_measure() {
+    fn test_compact_structural_measure_is_narrower_than_regular_measure() {
         let mut compact = regular_measure(1, 0, 1);
         compact.events.clear();
         compact.multi_rest_count = Some(4);
@@ -1610,7 +1985,9 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
         let mut positions = scene.pages[0]
             .items
             .iter()
-            .filter(|item| item.role == "notehead" && item.measure_id.as_deref() == Some(measure_id))
+            .filter(|item| {
+                item.role == "notehead" && item.measure_id.as_deref() == Some(measure_id)
+            })
             .filter_map(|item| match &item.primitive {
                 ScenePrimitive::TextRun(text) => Some(text.x_pt),
                 _ => None,
@@ -1635,7 +2012,11 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
             start,
             duration,
             kind: EventKind::Hit,
-            glyph: if track_family(track) == "cymbal" { "x".into() } else { "d".into() },
+            glyph: if track_family(track) == "cymbal" {
+                "x".into()
+            } else {
+                "d".into()
+            },
             modifiers: vec![],
             modifier: None,
             voice,
@@ -1672,8 +2053,14 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
                 RenderEvent {
                     track: "HH".into(),
                     track_family: "cymbal".into(),
-                    start: Fraction { numerator: 0, denominator: 1 },
-                    duration: Fraction { numerator: 1, denominator: 4 },
+                    start: Fraction {
+                        numerator: 0,
+                        denominator: 1,
+                    },
+                    duration: Fraction {
+                        numerator: 1,
+                        denominator: 4,
+                    },
                     kind: EventKind::Hit,
                     glyph: "x".into(),
                     modifiers: vec![],
@@ -1685,8 +2072,14 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
                 RenderEvent {
                     track: "HH".into(),
                     track_family: "cymbal".into(),
-                    start: Fraction { numerator: 1, denominator: 4 },
-                    duration: Fraction { numerator: 1, denominator: 4 },
+                    start: Fraction {
+                        numerator: 1,
+                        denominator: 4,
+                    },
+                    duration: Fraction {
+                        numerator: 1,
+                        denominator: 4,
+                    },
                     kind: EventKind::Hit,
                     glyph: "x".into(),
                     modifiers: vec![],
@@ -1698,8 +2091,14 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
                 RenderEvent {
                     track: "HH".into(),
                     track_family: "cymbal".into(),
-                    start: Fraction { numerator: 1, denominator: 2 },
-                    duration: Fraction { numerator: 1, denominator: 4 },
+                    start: Fraction {
+                        numerator: 1,
+                        denominator: 2,
+                    },
+                    duration: Fraction {
+                        numerator: 1,
+                        denominator: 4,
+                    },
                     kind: EventKind::Hit,
                     glyph: "x".into(),
                     modifiers: vec![],
@@ -1711,8 +2110,14 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
                 RenderEvent {
                     track: "HH".into(),
                     track_family: "cymbal".into(),
-                    start: Fraction { numerator: 3, denominator: 4 },
-                    duration: Fraction { numerator: 1, denominator: 4 },
+                    start: Fraction {
+                        numerator: 3,
+                        denominator: 4,
+                    },
+                    duration: Fraction {
+                        numerator: 1,
+                        denominator: 4,
+                    },
                     kind: EventKind::Hit,
                     glyph: "x".into(),
                     modifiers: vec![],
@@ -1736,11 +2141,20 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
         let score = simple_layout_score(vec![measure]);
         let scene = build_layout_scene(&score, &LayoutOptions::default());
         let xs = notehead_positions(&scene, "measure-0");
-        let gaps = xs.windows(2).map(|pair| pair[1] - pair[0]).collect::<Vec<_>>();
+        let gaps = xs
+            .windows(2)
+            .map(|pair| pair[1] - pair[0])
+            .collect::<Vec<_>>();
 
         assert_eq!(xs.len(), 4);
-        assert!((gaps[0] - gaps[1]).abs() < 0.5, "quarter-note gaps should match: {gaps:?}");
-        assert!((gaps[1] - gaps[2]).abs() < 0.5, "quarter-note gaps should match: {gaps:?}");
+        assert!(
+            (gaps[0] - gaps[1]).abs() < 0.5,
+            "quarter-note gaps should match: {gaps:?}"
+        );
+        assert!(
+            (gaps[1] - gaps[2]).abs() < 0.5,
+            "quarter-note gaps should match: {gaps:?}"
+        );
     }
 
     #[test]
@@ -1755,8 +2169,14 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
                 RenderEvent {
                     track: "HH".into(),
                     track_family: "cymbal".into(),
-                    start: Fraction { numerator: 0, denominator: 1 },
-                    duration: Fraction { numerator: 1, denominator: 4 },
+                    start: Fraction {
+                        numerator: 0,
+                        denominator: 1,
+                    },
+                    duration: Fraction {
+                        numerator: 1,
+                        denominator: 4,
+                    },
                     kind: EventKind::Hit,
                     glyph: "x".into(),
                     modifiers: vec![],
@@ -1768,8 +2188,14 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
                 RenderEvent {
                     track: "SD".into(),
                     track_family: "drum".into(),
-                    start: Fraction { numerator: 1, denominator: 8 },
-                    duration: Fraction { numerator: 1, denominator: 8 },
+                    start: Fraction {
+                        numerator: 1,
+                        denominator: 8,
+                    },
+                    duration: Fraction {
+                        numerator: 1,
+                        denominator: 8,
+                    },
                     kind: EventKind::Rest,
                     glyph: "r".into(),
                     modifiers: vec![],
@@ -1781,8 +2207,14 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
                 RenderEvent {
                     track: "HH".into(),
                     track_family: "cymbal".into(),
-                    start: Fraction { numerator: 1, denominator: 4 },
-                    duration: Fraction { numerator: 1, denominator: 4 },
+                    start: Fraction {
+                        numerator: 1,
+                        denominator: 4,
+                    },
+                    duration: Fraction {
+                        numerator: 1,
+                        denominator: 4,
+                    },
                     kind: EventKind::Hit,
                     glyph: "x".into(),
                     modifiers: vec![],
@@ -1794,8 +2226,14 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
                 RenderEvent {
                     track: "SD".into(),
                     track_family: "drum".into(),
-                    start: Fraction { numerator: 3, denominator: 8 },
-                    duration: Fraction { numerator: 1, denominator: 8 },
+                    start: Fraction {
+                        numerator: 3,
+                        denominator: 8,
+                    },
+                    duration: Fraction {
+                        numerator: 1,
+                        denominator: 8,
+                    },
                     kind: EventKind::Rest,
                     glyph: "r".into(),
                     modifiers: vec![],
@@ -1807,8 +2245,14 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
                 RenderEvent {
                     track: "HH".into(),
                     track_family: "cymbal".into(),
-                    start: Fraction { numerator: 1, denominator: 2 },
-                    duration: Fraction { numerator: 1, denominator: 4 },
+                    start: Fraction {
+                        numerator: 1,
+                        denominator: 2,
+                    },
+                    duration: Fraction {
+                        numerator: 1,
+                        denominator: 4,
+                    },
                     kind: EventKind::Hit,
                     glyph: "x".into(),
                     modifiers: vec![],
@@ -1820,8 +2264,14 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
                 RenderEvent {
                     track: "HH".into(),
                     track_family: "cymbal".into(),
-                    start: Fraction { numerator: 3, denominator: 4 },
-                    duration: Fraction { numerator: 1, denominator: 4 },
+                    start: Fraction {
+                        numerator: 3,
+                        denominator: 4,
+                    },
+                    duration: Fraction {
+                        numerator: 1,
+                        denominator: 4,
+                    },
                     kind: EventKind::Hit,
                     glyph: "x".into(),
                     modifiers: vec![],
@@ -1856,18 +2306,68 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
         let second_group_gap = xs[3] - xs[2];
 
         assert_eq!(xs.len(), 4);
-        assert!(xs[2] > midpoint, "the beat-3 note should start past the visual midpoint when the first group is denser");
-        assert!(first_group_gap > second_group_gap + 1.0, "dense first-half grouping should allocate wider beat spacing: {xs:?}");
+        assert!(
+            xs[2] > midpoint,
+            "the beat-3 note should start past the visual midpoint when the first group is denser"
+        );
+        assert!(
+            first_group_gap > second_group_gap + 1.0,
+            "dense first-half grouping should allocate wider beat spacing: {xs:?}"
+        );
     }
 
     #[test]
     fn test_beams_follow_grouping_segments() {
         let mut measure = regular_measure(0, 0, 0);
         measure.events = vec![
-            test_hit("HH", Fraction { numerator: 0, denominator: 1 }, Fraction { numerator: 1, denominator: 8 }, 1),
-            test_hit("HH", Fraction { numerator: 1, denominator: 8 }, Fraction { numerator: 1, denominator: 8 }, 1),
-            test_hit("HH", Fraction { numerator: 1, denominator: 2 }, Fraction { numerator: 1, denominator: 8 }, 1),
-            test_hit("HH", Fraction { numerator: 5, denominator: 8 }, Fraction { numerator: 1, denominator: 8 }, 1),
+            test_hit(
+                "HH",
+                Fraction {
+                    numerator: 0,
+                    denominator: 1,
+                },
+                Fraction {
+                    numerator: 1,
+                    denominator: 8,
+                },
+                1,
+            ),
+            test_hit(
+                "HH",
+                Fraction {
+                    numerator: 1,
+                    denominator: 8,
+                },
+                Fraction {
+                    numerator: 1,
+                    denominator: 8,
+                },
+                1,
+            ),
+            test_hit(
+                "HH",
+                Fraction {
+                    numerator: 1,
+                    denominator: 2,
+                },
+                Fraction {
+                    numerator: 1,
+                    denominator: 8,
+                },
+                1,
+            ),
+            test_hit(
+                "HH",
+                Fraction {
+                    numerator: 5,
+                    denominator: 8,
+                },
+                Fraction {
+                    numerator: 1,
+                    denominator: 8,
+                },
+                1,
+            ),
         ];
         let mut score = simple_layout_score(vec![measure]);
         score.header.grouping = vec![2, 2];
@@ -1881,9 +2381,41 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
     fn test_rests_break_grouping_beams() {
         let mut measure = regular_measure(0, 0, 0);
         measure.events = vec![
-            test_hit("HH", Fraction { numerator: 0, denominator: 1 }, Fraction { numerator: 1, denominator: 8 }, 1),
-            test_rest(Fraction { numerator: 1, denominator: 8 }, Fraction { numerator: 1, denominator: 8 }, 1),
-            test_hit("HH", Fraction { numerator: 1, denominator: 4 }, Fraction { numerator: 1, denominator: 8 }, 1),
+            test_hit(
+                "HH",
+                Fraction {
+                    numerator: 0,
+                    denominator: 1,
+                },
+                Fraction {
+                    numerator: 1,
+                    denominator: 8,
+                },
+                1,
+            ),
+            test_rest(
+                Fraction {
+                    numerator: 1,
+                    denominator: 8,
+                },
+                Fraction {
+                    numerator: 1,
+                    denominator: 8,
+                },
+                1,
+            ),
+            test_hit(
+                "HH",
+                Fraction {
+                    numerator: 1,
+                    denominator: 4,
+                },
+                Fraction {
+                    numerator: 1,
+                    denominator: 8,
+                },
+                1,
+            ),
         ];
         let mut score = simple_layout_score(vec![measure]);
         score.header.grouping = vec![4];
@@ -1905,8 +2437,14 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
                 RenderEvent {
                     track: "HH".into(),
                     track_family: "cymbal".into(),
-                    start: Fraction { numerator: 0, denominator: 1 },
-                    duration: Fraction { numerator: 1, denominator: 8 },
+                    start: Fraction {
+                        numerator: 0,
+                        denominator: 1,
+                    },
+                    duration: Fraction {
+                        numerator: 1,
+                        denominator: 8,
+                    },
                     kind: EventKind::Hit,
                     glyph: "x".into(),
                     modifiers: vec![],
@@ -1918,8 +2456,14 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
                 RenderEvent {
                     track: "SD".into(),
                     track_family: "drum".into(),
-                    start: Fraction { numerator: 0, denominator: 1 },
-                    duration: Fraction { numerator: 1, denominator: 8 },
+                    start: Fraction {
+                        numerator: 0,
+                        denominator: 1,
+                    },
+                    duration: Fraction {
+                        numerator: 1,
+                        denominator: 8,
+                    },
                     kind: EventKind::Hit,
                     glyph: "d".into(),
                     modifiers: vec![],
@@ -1940,13 +2484,23 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
             note_value: 8,
             volta_terminator: false,
         };
-        let scene = build_layout_scene(&simple_layout_score(vec![measure]), &LayoutOptions::default());
+        let scene = build_layout_scene(
+            &simple_layout_score(vec![measure]),
+            &LayoutOptions::default(),
+        );
         let noteheads = items_by_role(&scene, "notehead");
         let stems = items_by_role(&scene, "stem");
 
         assert_eq!(noteheads.len(), 2);
-        assert_eq!(stems.len(), 1, "combined hits in the same voice should share one stem");
-        assert!(stems[0].anchor_item_id.is_some(), "shared stem should anchor to a notehead");
+        assert_eq!(
+            stems.len(),
+            1,
+            "combined hits in the same voice should share one stem"
+        );
+        assert!(
+            stems[0].anchor_item_id.is_some(),
+            "shared stem should anchor to a notehead"
+        );
     }
 
     #[test]
@@ -1961,8 +2515,14 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
                 RenderEvent {
                     track: "HH".into(),
                     track_family: "cymbal".into(),
-                    start: Fraction { numerator: 0, denominator: 1 },
-                    duration: Fraction { numerator: 1, denominator: 8 },
+                    start: Fraction {
+                        numerator: 0,
+                        denominator: 1,
+                    },
+                    duration: Fraction {
+                        numerator: 1,
+                        denominator: 8,
+                    },
                     kind: EventKind::Hit,
                     glyph: "x".into(),
                     modifiers: vec!["accent".into()],
@@ -1974,8 +2534,14 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
                 RenderEvent {
                     track: "BD".into(),
                     track_family: "drum".into(),
-                    start: Fraction { numerator: 0, denominator: 1 },
-                    duration: Fraction { numerator: 1, denominator: 8 },
+                    start: Fraction {
+                        numerator: 0,
+                        denominator: 1,
+                    },
+                    duration: Fraction {
+                        numerator: 1,
+                        denominator: 8,
+                    },
                     kind: EventKind::Hit,
                     glyph: "d".into(),
                     modifiers: vec![],
@@ -1987,8 +2553,14 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
                 RenderEvent {
                     track: "ST".into(),
                     track_family: "text".into(),
-                    start: Fraction { numerator: 0, denominator: 1 },
-                    duration: Fraction { numerator: 1, denominator: 8 },
+                    start: Fraction {
+                        numerator: 0,
+                        denominator: 1,
+                    },
+                    duration: Fraction {
+                        numerator: 1,
+                        denominator: 8,
+                    },
                     kind: EventKind::Sticking,
                     glyph: "R".into(),
                     modifiers: vec![],
@@ -2009,11 +2581,20 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
             note_value: 8,
             volta_terminator: false,
         };
-        let scene = build_layout_scene(&simple_layout_score(vec![measure]), &LayoutOptions::default());
+        let scene = build_layout_scene(
+            &simple_layout_score(vec![measure]),
+            &LayoutOptions::default(),
+        );
         let noteheads = items_by_role(&scene, "notehead");
         let stems = items_by_role(&scene, "stem");
-        let accent = items_by_role(&scene, "accent").into_iter().next().expect("expected accent");
-        let sticking = items_by_role(&scene, "sticking").into_iter().next().expect("expected sticking");
+        let accent = items_by_role(&scene, "accent")
+            .into_iter()
+            .next()
+            .expect("expected accent");
+        let sticking = items_by_role(&scene, "sticking")
+            .into_iter()
+            .next()
+            .expect("expected sticking");
         let mut xs = noteheads
             .iter()
             .filter_map(|item| match &item.primitive {
@@ -2025,10 +2606,22 @@ fn test_compact_structural_measure_is_narrower_than_regular_measure() {
 
         assert_eq!(noteheads.len(), 2);
         assert_eq!(stems.len(), 2, "opposing voices should keep separate stems");
-        assert!(xs[1] - xs[0] >= 6.0, "opposing voices on the same slot should be horizontally separated: {xs:?}");
-        assert!(accent.anchor_item_id.is_some(), "accent should preserve its note anchor");
-        assert!(sticking.anchor_item_id.is_some(), "sticking should preserve its anchor");
-        assert!(stems.iter().all(|stem| stem.anchor_item_id.is_some()), "stems should preserve note anchors");
+        assert!(
+            xs[1] - xs[0] >= 6.0,
+            "opposing voices on the same slot should be horizontally separated: {xs:?}"
+        );
+        assert!(
+            accent.anchor_item_id.is_some(),
+            "accent should preserve its note anchor"
+        );
+        assert!(
+            sticking.anchor_item_id.is_some(),
+            "sticking should preserve its anchor"
+        );
+        assert!(
+            stems.iter().all(|stem| stem.anchor_item_id.is_some()),
+            "stems should preserve note anchors"
+        );
     }
 }
 
@@ -2041,7 +2634,9 @@ pub struct SlotMapper {
 }
 
 impl SlotMapper {
-    pub fn new(px_per_quarter: f32) -> Self { Self { px_per_quarter } }
+    pub fn new(px_per_quarter: f32) -> Self {
+        Self { px_per_quarter }
+    }
 
     /// Map a slot index within a beat to a horizontal offset from the beat start.
     /// slots_per_beat = `divisions / beats` for this measure.
@@ -2052,7 +2647,9 @@ impl SlotMapper {
 
     /// Full measure width in pixels. Content-weighted: denser rhythms get more space.
     pub fn measure_width(&self, total_slots: u32, slots_per_quarter: u32, is_compact: bool) -> f32 {
-        if is_compact { return 40.0; }
+        if is_compact {
+            return 40.0;
+        }
         let quarters = total_slots as f32 / slots_per_quarter as f32;
         quarters * self.px_per_quarter
     }
@@ -2098,7 +2695,12 @@ impl MeasureGeometry {
             if slot < group.end_slot {
                 let group_slots = (group.end_slot - group.start_slot).max(1);
                 let slot_in_group = slot.saturating_sub(group.start_slot).min(group_slots);
-                let offset = self.slot_offset_within_group(header, slot_in_group, group_slots, group.width_pt);
+                let offset = self.slot_offset_within_group(
+                    header,
+                    slot_in_group,
+                    group_slots,
+                    group.width_pt,
+                );
                 return group_start_x + offset;
             }
             group_start_x += group.width_pt;
@@ -2150,7 +2752,7 @@ pub struct LayoutElement {
     pub text: Option<String>,
     pub from_x: Option<f32>,
     pub to_x: Option<f32>,
-    pub priority: u8,  // for edge stacking (0=innermost)
+    pub priority: u8, // for edge stacking (0=innermost)
     pub can_shift_y: bool,
     pub can_shift_x: bool,
 }
@@ -2176,7 +2778,11 @@ pub enum ElementKind {
 // ── Note/Rest Placement (Task 3) ────────────────────────────────
 
 /// Place notes and rests from a single measure's events.
-pub fn place_notes(measure: &NormalizedMeasure, mapper: &SlotMapper, _opts: &LayoutOptions) -> Vec<LayoutElement> {
+pub fn place_notes(
+    measure: &NormalizedMeasure,
+    mapper: &SlotMapper,
+    _opts: &LayoutOptions,
+) -> Vec<LayoutElement> {
     let mut elements = Vec::new();
     for ev in &measure.events {
         let x = mapper.slot_x_within_beat(
@@ -2192,11 +2798,16 @@ pub fn place_notes(measure: &NormalizedMeasure, mapper: &SlotMapper, _opts: &Lay
         };
 
         elements.push(LayoutElement {
-            kind: if ev.kind == EventKind::Rest { ElementKind::Rest } else { ElementKind::Note },
-            x, y,
-            width: metrics.width_ss * 10.0,
-            height: metrics.height_ss * 10.0,
-            smufl_codepoint: Some(metrics.codepoint),
+            kind: if ev.kind == EventKind::Rest {
+                ElementKind::Rest
+            } else {
+                ElementKind::Note
+            },
+            x,
+            y,
+            width: metrics.width_ss() * 10.0,
+            height: metrics.bbox_height_ss() * 10.0,
+            smufl_codepoint: Some(metrics.smufl_codepoint),
             voice: Some(ev.voice),
             stem_up: Some(ev.voice == 1),
             barline_type: None,
@@ -2248,7 +2859,7 @@ pub fn stack_edge_elements(elements: &mut [LayoutElement], edge_padding: f32) ->
         let mut any_overlap = false;
 
         for i in 0..elements.len() {
-            for j in (i+1)..elements.len() {
+            for j in (i + 1)..elements.len() {
                 let (a, b) = if elements[i].priority < elements[j].priority {
                     (&elements[i].clone(), &elements[j].clone())
                 } else {
@@ -2259,13 +2870,17 @@ pub fn stack_edge_elements(elements: &mut [LayoutElement], edge_padding: f32) ->
                 let a_right = a.x + a.width;
                 let b_right = b.x + b.width;
                 let x_overlap = a.x < b_right && a_right > b.x;
-                if !x_overlap { continue; }
+                if !x_overlap {
+                    continue;
+                }
 
                 // Check Y overlap
                 let a_bottom = a.y + a.height;
                 let b_bottom = b.y + b.height;
                 let y_overlap = a.y < b_bottom && a_bottom > b.y;
-                if !y_overlap { continue; }
+                if !y_overlap {
+                    continue;
+                }
 
                 any_overlap = true;
                 let overlap = a_bottom.min(b_bottom) - a.y.max(b.y);
@@ -2282,7 +2897,9 @@ pub fn stack_edge_elements(elements: &mut [LayoutElement], edge_padding: f32) ->
             }
         }
 
-        if !any_overlap { break; }
+        if !any_overlap {
+            break;
+        }
     }
 
     warnings
@@ -2335,7 +2952,8 @@ struct NotePlacement {
     note_id: String,
     note_x: f32,
     note_y: f32,
-    stem_offset_y: f32,
+    stem_up_anchor_ss: Option<GlyphPoint>,
+    stem_down_anchor_ss: Option<GlyphPoint>,
 }
 
 /// Build systems from a NormalizedScore.
@@ -2348,14 +2966,18 @@ pub fn build_systems(score: &NormalizedScore, opts: &LayoutOptions) -> Vec<Syste
         measures: Vec::new(),
     };
     let mut cursor_x = opts.left_margin_pt + 30.0 + 40.0; // clef + time sig
-    let usable_width = opts.page_width_pt - opts.left_margin_pt - opts.right_margin_pt - 30.0 - 40.0;
+    let usable_width =
+        opts.page_width_pt - opts.left_margin_pt - opts.right_margin_pt - 30.0 - 40.0;
 
     for measure in &score.measures {
-        let is_compact = measure.multi_rest_count.is_some() || measure.measure_repeat_slashes.is_some();
+        let is_compact =
+            measure.multi_rest_count.is_some() || measure.measure_repeat_slashes.is_some();
         let total_slots = measure.events.len() as u32; // simplified
         let width = mapper.measure_width(total_slots.max(1), 4, is_compact);
 
-        if cursor_x + width > opts.left_margin_pt + usable_width && !current_system.measures.is_empty() {
+        if cursor_x + width > opts.left_margin_pt + usable_width
+            && !current_system.measures.is_empty()
+        {
             systems.push(current_system);
             current_system = System {
                 y: opts.top_margin_pt + (systems.len() as f32 + 1.0) * (opts.staff_scale * 80.0),
@@ -2389,8 +3011,12 @@ fn to_slots(f: &Fraction, note_value: u32) -> u32 {
     (f.numerator * note_value as u32) / f.denominator.max(1)
 }
 
-fn slots_per_beat(_measure: &NormalizedMeasure) -> u32 { 4 } // simplified
-fn beat_width_for(_measure: &NormalizedMeasure, _start: &Fraction) -> f32 { 80.0 }
+fn slots_per_beat(_measure: &NormalizedMeasure) -> u32 {
+    4
+} // simplified
+fn beat_width_for(_measure: &NormalizedMeasure, _start: &Fraction) -> f32 {
+    80.0
+}
 
 struct SystemStartReservation {
     opening_barline_thickness: f32,
@@ -2475,21 +3101,31 @@ fn fraction_to_measure_slot(
     time_beat_unit: u32,
     divisions: u32,
 ) -> u32 {
-    let numerator = fraction.numerator as u64 * divisions.max(1) as u64 * time_beat_unit.max(1) as u64;
+    let numerator =
+        fraction.numerator as u64 * divisions.max(1) as u64 * time_beat_unit.max(1) as u64;
     let denominator = fraction.denominator.max(1) as u64 * time_beats.max(1) as u64;
     ((numerator + denominator / 2) / denominator) as u32
 }
 
-fn event_count_in_slot_range(measure: &RenderMeasure, header: &RenderHeader, start_slot: u32, end_slot: u32) -> usize {
-    measure.events.iter().filter(|event| {
-        let slot = fraction_to_measure_slot(
-            event.start,
-            header.time_beats,
-            header.time_beat_unit,
-            header.divisions,
-        );
-        slot >= start_slot && slot < end_slot
-    }).count()
+fn event_count_in_slot_range(
+    measure: &RenderMeasure,
+    header: &RenderHeader,
+    start_slot: u32,
+    end_slot: u32,
+) -> usize {
+    measure
+        .events
+        .iter()
+        .filter(|event| {
+            let slot = fraction_to_measure_slot(
+                event.start,
+                header.time_beats,
+                header.time_beat_unit,
+                header.divisions,
+            );
+            slot >= start_slot && slot < end_slot
+        })
+        .count()
 }
 
 fn grouping_segment_index_for_slot(header: &RenderHeader, slot: u32) -> usize {
@@ -2628,7 +3264,11 @@ fn estimated_measure_width(
             } else {
                 1.0
             };
-            let rhythm_bonus = if shortest_denominator >= 16 { 1.08 } else { 1.0 };
+            let rhythm_bonus = if shortest_denominator >= 16 {
+                1.08
+            } else {
+                1.0
+            };
             *start_slot = end_slot;
             Some(base_quarters * mapper.px_per_quarter * density_bonus * rhythm_bonus)
         })
@@ -2690,11 +3330,14 @@ fn expand_layout_data<'a>(score: &'a RenderScore) -> ExpandedLayoutData<'a> {
     };
 
     let mut measures = Vec::new();
-    let mut paragraph_measure_counts: std::collections::BTreeMap<u32, u32> = std::collections::BTreeMap::new();
+    let mut paragraph_measure_counts: std::collections::BTreeMap<u32, u32> =
+        std::collections::BTreeMap::new();
     for (measure_index, measure) in score.measures.iter().enumerate() {
         let slots = &display_slots[measure_index];
         for (slot_index, display_index) in slots.iter().enumerate() {
-            let paragraph_counter = paragraph_measure_counts.entry(measure.paragraph_index).or_insert(0);
+            let paragraph_counter = paragraph_measure_counts
+                .entry(measure.paragraph_index)
+                .or_insert(0);
             *paragraph_counter += 1;
 
             let repeat_part = match measure.measure_repeat_slashes {
@@ -2752,7 +3395,10 @@ fn expand_layout_data<'a>(score: &'a RenderScore) -> ExpandedLayoutData<'a> {
         })
         .collect();
 
-    ExpandedLayoutData { measures, repeat_spans }
+    ExpandedLayoutData {
+        measures,
+        repeat_spans,
+    }
 }
 
 fn finalize_planned_system<'a>(
@@ -2802,7 +3448,8 @@ fn plan_scene_systems<'a>(
     opts: &LayoutOptions,
 ) -> Vec<PlannedSystem<'a>> {
     let mapper = SlotMapper::new(opts.px_per_quarter);
-    let available_width = (opts.page_width_pt - opts.left_margin_pt - opts.right_margin_pt).max(100.0);
+    let available_width =
+        (opts.page_width_pt - opts.left_margin_pt - opts.right_margin_pt).max(100.0);
     let mut systems: Vec<PlannedSystem<'a>> = Vec::new();
     let mut current_measures: Vec<&'a DisplayMeasure<'a>> = Vec::new();
     let mut current_inner_estimates: Vec<f32> = Vec::new();
@@ -2811,7 +3458,8 @@ fn plan_scene_systems<'a>(
 
     for measure in measures {
         let estimate = estimated_measure_width(header, measure.measure, &mapper);
-        let paragraph_break = current_paragraph.is_some() && current_paragraph != Some(measure.paragraph_index);
+        let paragraph_break =
+            current_paragraph.is_some() && current_paragraph != Some(measure.paragraph_index);
         if !current_measures.is_empty() && paragraph_break {
             finalize_planned_system(
                 &mut systems,
@@ -2879,7 +3527,21 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
     let tempo_y = opts.top_margin_pt + header_area_h + opts.tempo_offset_y;
 
     if let Some(ref text) = score.header.title {
-        let title_id = push_text_item(&mut page.items, &mut item_counter, None, "title", center_x, title_y, TextRole::Title, text.clone(), title_metric.font_family, title_metric.font_size_pt, "#333", Some("middle"), Some("bold"));
+        let title_id = push_text_item(
+            &mut page.items,
+            &mut item_counter,
+            None,
+            "title",
+            center_x,
+            title_y,
+            TextRole::Title,
+            text.clone(),
+            title_metric.font_family,
+            title_metric.font_size_pt,
+            "#333",
+            Some("middle"),
+            Some("bold"),
+        );
         page.composites.push(SceneComposite {
             id: "text-block-title".to_string(),
             kind: CompositeKind::TextBlock,
@@ -2892,7 +3554,21 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
         });
     }
     if let Some(ref text) = score.header.subtitle {
-        let subtitle_id = push_text_item(&mut page.items, &mut item_counter, None, "subtitle", center_x, subtitle_y, TextRole::Subtitle, text.clone(), subtitle_metric.font_family, subtitle_metric.font_size_pt, "#333", Some("middle"), None);
+        let subtitle_id = push_text_item(
+            &mut page.items,
+            &mut item_counter,
+            None,
+            "subtitle",
+            center_x,
+            subtitle_y,
+            TextRole::Subtitle,
+            text.clone(),
+            subtitle_metric.font_family,
+            subtitle_metric.font_size_pt,
+            "#333",
+            Some("middle"),
+            None,
+        );
         page.composites.push(SceneComposite {
             id: "text-block-subtitle".to_string(),
             kind: CompositeKind::TextBlock,
@@ -2905,7 +3581,21 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
         });
     }
     if let Some(ref text) = score.header.composer {
-        let composer_id = push_text_item(&mut page.items, &mut item_counter, None, "composer", page_w - margin, composer_y, TextRole::Composer, text.clone(), composer_metric.font_family, composer_metric.font_size_pt, "#333", Some("end"), None);
+        let composer_id = push_text_item(
+            &mut page.items,
+            &mut item_counter,
+            None,
+            "composer",
+            page_w - margin,
+            composer_y,
+            TextRole::Composer,
+            text.clone(),
+            composer_metric.font_family,
+            composer_metric.font_size_pt,
+            "#333",
+            Some("end"),
+            None,
+        );
         page.composites.push(SceneComposite {
             id: "text-block-composer".to_string(),
             kind: CompositeKind::TextBlock,
@@ -2919,13 +3609,56 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
     }
     if score.header.tempo > 0 {
         let tempo_glyph_x = margin + 9.0;
-        let tempo_glyph_width = canonical_glyph_metric(GlyphRole::MetNoteQuarterUp).width_pt;
+        let tempo_glyph_width =
+            canonical_glyph_metric(GlyphRole::MetNoteQuarterUp).width_ss() * 25.0 / 4.0;
         let tempo_equals_x = tempo_glyph_x + tempo_glyph_width + 8.0;
         let tempo_value_text = score.header.tempo.to_string();
         let tempo_value_x = tempo_equals_x + canonical_text_width(TextRole::Tempo, "=") + 6.0;
-        let tempo_glyph_id = push_text_item(&mut page.items, &mut item_counter, None, "tempo-glyph", tempo_glyph_x, tempo_y, TextRole::Tempo, "\u{ECA5}".to_string(), "Bravura", 25.0, "#333", None, None);
-        let tempo_equals_id = push_text_item(&mut page.items, &mut item_counter, None, "tempo-equals", tempo_equals_x, tempo_y, TextRole::Tempo, "=".to_string(), tempo_metric.font_family, tempo_metric.font_size_pt, "#333", None, None);
-        let tempo_value_id = push_text_item(&mut page.items, &mut item_counter, None, "tempo", tempo_value_x, tempo_y, TextRole::Tempo, tempo_value_text, tempo_metric.font_family, tempo_metric.font_size_pt, "#333", None, None);
+        let tempo_glyph_id = push_text_item(
+            &mut page.items,
+            &mut item_counter,
+            None,
+            "tempo-glyph",
+            tempo_glyph_x,
+            tempo_y,
+            TextRole::Tempo,
+            "\u{ECA5}".to_string(),
+            "Bravura",
+            25.0,
+            "#333",
+            None,
+            None,
+        );
+        let tempo_equals_id = push_text_item(
+            &mut page.items,
+            &mut item_counter,
+            None,
+            "tempo-equals",
+            tempo_equals_x,
+            tempo_y,
+            TextRole::Tempo,
+            "=".to_string(),
+            tempo_metric.font_family,
+            tempo_metric.font_size_pt,
+            "#333",
+            None,
+            None,
+        );
+        let tempo_value_id = push_text_item(
+            &mut page.items,
+            &mut item_counter,
+            None,
+            "tempo",
+            tempo_value_x,
+            tempo_y,
+            TextRole::Tempo,
+            tempo_value_text,
+            tempo_metric.font_family,
+            tempo_metric.font_size_pt,
+            "#333",
+            None,
+            None,
+        );
         page.composites.push(SceneComposite {
             id: "text-block-tempo".to_string(),
             kind: CompositeKind::TextBlock,
@@ -2954,16 +3687,69 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
 
         for i in 0..5 {
             let ly = sy + staff_ss * (1.0 + i as f32);
-            push_line_item(&mut page.items, &mut item_counter, None, "staff-line", system_left, ly, system_right, ly, "#333", 1.0, None);
+            push_line_item(
+                &mut page.items,
+                &mut item_counter,
+                None,
+                "staff-line",
+                system_left,
+                ly,
+                system_right,
+                ly,
+                "#333",
+                1.0,
+                None,
+            );
         }
         let clef_metric = canonical_text_metric(TextRole::PercussionClef);
-        let count_metric = canonical_text_metric(TextRole::CountLabel);
-        push_text_item(&mut page.items, &mut item_counter, None, "percussion-clef", margin + 5.0, s_mid, TextRole::PercussionClef, "\u{E069}".to_string(), "Bravura", clef_metric.font_size_pt, "#333", None, None);
+        push_text_item(
+            &mut page.items,
+            &mut item_counter,
+            None,
+            "percussion-clef",
+            margin + 5.0,
+            s_mid,
+            TextRole::PercussionClef,
+            "\u{E069}".to_string(),
+            "Bravura",
+            clef_metric.font_size_pt,
+            "#333",
+            None,
+            None,
+        );
         if is_first_system {
             let tsx = margin + 35.0;
             let time_sig_metric = canonical_text_metric(TextRole::TimeSignatureDigit);
-            push_text_item(&mut page.items, &mut item_counter, None, "time-signature-digit", tsx, sy + staff_ss * 2.0, TextRole::TimeSignatureDigit, num_to_glyph(score.header.time_beats), time_sig_metric.font_family, time_sig_metric.font_size_pt, "#333", None, None);
-            push_text_item(&mut page.items, &mut item_counter, None, "time-signature-digit", tsx, sy + staff_ss * 4.0, TextRole::TimeSignatureDigit, num_to_glyph(score.header.time_beat_unit), time_sig_metric.font_family, time_sig_metric.font_size_pt, "#333", None, None);
+            push_text_item(
+                &mut page.items,
+                &mut item_counter,
+                None,
+                "time-signature-digit",
+                tsx,
+                sy + staff_ss * 2.0,
+                TextRole::TimeSignatureDigit,
+                num_to_glyph(score.header.time_beats),
+                time_sig_metric.font_family,
+                time_sig_metric.font_size_pt,
+                "#333",
+                None,
+                None,
+            );
+            push_text_item(
+                &mut page.items,
+                &mut item_counter,
+                None,
+                "time-signature-digit",
+                tsx,
+                sy + staff_ss * 4.0,
+                TextRole::TimeSignatureDigit,
+                num_to_glyph(score.header.time_beat_unit),
+                time_sig_metric.font_family,
+                time_sig_metric.font_size_pt,
+                "#333",
+                None,
+                None,
+            );
         }
         let measure_number_metric = canonical_text_metric(TextRole::MeasureNumber);
         if !is_first_system {
@@ -2989,9 +3775,27 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
             measure_ids.push(measure_id.clone());
 
             if mi == 0 {
-                render_left_barline(&mut page.items, &mut item_counter, Some(&measure_id), mx, s_top, s_bot, measure.barline.as_deref(), true);
+                render_left_barline(
+                    &mut page.items,
+                    &mut item_counter,
+                    Some(&measure_id),
+                    mx,
+                    s_top,
+                    s_bot,
+                    measure.barline.as_deref(),
+                    true,
+                );
             } else {
-                render_left_barline(&mut page.items, &mut item_counter, Some(&measure_id), mx, s_top, s_bot, measure.barline.as_deref(), false);
+                render_left_barline(
+                    &mut page.items,
+                    &mut item_counter,
+                    Some(&measure_id),
+                    mx,
+                    s_top,
+                    s_bot,
+                    measure.barline.as_deref(),
+                    false,
+                );
             }
 
             page.measures.push(SceneMeasure {
@@ -3007,13 +3811,78 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
 
             if let Some(count) = measure.measure.multi_rest_count {
                 let center_y = s_top + (s_bot - s_top) * 0.5;
-                let bar_id = push_line_item(&mut page.items, &mut item_counter, Some(&measure_id), "multi-rest-bar", mx + 14.0, center_y, mx + *mw - 14.0, center_y, "#333", 3.0, None);
-                let count_id = push_text_item(&mut page.items, &mut item_counter, Some(&measure_id), "multi-rest-count", mx + *mw * 0.5, center_y - count_metric.ascent_pt, TextRole::CountLabel, count.to_string(), count_metric.font_family, count_metric.font_size_pt, "#333", Some("middle"), Some("bold"));
+                let pad = (*mw * 0.1).max(8.0);
+                let bar_left = mx + pad;
+                let bar_right = mx + *mw - pad;
+                let bar_thickness = staff_ss * 0.5;
+                let serif_height = staff_ss * 2.0;
+                let serif_thickness = 2.0;
+                let bar_id = push_line_item(
+                    &mut page.items,
+                    &mut item_counter,
+                    Some(&measure_id),
+                    "multi-rest-bar",
+                    bar_left,
+                    center_y,
+                    bar_right,
+                    center_y,
+                    "#333",
+                    bar_thickness,
+                    Some("butt"),
+                );
+                let left_serif_id = push_line_item(
+                    &mut page.items,
+                    &mut item_counter,
+                    Some(&measure_id),
+                    "multi-rest-serif",
+                    bar_left,
+                    center_y - serif_height * 0.5,
+                    bar_left,
+                    center_y + serif_height * 0.5,
+                    "#333",
+                    serif_thickness,
+                    Some("butt"),
+                );
+                let right_serif_id = push_line_item(
+                    &mut page.items,
+                    &mut item_counter,
+                    Some(&measure_id),
+                    "multi-rest-serif",
+                    bar_right,
+                    center_y - serif_height * 0.5,
+                    bar_right,
+                    center_y + serif_height * 0.5,
+                    "#333",
+                    serif_thickness,
+                    Some("butt"),
+                );
+                let count_glyph: String = count
+                    .to_string()
+                    .chars()
+                    .map(|c| char::from_u32(0xE080 + c.to_digit(10).unwrap()).unwrap())
+                    .collect();
+                let time_sig_metric = canonical_text_metric(TextRole::TimeSignatureDigit);
+                let count_y = s_top - staff_ss * 0.5 - time_sig_metric.font_size_pt * 0.5;
+                let count_id = push_text_item(
+                    &mut page.items,
+                    &mut item_counter,
+                    Some(&measure_id),
+                    "multi-rest-count",
+                    mx + *mw * 0.5,
+                    count_y,
+                    TextRole::TimeSignatureDigit,
+                    count_glyph,
+                    time_sig_metric.font_family,
+                    time_sig_metric.font_size_pt,
+                    "#333",
+                    Some("middle"),
+                    None,
+                );
                 page.composites.push(SceneComposite {
                     id: format!("multi-rest-{}", measure.global_index),
                     kind: CompositeKind::MultiRest,
                     fragment: SpanFragmentKind::SingleSegment,
-                    child_item_ids: vec![bar_id, count_id],
+                    child_item_ids: vec![bar_id, left_serif_id, right_serif_id, count_id],
                     label: None,
                     count: Some(count),
                     start_anchor_id: Some(measure_id.clone()),
@@ -3022,17 +3891,18 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
             } else if let Some(repeat_part) = measure.repeat_part {
                 match repeat_part {
                     MeasureRepeatDisplayPart::Single => {
-                        let repeat_metric = canonical_glyph_metric(GlyphRole::MeasureRepeatMark1Bar);
+                        let repeat_metric =
+                            canonical_glyph_metric(GlyphRole::MeasureRepeatMark1Bar);
                         let repeat_id = push_glyph_item(
                             &mut page.items,
                             &mut item_counter,
                             Some(&measure_id),
                             "measure-repeat",
-                            mx + *mw * 0.5 - repeat_metric.anchor_x_pt,
-                            s_top + count_metric.ascent_pt + 8.0,
+                            mx + *mw * 0.5 - repeat_metric.bbox_center_x_pt(30.0),
+                            s_mid + repeat_metric.bbox_center_y_pt(30.0),
                             GlyphRole::MeasureRepeatMark1Bar,
                             "Bravura",
-                            20.0,
+                            30.0,
                             "#333",
                         );
                         page.composites.push(SceneComposite {
@@ -3049,17 +3919,18 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
                     MeasureRepeatDisplayPart::TwoBarStart => {
                         let next_width = system.widths.get(mi + 1).copied().unwrap_or(*mw);
                         let span_center_x = mx + (*mw + next_width) * 0.5;
-                        let repeat_metric = canonical_glyph_metric(GlyphRole::MeasureRepeatMark2Bars);
+                        let repeat_metric =
+                            canonical_glyph_metric(GlyphRole::MeasureRepeatMark2Bars);
                         let repeat_id = push_glyph_item(
                             &mut page.items,
                             &mut item_counter,
                             Some(&measure_id),
                             "measure-repeat",
-                            span_center_x - repeat_metric.anchor_x_pt,
-                            s_top + count_metric.ascent_pt + 8.0,
+                            span_center_x - repeat_metric.bbox_center_x_pt(30.0),
+                            s_mid + repeat_metric.bbox_center_y_pt(30.0),
                             GlyphRole::MeasureRepeatMark2Bars,
                             "Bravura",
-                            20.0,
+                            30.0,
                             "#333",
                         );
                         let end_anchor_id = format!("measure-{}", measure.global_index + 1);
@@ -3077,7 +3948,11 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
                     MeasureRepeatDisplayPart::TwoBarStop => {}
                 }
             } else {
-                let left_pad = if mi == 0 { first_measure_left_pad } else { other_measure_left_pad };
+                let left_pad = if mi == 0 {
+                    first_measure_left_pad
+                } else {
+                    other_measure_left_pad
+                };
                 render_measure_events(
                     &mut page.items,
                     &mut item_counter,
@@ -3095,7 +3970,18 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
                 );
             }
 
-            render_nav_markers(&mut page.items, &mut page.composites, &mut item_counter, &measure_id, measure, mx, *mw, sy, s_top, s_bot);
+            render_nav_markers(
+                &mut page.items,
+                &mut page.composites,
+                &mut item_counter,
+                &measure_id,
+                measure,
+                mx,
+                *mw,
+                sy,
+                s_top,
+                s_bot,
+            );
             render_right_barline(
                 &mut page.items,
                 &mut item_counter,
@@ -3103,7 +3989,10 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
                 mx + *mw,
                 s_top,
                 s_bot,
-                measure.closing_barline.as_deref().or(measure.barline.as_deref()),
+                measure
+                    .closing_barline
+                    .as_deref()
+                    .or(measure.barline.as_deref()),
                 mi + 1 == system.measures.len() && is_last,
             );
             mx += *mw;
@@ -3121,8 +4010,22 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
         });
     }
 
-    push_repeat_span_composites(&mut page.items, &mut page.composites, &mut item_counter, &page.measures, &expanded.repeat_spans, opts);
-    push_volta_composites(&mut page.items, &mut page.composites, &mut item_counter, &page.measures, &expanded.measures, opts);
+    push_repeat_span_composites(
+        &mut page.items,
+        &mut page.composites,
+        &mut item_counter,
+        &page.measures,
+        &expanded.repeat_spans,
+        opts,
+    );
+    push_volta_composites(
+        &mut page.items,
+        &mut page.composites,
+        &mut item_counter,
+        &page.measures,
+        &expanded.measures,
+        opts,
+    );
     render_hairpin_fragments(
         &mut page.items,
         &mut page.composites,
@@ -3151,7 +4054,8 @@ fn push_repeat_span_composites(
 ) {
     let count_metric = canonical_text_metric(TextRole::CountLabel);
     for repeat in repeat_spans {
-        let fragments = measure_fragments_for_range(page_measures, repeat.start_measure, repeat.end_measure);
+        let fragments =
+            measure_fragments_for_range(page_measures, repeat.start_measure, repeat.end_measure);
         let fragment_total = fragments.len();
         for (fragment_index, fragment) in fragments.iter().enumerate() {
             if fragment.is_empty() {
@@ -3163,18 +4067,71 @@ fn push_repeat_span_composites(
             let x1 = first.x_pt + 4.0;
             let x2 = last.x_pt + last.width_pt - 4.0;
             let mut child_item_ids = Vec::new();
-            child_item_ids.push(push_line_item(items, counter, Some(&first.id), "repeat-span-line", x1, y, x2, y, "#333", 1.2, None));
+            child_item_ids.push(push_line_item(
+                items,
+                counter,
+                Some(&first.id),
+                "repeat-span-line",
+                x1,
+                y,
+                x2,
+                y,
+                "#333",
+                1.2,
+                None,
+            ));
             if fragment_index == 0 {
-                child_item_ids.push(push_line_item(items, counter, Some(&first.id), "repeat-span-start", x1, y, x1, y + 8.0, "#333", 1.2, None));
+                child_item_ids.push(push_line_item(
+                    items,
+                    counter,
+                    Some(&first.id),
+                    "repeat-span-start",
+                    x1,
+                    y,
+                    x1,
+                    y + 8.0,
+                    "#333",
+                    1.2,
+                    None,
+                ));
             }
             if fragment_index + 1 == fragment_total {
-                child_item_ids.push(push_line_item(items, counter, Some(&last.id), "repeat-span-end", x2, y, x2, y + 8.0, "#333", 1.2, None));
+                child_item_ids.push(push_line_item(
+                    items,
+                    counter,
+                    Some(&last.id),
+                    "repeat-span-end",
+                    x2,
+                    y,
+                    x2,
+                    y + 8.0,
+                    "#333",
+                    1.2,
+                    None,
+                ));
             }
             if repeat.times > 1 && fragment_index == 0 {
-                child_item_ids.push(push_text_item(items, counter, Some(&first.id), "repeat-span-count", (x1 + x2) * 0.5, y - count_metric.descent_pt - 1.0, TextRole::CountLabel, format!("{}x", repeat.times), count_metric.font_family, count_metric.font_size_pt, "#333", Some("middle"), None));
+                child_item_ids.push(push_text_item(
+                    items,
+                    counter,
+                    Some(&first.id),
+                    "repeat-span-count",
+                    (x1 + x2) * 0.5,
+                    y - count_metric.descent_pt - 1.0,
+                    TextRole::CountLabel,
+                    format!("{}x", repeat.times),
+                    count_metric.font_family,
+                    count_metric.font_size_pt,
+                    "#333",
+                    Some("middle"),
+                    None,
+                ));
             }
             composites.push(SceneComposite {
-                id: format!("repeat-span-{}-{}-{}", repeat.start_measure, repeat.end_measure, fragment_index),
+                id: format!(
+                    "repeat-span-{}-{}-{}",
+                    repeat.start_measure, repeat.end_measure, fragment_index
+                ),
                 kind: CompositeKind::RepeatSpan,
                 fragment: span_fragment_kind(fragment_index, fragment_total),
                 child_item_ids,
@@ -3201,16 +4158,38 @@ fn push_volta_composites(
     for measure in measures {
         if measure.measure.volta_indices != current_label {
             if let (Some(start), Some(label)) = (current_start.take(), current_label.take()) {
-                push_volta_segment(items, composites, counter, page_measures, start, measure.global_index.saturating_sub(1), &label, opts);
+                push_volta_segment(
+                    items,
+                    composites,
+                    counter,
+                    page_measures,
+                    start,
+                    measure.global_index.saturating_sub(1),
+                    &label,
+                    opts,
+                );
             }
             current_label = measure.measure.volta_indices.clone();
-            current_start = measure.measure.volta_indices.as_ref().map(|_| measure.global_index);
+            current_start = measure
+                .measure
+                .volta_indices
+                .as_ref()
+                .map(|_| measure.global_index);
         }
     }
 
     if let (Some(start), Some(label)) = (current_start, current_label) {
         if let Some(last_measure) = measures.last() {
-            push_volta_segment(items, composites, counter, page_measures, start, last_measure.global_index, &label, opts);
+            push_volta_segment(
+                items,
+                composites,
+                counter,
+                page_measures,
+                start,
+                last_measure.global_index,
+                &label,
+                opts,
+            );
         }
     }
 }
@@ -3246,13 +4225,63 @@ fn push_volta_segment(
         let x1 = first.x_pt + 2.0;
         let x2 = last.x_pt + last.width_pt - 2.0;
         let mut child_item_ids = Vec::new();
-        child_item_ids.push(push_line_item(items, counter, Some(&first.id), "volta-line", x1, y, x2, y, "#333", 1.2, None));
+        child_item_ids.push(push_line_item(
+            items,
+            counter,
+            Some(&first.id),
+            "volta-line",
+            x1,
+            y,
+            x2,
+            y,
+            "#333",
+            1.2,
+            None,
+        ));
         if fragment_index == 0 {
-            child_item_ids.push(push_line_item(items, counter, Some(&first.id), "volta-start-hook", x1, y, x1, y + 10.0, "#333", 1.2, None));
-            child_item_ids.push(push_text_item(items, counter, Some(&first.id), "volta-label", x1 + 4.0, y - count_metric.descent_pt - 1.0, TextRole::CountLabel, label_text.clone(), count_metric.font_family, count_metric.font_size_pt, "#333", None, None));
+            child_item_ids.push(push_line_item(
+                items,
+                counter,
+                Some(&first.id),
+                "volta-start-hook",
+                x1,
+                y,
+                x1,
+                y + 10.0,
+                "#333",
+                1.2,
+                None,
+            ));
+            child_item_ids.push(push_text_item(
+                items,
+                counter,
+                Some(&first.id),
+                "volta-label",
+                x1 + 4.0,
+                y - count_metric.descent_pt - 1.0,
+                TextRole::CountLabel,
+                label_text.clone(),
+                count_metric.font_family,
+                count_metric.font_size_pt,
+                "#333",
+                None,
+                None,
+            ));
         }
         if fragment_index + 1 == fragment_total {
-            child_item_ids.push(push_line_item(items, counter, Some(&last.id), "volta-end-hook", x2, y, x2, y + 10.0, "#333", 1.2, None));
+            child_item_ids.push(push_line_item(
+                items,
+                counter,
+                Some(&last.id),
+                "volta-end-hook",
+                x2,
+                y,
+                x2,
+                y + 10.0,
+                "#333",
+                1.2,
+                None,
+            ));
         }
         composites.push(SceneComposite {
             id: format!("volta-{}-{}-{}", start_measure, end_measure, fragment_index),
@@ -3274,7 +4303,9 @@ fn measure_fragments_for_range<'a>(
 ) -> Vec<Vec<&'a SceneMeasure>> {
     let mut matches: Vec<&SceneMeasure> = page_measures
         .iter()
-        .filter(|measure| measure.global_index >= start_measure && measure.global_index <= end_measure)
+        .filter(|measure| {
+            measure.global_index >= start_measure && measure.global_index <= end_measure
+        })
         .collect();
     matches.sort_by_key(|measure| measure.global_index);
 
@@ -3282,7 +4313,12 @@ fn measure_fragments_for_range<'a>(
     for measure in matches {
         if fragments
             .last()
-            .map(|fragment| fragment.last().map(|last| last.system_id == measure.system_id).unwrap_or(false))
+            .map(|fragment| {
+                fragment
+                    .last()
+                    .map(|last| last.system_id == measure.system_id)
+                    .unwrap_or(false)
+            })
             .unwrap_or(false)
         {
             fragments.last_mut().unwrap().push(measure);
@@ -3310,7 +4346,19 @@ fn span_fragment_kind(index: usize, total: usize) -> SpanFragmentKind {
     }
 }
 
-fn push_line_item(items: &mut Vec<SceneItem>, counter: &mut usize, measure_id: Option<&str>, role: &str, x1: f32, y1: f32, x2: f32, y2: f32, stroke: &str, stroke_width: f32, stroke_line_cap: Option<&str>) -> String {
+fn push_line_item(
+    items: &mut Vec<SceneItem>,
+    counter: &mut usize,
+    measure_id: Option<&str>,
+    role: &str,
+    x1: f32,
+    y1: f32,
+    x2: f32,
+    y2: f32,
+    stroke: &str,
+    stroke_width: f32,
+    stroke_line_cap: Option<&str>,
+) -> String {
     let id = format!("item-{counter}");
     items.push(SceneItem {
         id: id.clone(),
@@ -3414,7 +4462,15 @@ fn render_measure_events(
     stem_len_pt: f32,
 ) {
     let mut beam_anchors: Vec<BeamAnchor> = Vec::new();
-    let geometry = measure_geometry(header, measure, measure_x, measure_width, left_pad, right_pad, mapper);
+    let geometry = measure_geometry(
+        header,
+        measure,
+        measure_x,
+        measure_width,
+        left_pad,
+        right_pad,
+        mapper,
+    );
     let mut slot_events = measure
         .events
         .iter()
@@ -3433,11 +4489,16 @@ fn render_measure_events(
         a.slot
             .cmp(&b.slot)
             .then_with(|| a.event.voice.cmp(&b.event.voice))
-            .then_with(|| staff_y_for_track(&a.event.track).partial_cmp(&staff_y_for_track(&b.event.track)).unwrap_or(std::cmp::Ordering::Equal))
+            .then_with(|| {
+                staff_y_for_track(&a.event.track)
+                    .partial_cmp(&staff_y_for_track(&b.event.track))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
     });
 
     let mut index = 0usize;
-    let mut beam_states_by_voice: std::collections::BTreeMap<u8, BeamRunState> = std::collections::BTreeMap::new();
+    let mut beam_states_by_voice: std::collections::BTreeMap<u8, BeamRunState> =
+        std::collections::BTreeMap::new();
     let mut next_beam_group = 0_u32;
     while index < slot_events.len() {
         let slot = slot_events[index].slot;
@@ -3467,7 +4528,14 @@ fn render_measure_events(
         );
     }
 
-    render_beam_groups(items, counter, measure_id, beam_anchors, measure_width, staff_bottom);
+    render_beam_groups(
+        items,
+        counter,
+        measure_id,
+        beam_anchors,
+        measure_width,
+        staff_bottom,
+    );
 }
 
 fn render_slot_group(
@@ -3488,16 +4556,27 @@ fn render_slot_group(
         .collect::<std::collections::BTreeSet<_>>()
         .len();
 
-    let mut note_anchors_by_voice: std::collections::BTreeMap<u8, Vec<NotePlacement>> = std::collections::BTreeMap::new();
+    let mut note_anchors_by_voice: std::collections::BTreeMap<u8, Vec<NotePlacement>> =
+        std::collections::BTreeMap::new();
 
-    for voice in slot_group.iter().map(|slot_event| slot_event.event.voice).collect::<std::collections::BTreeSet<_>>() {
+    for voice in slot_group
+        .iter()
+        .map(|slot_event| slot_event.event.voice)
+        .collect::<std::collections::BTreeSet<_>>()
+    {
         let voice_hits = slot_group
             .iter()
-            .filter(|slot_event| slot_event.event.voice == voice && matches!(slot_event.event.kind, EventKind::Hit))
+            .filter(|slot_event| {
+                slot_event.event.voice == voice && matches!(slot_event.event.kind, EventKind::Hit)
+            })
             .collect::<Vec<_>>();
         if !voice_hits.is_empty() {
             let voice_shift = if hit_voice_count > 1 {
-                if voice == 1 { -4.0 } else { 4.0 }
+                if voice == 1 {
+                    -4.0
+                } else {
+                    4.0
+                }
             } else {
                 0.0
             };
@@ -3516,33 +4595,75 @@ fn render_slot_group(
             note_anchors_by_voice.insert(voice, placements);
         }
 
-        for rest in slot_group
-            .iter()
-            .filter(|slot_event| slot_event.event.voice == voice && matches!(slot_event.event.kind, EventKind::Rest))
-        {
+        for rest in slot_group.iter().filter(|slot_event| {
+            slot_event.event.voice == voice && matches!(slot_event.event.kind, EventKind::Rest)
+        }) {
             let rest_metric = rest_glyph_for_fraction(rest.event.duration);
-            let rest_glyph_char = char::from_u32(rest_metric.codepoint).unwrap_or('?').to_string();
-            let rest_y = if rest.event.voice == 2 { staff_top + 30.0 } else { staff_top + 20.0 };
-            push_text_item(items, counter, Some(measure_id), "rest", event_x, rest_y, TextRole::CountLabel, rest_glyph_char, "Bravura", 28.0, "#333", Some("middle"), None);
+            let rest_glyph_char = char::from_u32(rest_metric.smufl_codepoint)
+                .unwrap_or('?')
+                .to_string();
+            let rest_y = if rest.event.voice == 2 {
+                staff_top + 30.0
+            } else {
+                staff_top + 20.0
+            };
+            push_text_item(
+                items,
+                counter,
+                Some(measure_id),
+                "rest",
+                event_x,
+                rest_y,
+                TextRole::CountLabel,
+                rest_glyph_char,
+                "Bravura",
+                28.0,
+                "#333",
+                Some("middle"),
+                None,
+            );
         }
     }
 
-    let default_anchor = note_anchors_by_voice
-        .values()
-        .find_map(|placements| placements.first().map(|placement| placement.note_id.clone()));
+    let default_anchor = note_anchors_by_voice.values().find_map(|placements| {
+        placements
+            .first()
+            .map(|placement| placement.note_id.clone())
+    });
     let default_anchor_y = note_anchors_by_voice
         .values()
         .flat_map(|placements| placements.iter().map(|placement| placement.note_y))
-        .fold(None, |acc: Option<f32>, y| Some(acc.map_or(y, |current| current.min(y))));
+        .fold(None, |acc: Option<f32>, y| {
+            Some(acc.map_or(y, |current| current.min(y)))
+        });
 
     let sticking_metric = canonical_text_metric(TextRole::Sticking);
-    for sticking in slot_group.iter().filter(|slot_event| matches!(slot_event.event.kind, EventKind::Sticking)) {
-        push_text_item(items, counter, Some(measure_id), "sticking", event_x, staff_top - sticking_metric.descent_pt, TextRole::Sticking, sticking.event.glyph.clone(), sticking_metric.font_family, sticking_metric.font_size_pt, "#333", Some("middle"), Some("bold"));
+    for sticking in slot_group
+        .iter()
+        .filter(|slot_event| matches!(slot_event.event.kind, EventKind::Sticking))
+    {
+        push_text_item(
+            items,
+            counter,
+            Some(measure_id),
+            "sticking",
+            event_x,
+            staff_top - sticking_metric.descent_pt,
+            TextRole::Sticking,
+            sticking.event.glyph.clone(),
+            sticking_metric.font_family,
+            sticking_metric.font_size_pt,
+            "#333",
+            Some("middle"),
+            Some("bold"),
+        );
         if let Some(item) = items.last_mut() {
             item.anchor_item_id = default_anchor.clone();
         }
         if let Some(anchor_y) = default_anchor_y {
-            if let Some(ScenePrimitive::TextRun(text)) = items.last_mut().map(|item| &mut item.primitive) {
+            if let Some(ScenePrimitive::TextRun(text)) =
+                items.last_mut().map(|item| &mut item.primitive)
+            {
                 text.y_pt = anchor_y - sticking_metric.line_height_pt - 4.0;
             }
         }
@@ -3609,7 +4730,10 @@ fn render_hit_cluster(
     stem_len_pt: f32,
 ) -> Vec<NotePlacement> {
     let note_font_size = 30.0_f32;
-    let stem_up = voice_hits.first().map(|slot_event| slot_event.event.voice != 2).unwrap_or(true);
+    let stem_up = voice_hits
+        .first()
+        .map(|slot_event| slot_event.event.voice != 2)
+        .unwrap_or(true);
     let base_note_x = event_x - 7.0 + voice_shift;
     let mut placements = voice_hits
         .iter()
@@ -3623,10 +4747,30 @@ fn render_hit_cluster(
 
     let mut note_placements = Vec::new();
     for (slot_event, note_y_offset) in &placements {
-        let glyph_metric = notehead_glyph(&slot_event.event.track, &slot_event.event.modifiers, &slot_event.event.glyph);
-        let note_glyph = char::from_u32(glyph_metric.codepoint).unwrap_or('?').to_string();
+        let glyph_metric = notehead_glyph(
+            &slot_event.event.track,
+            &slot_event.event.modifiers,
+            &slot_event.event.glyph,
+        );
+        let note_glyph = char::from_u32(glyph_metric.smufl_codepoint)
+            .unwrap_or('?')
+            .to_string();
         let actual_note_y = staff_top + *note_y_offset;
-        let note_id = push_text_item(items, counter, Some(measure_id), "notehead", base_note_x, actual_note_y, TextRole::Tempo, note_glyph, "Bravura", note_font_size, "#333", None, None);
+        let note_id = push_text_item(
+            items,
+            counter,
+            Some(measure_id),
+            "notehead",
+            base_note_x,
+            actual_note_y,
+            TextRole::Tempo,
+            note_glyph,
+            "Bravura",
+            note_font_size,
+            "#333",
+            None,
+            None,
+        );
         let ledger_half_overhang_pt = 3.0_f32;
         for ledger_y_offset in ledger_line_offsets_for_staff_position(*note_y_offset / 10.0) {
             let ledger_y = staff_top + ledger_y_offset * 10.0;
@@ -3637,7 +4781,14 @@ fn render_hit_cluster(
                 "ledger-line",
                 base_note_x - ledger_half_overhang_pt,
                 ledger_y,
-                base_note_x + canonical_glyph_metric(glyph_role_for_codepoint(glyph_metric.codepoint)).width_pt + ledger_half_overhang_pt,
+                base_note_x
+                    + canonical_glyph_metric(glyph_role_for_codepoint(
+                        glyph_metric.smufl_codepoint,
+                    ))
+                    .width_ss()
+                        * note_font_size
+                        / 4.0
+                    + ledger_half_overhang_pt,
                 ledger_y,
                 "#333",
                 1.25,
@@ -3651,12 +4802,32 @@ fn render_hit_cluster(
             note_id: note_id.clone(),
             note_x: base_note_x,
             note_y: actual_note_y,
-            stem_offset_y: glyph_metric.stem_offset_y,
+            stem_up_anchor_ss: glyph_metric.stem_up_anchor_ss,
+            stem_down_anchor_ss: glyph_metric.stem_down_anchor_ss,
         });
 
-        if slot_event.event.modifiers.iter().any(|modifier| modifier == "accent") {
+        if slot_event
+            .event
+            .modifiers
+            .iter()
+            .any(|modifier| modifier == "accent")
+        {
             let count_metric = canonical_text_metric(TextRole::CountLabel);
-            push_text_item(items, counter, Some(measure_id), "accent", event_x, actual_note_y - count_metric.line_height_pt - 2.0, TextRole::CountLabel, ">".to_string(), count_metric.font_family, count_metric.font_size_pt, "#333", Some("middle"), Some("bold"));
+            push_text_item(
+                items,
+                counter,
+                Some(measure_id),
+                "accent",
+                event_x,
+                actual_note_y - count_metric.line_height_pt - 2.0,
+                TextRole::CountLabel,
+                ">".to_string(),
+                count_metric.font_family,
+                count_metric.font_size_pt,
+                "#333",
+                Some("middle"),
+                Some("bold"),
+            );
             if let Some(item) = items.last_mut() {
                 item.anchor_item_id = Some(note_id.clone());
             }
@@ -3664,28 +4835,71 @@ fn render_hit_cluster(
     }
 
     if let Some(first_hit) = voice_hits.first() {
-        let needs_stem = first_hit.event.duration.denominator >= 4 || first_hit.event.tuplet.is_some();
+        let needs_stem =
+            first_hit.event.duration.denominator >= 4 || first_hit.event.tuplet.is_some();
         if needs_stem {
             let smufl_ss = note_font_size / 4.0;
-            let anchor_x = 1.48_f32;
             let attach_note = if stem_up {
-                note_placements
-                    .iter()
-                    .min_by(|a, b| a.note_y.partial_cmp(&b.note_y).unwrap_or(std::cmp::Ordering::Equal))
+                note_placements.iter().min_by(|a, b| {
+                    a.note_y
+                        .partial_cmp(&b.note_y)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
             } else {
-                note_placements
-                    .iter()
-                    .max_by(|a, b| a.note_y.partial_cmp(&b.note_y).unwrap_or(std::cmp::Ordering::Equal))
+                note_placements.iter().max_by(|a, b| {
+                    a.note_y
+                        .partial_cmp(&b.note_y)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
             };
             if let Some(attach_note) = attach_note {
-                let stem_x = if stem_up {
-                    attach_note.note_x + anchor_x * smufl_ss
+                let fallback_anchor = if stem_up {
+                    GlyphPoint {
+                        x_ss: 1.18,
+                        y_ss: 0.168,
+                    }
                 } else {
-                    attach_note.note_x + 0.10 * smufl_ss
+                    GlyphPoint {
+                        x_ss: 0.0,
+                        y_ss: -0.168,
+                    }
                 };
-                let stem_y1 = if stem_up { attach_note.note_y - stem_len_pt } else { attach_note.note_y + attach_note.stem_offset_y };
-                let stem_y2 = if stem_up { attach_note.note_y - attach_note.stem_offset_y } else { attach_note.note_y + stem_len_pt };
-                let stem_id = push_line_item(items, counter, Some(measure_id), "stem", stem_x, stem_y1, stem_x, stem_y2, "#333", 1.5, None);
+                let stem_anchor = if stem_up {
+                    attach_note.stem_up_anchor_ss
+                } else {
+                    attach_note.stem_down_anchor_ss
+                }
+                .unwrap_or(fallback_anchor);
+                let stem_attach_x = attach_note.note_x + stem_anchor.x_ss * smufl_ss;
+                let stem_attach_y = attach_note.note_y - stem_anchor.y_ss * smufl_ss;
+                let stem_x = if stem_up {
+                    stem_attach_x
+                } else {
+                    stem_attach_x
+                };
+                let stem_y1 = if stem_up {
+                    stem_attach_y - stem_len_pt
+                } else {
+                    stem_attach_y
+                };
+                let stem_y2 = if stem_up {
+                    stem_attach_y
+                } else {
+                    stem_attach_y + stem_len_pt
+                };
+                let stem_id = push_line_item(
+                    items,
+                    counter,
+                    Some(measure_id),
+                    "stem",
+                    stem_x,
+                    stem_y1,
+                    stem_x,
+                    stem_y2,
+                    "#333",
+                    1.5,
+                    None,
+                );
                 if let Some(item) = items.last_mut() {
                     item.anchor_item_id = Some(attach_note.note_id.clone());
                 }
@@ -3791,17 +5005,26 @@ fn render_beam_groups(
                 (false, _) => GlyphRole::Flag8thDown,
             };
             let flag_metric = canonical_glyph_metric(flag_role);
-            let flag_x = anchor.stem_x;
+            let smufl_ss = BASE_FONT_SIZE_PT / 4.0;
+            let flag_anchor =
+                flag_metric
+                    .stem_anchor_for_direction(anchor.up)
+                    .unwrap_or(GlyphPoint {
+                        x_ss: 0.0,
+                        y_ss: 0.0,
+                    });
+            let flag_x = anchor.stem_x - flag_anchor.x_ss * smufl_ss;
+            let flag_y = anchor.stem_tip_y + flag_anchor.y_ss * smufl_ss;
             let flag_id = push_glyph_item(
                 items,
                 counter,
                 Some(measure_id),
                 "flag",
                 flag_x,
-                anchor.stem_tip_y,
+                flag_y,
                 flag_role,
                 "Bravura",
-                flag_metric.height_pt,
+                BASE_FONT_SIZE_PT,
                 "#333",
             );
             if let Some(item) = items.last_mut() {
@@ -3824,7 +5047,11 @@ fn render_beam_groups(
             let dx = xn - x1;
             let dy = end_y - primary_y;
             for anchor in &group[1..group.len() - 1] {
-                let t = if dx.abs() > 0.001 { (anchor.stem_x - x1) / dx } else { 0.5 };
+                let t = if dx.abs() > 0.001 {
+                    (anchor.stem_x - x1) / dx
+                } else {
+                    0.5
+                };
                 let target_tip_y = primary_y + dy * t;
                 adjust_stem_tip(items, &anchor.stem_item_id, target_tip_y, anchor.up);
             }
@@ -3874,7 +5101,9 @@ fn render_beam_groups(
         let starts_new_group = current.is_empty()
             || current
                 .last()
-                .map(|prev| prev.voice != anchor.voice || prev.up != anchor.up || prev.group != anchor.group)
+                .map(|prev| {
+                    prev.voice != anchor.voice || prev.up != anchor.up || prev.group != anchor.group
+                })
                 .unwrap_or(false);
         if starts_new_group {
             if !current.is_empty() {
@@ -3917,12 +5146,62 @@ fn render_left_barline(
     let count_metric = canonical_text_metric(TextRole::CountLabel);
     match barline {
         Some("repeat-start") | Some("repeat-both") => {
-            push_rect_item(items, counter, measure_id, "repeat-start-thick", x, top, 3.0, h, "#333", None, None);
-            push_rect_item(items, counter, measure_id, "repeat-start-thin", x + 5.0, top, 1.0, h, "#333", None, None);
-            push_text_item(items, counter, measure_id, "repeat-dot", x + 9.0, top + 12.0, TextRole::CountLabel, ":".to_string(), count_metric.font_family, count_metric.font_size_pt, "#333", None, None);
+            push_rect_item(
+                items,
+                counter,
+                measure_id,
+                "repeat-start-thick",
+                x,
+                top,
+                3.0,
+                h,
+                "#333",
+                None,
+                None,
+            );
+            push_rect_item(
+                items,
+                counter,
+                measure_id,
+                "repeat-start-thin",
+                x + 5.0,
+                top,
+                1.0,
+                h,
+                "#333",
+                None,
+                None,
+            );
+            push_text_item(
+                items,
+                counter,
+                measure_id,
+                "repeat-dot",
+                x + 9.0,
+                top + 12.0,
+                TextRole::CountLabel,
+                ":".to_string(),
+                count_metric.font_family,
+                count_metric.font_size_pt,
+                "#333",
+                None,
+                None,
+            );
         }
         _ if is_system_start => {
-            push_rect_item(items, counter, measure_id, "opening-barline", x, top, 1.0, h, "#333", None, None);
+            push_rect_item(
+                items,
+                counter,
+                measure_id,
+                "opening-barline",
+                x,
+                top,
+                1.0,
+                h,
+                "#333",
+                None,
+                None,
+            );
         }
         _ => {}
     }
@@ -3942,22 +5221,136 @@ fn render_right_barline(
     let count_metric = canonical_text_metric(TextRole::CountLabel);
     match barline {
         Some("repeat-end") | Some("repeat-both") => {
-            push_rect_item(items, counter, measure_id, "repeat-end-thin", x - 6.0, top, 1.0, h, "#333", None, None);
-            push_rect_item(items, counter, measure_id, "repeat-end-thick", x - 3.0, top, 3.0, h, "#333", None, None);
-            push_text_item(items, counter, measure_id, "repeat-dot", x - 12.0, top + 12.0, TextRole::CountLabel, ":".to_string(), count_metric.font_family, count_metric.font_size_pt, "#333", None, None);
+            push_rect_item(
+                items,
+                counter,
+                measure_id,
+                "repeat-end-thin",
+                x - 6.0,
+                top,
+                1.0,
+                h,
+                "#333",
+                None,
+                None,
+            );
+            push_rect_item(
+                items,
+                counter,
+                measure_id,
+                "repeat-end-thick",
+                x - 3.0,
+                top,
+                3.0,
+                h,
+                "#333",
+                None,
+                None,
+            );
+            push_text_item(
+                items,
+                counter,
+                measure_id,
+                "repeat-dot",
+                x - 12.0,
+                top + 12.0,
+                TextRole::CountLabel,
+                ":".to_string(),
+                count_metric.font_family,
+                count_metric.font_size_pt,
+                "#333",
+                None,
+                None,
+            );
         }
         Some("double") => {
-            push_rect_item(items, counter, measure_id, "double-barline-left", x - 4.0, top, 1.0, h, "#333", None, None);
-            push_rect_item(items, counter, measure_id, "double-barline-right", x - 1.0, top, 1.0, h, "#333", None, None);
+            push_rect_item(
+                items,
+                counter,
+                measure_id,
+                "double-barline-left",
+                x - 4.0,
+                top,
+                1.0,
+                h,
+                "#333",
+                None,
+                None,
+            );
+            push_rect_item(
+                items,
+                counter,
+                measure_id,
+                "double-barline-right",
+                x - 1.0,
+                top,
+                1.0,
+                h,
+                "#333",
+                None,
+                None,
+            );
         }
         Some("final") => {
-            push_rect_item(items, counter, measure_id, "final-barline-thin", x - 4.0, top, 1.0, h, "#333", None, None);
-            push_rect_item(items, counter, measure_id, "final-barline-thick", x - 3.0, top, 3.0, h, "#333", None, None);
+            push_rect_item(
+                items,
+                counter,
+                measure_id,
+                "final-barline-thin",
+                x - 4.0,
+                top,
+                1.0,
+                h,
+                "#333",
+                None,
+                None,
+            );
+            push_rect_item(
+                items,
+                counter,
+                measure_id,
+                "final-barline-thick",
+                x - 3.0,
+                top,
+                3.0,
+                h,
+                "#333",
+                None,
+                None,
+            );
         }
         _ => {
-            push_rect_item(items, counter, measure_id, if is_last_measure_of_score { "closing-barline" } else { "barline" }, x - 1.0, top, 1.0, h, "#333", None, None);
+            push_rect_item(
+                items,
+                counter,
+                measure_id,
+                if is_last_measure_of_score {
+                    "closing-barline"
+                } else {
+                    "barline"
+                },
+                x - 1.0,
+                top,
+                1.0,
+                h,
+                "#333",
+                None,
+                None,
+            );
             if is_last_measure_of_score {
-                push_rect_item(items, counter, measure_id, "final-barline", x - 3.0, top, 3.0, h, "#333", None, None);
+                push_rect_item(
+                    items,
+                    counter,
+                    measure_id,
+                    "final-barline",
+                    x - 3.0,
+                    top,
+                    3.0,
+                    h,
+                    "#333",
+                    None,
+                    None,
+                );
             }
         }
     }
@@ -3981,7 +5374,21 @@ fn render_nav_markers(
             NavMarker::Segno => "@segno",
             NavMarker::Coda => "@coda",
         };
-        let nav_id = push_text_item(items, counter, Some(measure_id), "nav-start", x + 4.0, system_y - count_metric.descent_pt, TextRole::CountLabel, label.to_string(), count_metric.font_family, count_metric.font_size_pt, "#333", None, Some("bold"));
+        let nav_id = push_text_item(
+            items,
+            counter,
+            Some(measure_id),
+            "nav-start",
+            x + 4.0,
+            system_y - count_metric.descent_pt,
+            TextRole::CountLabel,
+            label.to_string(),
+            count_metric.font_family,
+            count_metric.font_size_pt,
+            "#333",
+            None,
+            Some("bold"),
+        );
         composites.push(SceneComposite {
             id: format!("navigation-start-{}", measure.global_index),
             kind: CompositeKind::Navigation,
@@ -4004,7 +5411,21 @@ fn render_nav_markers(
             NavJump::DSalCoda => "@ds-al-coda",
             NavJump::ToCoda => "@to-coda",
         };
-        let nav_id = push_text_item(items, counter, Some(measure_id), "nav-end", x + width - 4.0, top - count_metric.descent_pt - 1.0, TextRole::CountLabel, label.to_string(), count_metric.font_family, count_metric.font_size_pt, "#333", Some("end"), Some("bold"));
+        let nav_id = push_text_item(
+            items,
+            counter,
+            Some(measure_id),
+            "nav-end",
+            x + width - 4.0,
+            top - count_metric.descent_pt - 1.0,
+            TextRole::CountLabel,
+            label.to_string(),
+            count_metric.font_family,
+            count_metric.font_size_pt,
+            "#333",
+            Some("end"),
+            Some("bold"),
+        );
         composites.push(SceneComposite {
             id: format!("navigation-end-{}", measure.global_index),
             kind: CompositeKind::Navigation,
@@ -4054,12 +5475,49 @@ fn render_hairpin_fragments(
                 };
                 let base_y = first.y_pt + first.height_pt + 8.0 + hairpin_offset_y;
                 let open_height = 10.0;
-                let start_y = base_y + if matches!(hairpin.kind, HairpinKind::Crescendo) { open_height } else { 0.0 };
-                let end_y = base_y + if matches!(hairpin.kind, HairpinKind::Crescendo) { 0.0 } else { open_height };
-                let top_id = push_line_item(items, counter, Some(&first.id), "hairpin-top", start_x, base_y, end_x, end_y, "#333", 1.2, None);
-                let bottom_id = push_line_item(items, counter, Some(&first.id), "hairpin-bottom", start_x, base_y + open_height, end_x, start_y, "#333", 1.2, None);
+                let start_y = base_y
+                    + if matches!(hairpin.kind, HairpinKind::Crescendo) {
+                        open_height
+                    } else {
+                        0.0
+                    };
+                let end_y = base_y
+                    + if matches!(hairpin.kind, HairpinKind::Crescendo) {
+                        0.0
+                    } else {
+                        open_height
+                    };
+                let top_id = push_line_item(
+                    items,
+                    counter,
+                    Some(&first.id),
+                    "hairpin-top",
+                    start_x,
+                    base_y,
+                    end_x,
+                    end_y,
+                    "#333",
+                    1.2,
+                    None,
+                );
+                let bottom_id = push_line_item(
+                    items,
+                    counter,
+                    Some(&first.id),
+                    "hairpin-bottom",
+                    start_x,
+                    base_y + open_height,
+                    end_x,
+                    start_y,
+                    "#333",
+                    1.2,
+                    None,
+                );
                 composites.push(SceneComposite {
-                    id: format!("hairpin-{}-{}-{}", hairpin.start_measure_index, hairpin.end_measure_index, fragment_index),
+                    id: format!(
+                        "hairpin-{}-{}-{}",
+                        hairpin.start_measure_index, hairpin.end_measure_index, fragment_index
+                    ),
                     kind: CompositeKind::Hairpin,
                     fragment: span_fragment_kind(fragment_index, fragment_total),
                     child_item_ids: vec![top_id, bottom_id],
@@ -4087,7 +5545,11 @@ struct EdgeGroup {
     below_staff: bool,
 }
 
-fn stack_scene_structural_items(items: &mut [SceneItem], composites: &[SceneComposite], edge_padding: f32) {
+fn stack_scene_structural_items(
+    items: &mut [SceneItem],
+    composites: &[SceneComposite],
+    edge_padding: f32,
+) {
     let item_index = items
         .iter()
         .enumerate()
@@ -4103,11 +5565,15 @@ fn stack_scene_structural_items(items: &mut [SceneItem], composites: &[SceneComp
             CompositeKind::Hairpin => Some((1_u8, true)),
             _ => None,
         };
-        let Some((priority, below_staff)) = priority else { continue };
+        let Some((priority, below_staff)) = priority else {
+            continue;
+        };
         if composite.child_item_ids.is_empty() {
             continue;
         }
-        if let Some((x, y, width, height)) = bounding_box_for_ids(items, &item_index, &composite.child_item_ids) {
+        if let Some((x, y, width, height)) =
+            bounding_box_for_ids(items, &item_index, &composite.child_item_ids)
+        {
             groups.push(EdgeGroup {
                 item_ids: composite.child_item_ids.clone(),
                 x,
@@ -4140,11 +5606,17 @@ fn stack_scene_structural_items(items: &mut [SceneItem], composites: &[SceneComp
     let mut shifted: Vec<EdgeGroup> = Vec::new();
     for mut group in groups {
         loop {
-            let overlap = shifted.iter().filter(|other| other.below_staff == group.below_staff).find(|other| {
-                let x_overlap = group.x < other.x + other.width && group.x + group.width > other.x;
-                let y_overlap = group.y < other.y + other.height && group.y + group.height > other.y;
-                x_overlap && y_overlap
-            }).cloned();
+            let overlap = shifted
+                .iter()
+                .filter(|other| other.below_staff == group.below_staff)
+                .find(|other| {
+                    let x_overlap =
+                        group.x < other.x + other.width && group.x + group.width > other.x;
+                    let y_overlap =
+                        group.y < other.y + other.height && group.y + group.height > other.y;
+                    x_overlap && y_overlap
+                })
+                .cloned();
             let Some(other) = overlap else { break };
             if group.below_staff {
                 group.y = other.y + other.height + edge_padding;
@@ -4152,7 +5624,9 @@ fn stack_scene_structural_items(items: &mut [SceneItem], composites: &[SceneComp
                 group.y = other.y - group.height - edge_padding;
             }
         }
-        if let Some((_, original_y, _, _)) = bounding_box_for_ids(items, &item_index, &group.item_ids) {
+        if let Some((_, original_y, _, _)) =
+            bounding_box_for_ids(items, &item_index, &group.item_ids)
+        {
             translate_item_ids(items, &item_index, &group.item_ids, group.y - original_y);
         }
         shifted.push(group);
@@ -4166,15 +5640,31 @@ fn bounding_box_for_ids(
 ) -> Option<(f32, f32, f32, f32)> {
     let bounds = ids
         .iter()
-        .filter_map(|id| item_index.get(id).and_then(|index| item_bounds(&items[*index])))
+        .filter_map(|id| {
+            item_index
+                .get(id)
+                .and_then(|index| item_bounds(&items[*index]))
+        })
         .collect::<Vec<_>>();
     if bounds.is_empty() {
         return None;
     }
-    let min_x = bounds.iter().map(|(x, _, _, _)| *x).fold(f32::INFINITY, f32::min);
-    let min_y = bounds.iter().map(|(_, y, _, _)| *y).fold(f32::INFINITY, f32::min);
-    let max_x = bounds.iter().map(|(x, _, width, _)| x + width).fold(f32::NEG_INFINITY, f32::max);
-    let max_y = bounds.iter().map(|(_, y, _, height)| y + height).fold(f32::NEG_INFINITY, f32::max);
+    let min_x = bounds
+        .iter()
+        .map(|(x, _, _, _)| *x)
+        .fold(f32::INFINITY, f32::min);
+    let min_y = bounds
+        .iter()
+        .map(|(_, y, _, _)| *y)
+        .fold(f32::INFINITY, f32::min);
+    let max_x = bounds
+        .iter()
+        .map(|(x, _, width, _)| x + width)
+        .fold(f32::NEG_INFINITY, f32::max);
+    let max_y = bounds
+        .iter()
+        .map(|(_, y, _, height)| y + height)
+        .fold(f32::NEG_INFINITY, f32::max);
     Some((min_x, min_y, max_x - min_x, max_y - min_y))
 }
 
@@ -4194,14 +5684,39 @@ fn item_bounds(item: &SceneItem) -> Option<(f32, f32, f32, f32)> {
         )),
         ScenePrimitive::Rect(rect) => Some((rect.x_pt, rect.y_pt, rect.width_pt, rect.height_pt)),
         ScenePrimitive::Polyline(polyline) => {
-            let min_x = polyline.points_pt.iter().map(|(x, _)| *x).fold(f32::INFINITY, f32::min);
-            let min_y = polyline.points_pt.iter().map(|(_, y)| *y).fold(f32::INFINITY, f32::min);
-            let max_x = polyline.points_pt.iter().map(|(x, _)| *x).fold(f32::NEG_INFINITY, f32::max);
-            let max_y = polyline.points_pt.iter().map(|(_, y)| *y).fold(f32::NEG_INFINITY, f32::max);
+            let min_x = polyline
+                .points_pt
+                .iter()
+                .map(|(x, _)| *x)
+                .fold(f32::INFINITY, f32::min);
+            let min_y = polyline
+                .points_pt
+                .iter()
+                .map(|(_, y)| *y)
+                .fold(f32::INFINITY, f32::min);
+            let max_x = polyline
+                .points_pt
+                .iter()
+                .map(|(x, _)| *x)
+                .fold(f32::NEG_INFINITY, f32::max);
+            let max_y = polyline
+                .points_pt
+                .iter()
+                .map(|(_, y)| *y)
+                .fold(f32::NEG_INFINITY, f32::max);
             Some((min_x, min_y, max_x - min_x, max_y - min_y))
         }
         ScenePrimitive::Path(path) => path_bounds(&path.d),
-        ScenePrimitive::GlyphRun(glyph) => Some((glyph.x_pt, glyph.y_pt, canonical_glyph_metric(glyph.glyph_role).width_pt, canonical_glyph_metric(glyph.glyph_role).height_pt)),
+        ScenePrimitive::GlyphRun(glyph) => {
+            let metric = canonical_glyph_metric(glyph.glyph_role);
+            let ss_to_pt = glyph.font_size_pt / 4.0;
+            Some((
+                glyph.x_pt + metric.bbox_sw_x_ss * ss_to_pt,
+                glyph.y_pt - metric.bbox_ne_y_ss * ss_to_pt,
+                metric.bbox_width_ss() * ss_to_pt,
+                metric.bbox_height_ss() * ss_to_pt,
+            ))
+        }
     }
 }
 
@@ -4269,7 +5784,11 @@ fn translate_path_y(d: &mut String, dy: f32) {
     let mut coordinate_index = 0usize;
     for token in tokens {
         if let Ok(value) = token.parse::<f32>() {
-            let adjusted = if coordinate_index % 2 == 1 { value + dy } else { value };
+            let adjusted = if coordinate_index % 2 == 1 {
+                value + dy
+            } else {
+                value
+            };
             translated.push(format!("{adjusted:.3}"));
             coordinate_index += 1;
         } else {
@@ -4283,7 +5802,19 @@ fn fraction_to_f32(fraction: Fraction) -> f32 {
     fraction.numerator as f32 / fraction.denominator.max(1) as f32
 }
 
-fn push_rect_item(items: &mut Vec<SceneItem>, counter: &mut usize, measure_id: Option<&str>, role: &str, x: f32, y: f32, width: f32, height: f32, fill: &str, stroke: Option<&str>, stroke_width: Option<f32>) {
+fn push_rect_item(
+    items: &mut Vec<SceneItem>,
+    counter: &mut usize,
+    measure_id: Option<&str>,
+    role: &str,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    fill: &str,
+    stroke: Option<&str>,
+    stroke_width: Option<f32>,
+) {
     items.push(SceneItem {
         id: format!("item-{counter}"),
         measure_id: measure_id.map(ToString::to_string),
@@ -4305,7 +5836,21 @@ fn push_rect_item(items: &mut Vec<SceneItem>, counter: &mut usize, measure_id: O
 }
 
 #[allow(clippy::too_many_arguments)]
-fn push_text_item(items: &mut Vec<SceneItem>, counter: &mut usize, measure_id: Option<&str>, role: &str, x: f32, y: f32, text_role: TextRole, text: String, font_family: &str, font_size_pt: f32, fill: &str, text_anchor: Option<&str>, font_weight: Option<&str>) -> String {
+fn push_text_item(
+    items: &mut Vec<SceneItem>,
+    counter: &mut usize,
+    measure_id: Option<&str>,
+    role: &str,
+    x: f32,
+    y: f32,
+    text_role: TextRole,
+    text: String,
+    font_family: &str,
+    font_size_pt: f32,
+    fill: &str,
+    text_anchor: Option<&str>,
+    font_weight: Option<&str>,
+) -> String {
     let id = format!("item-{counter}");
     items.push(SceneItem {
         id: id.clone(),
@@ -4520,7 +6065,16 @@ pub fn layout_scene_snapshot(scene: &LayoutScene) -> String {
                 item.z_index
             ));
             match &item.primitive {
-                WireScenePrimitive::GlyphRun { x_pt, y_pt, glyph_role, glyph_count, codepoint, font_family, font_size_pt, fill } => {
+                WireScenePrimitive::GlyphRun {
+                    x_pt,
+                    y_pt,
+                    glyph_role,
+                    glyph_count,
+                    codepoint,
+                    font_family,
+                    font_size_pt,
+                    fill,
+                } => {
                     out.push_str(&format!(
                         " primitive={{glyphRole={} glyphCount={} codepoint={} xPt={:.3} yPt={:.3} fontFamily={} fontSizePt={:.3} fill={}}}",
                         glyph_role,
@@ -4533,7 +6087,17 @@ pub fn layout_scene_snapshot(scene: &LayoutScene) -> String {
                         fill
                     ));
                 }
-                WireScenePrimitive::TextRun { x_pt, y_pt, text_role, text, font_family, font_size_pt, fill, text_anchor, font_weight } => {
+                WireScenePrimitive::TextRun {
+                    x_pt,
+                    y_pt,
+                    text_role,
+                    text,
+                    font_family,
+                    font_size_pt,
+                    fill,
+                    text_anchor,
+                    font_weight,
+                } => {
                     out.push_str(&format!(
                         " primitive={{textRole={} text={:?} xPt={:.3} yPt={:.3} fontFamily={} fontSizePt={:.3} fill={} textAnchor={} fontWeight={}}}",
                         text_role,
@@ -4547,13 +6111,29 @@ pub fn layout_scene_snapshot(scene: &LayoutScene) -> String {
                         font_weight.as_deref().unwrap_or("-")
                     ));
                 }
-                WireScenePrimitive::LineSegment { x1_pt, y1_pt, x2_pt, y2_pt, stroke, stroke_width, stroke_line_cap: _ } => {
+                WireScenePrimitive::LineSegment {
+                    x1_pt,
+                    y1_pt,
+                    x2_pt,
+                    y2_pt,
+                    stroke,
+                    stroke_width,
+                    stroke_line_cap: _,
+                } => {
                     out.push_str(&format!(
                         " primitive={{x1Pt={:.3} y1Pt={:.3} x2Pt={:.3} y2Pt={:.3} stroke={} strokeWidth={:.3}}}",
                         x1_pt, y1_pt, x2_pt, y2_pt, stroke, stroke_width
                     ));
                 }
-                WireScenePrimitive::Rect { x_pt, y_pt, width_pt, height_pt, fill, stroke, stroke_width } => {
+                WireScenePrimitive::Rect {
+                    x_pt,
+                    y_pt,
+                    width_pt,
+                    height_pt,
+                    fill,
+                    stroke,
+                    stroke_width,
+                } => {
                     out.push_str(&format!(
                         " primitive={{xPt={:.3} yPt={:.3} widthPt={:.3} heightPt={:.3} fill={} stroke={} strokeWidth={}}}",
                         x_pt,
@@ -4573,13 +6153,20 @@ pub fn layout_scene_snapshot(scene: &LayoutScene) -> String {
                         .join(" ");
                     out.push_str(&format!(" primitive={{pointsPt=[{}]}}", points));
                 }
-                WireScenePrimitive::Path { d, fill, stroke, stroke_width } => {
+                WireScenePrimitive::Path {
+                    d,
+                    fill,
+                    stroke,
+                    stroke_width,
+                } => {
                     out.push_str(&format!(
                         " primitive={{d={:?} fill={} stroke={} strokeWidth={}}}",
                         d,
                         fill,
                         stroke.as_deref().unwrap_or("-"),
-                        stroke_width.map(|value| format!("{value:.3}")).unwrap_or_else(|| "-".to_string())
+                        stroke_width
+                            .map(|value| format!("{value:.3}"))
+                            .unwrap_or_else(|| "-".to_string())
                     ));
                 }
             }
@@ -4605,31 +6192,96 @@ pub fn layout_scene_snapshot(scene: &LayoutScene) -> String {
 pub fn layout_scene_to_js(scene: &LayoutScene) -> JsValue {
     let wire = to_wire_scene(scene);
     let result = Object::new();
-    js_sys::Reflect::set(&result, &JsValue::from_str("version"), &JsValue::from_str(&wire.version)).unwrap();
-    js_sys::Reflect::set(&result, &JsValue::from_str("metricsVersion"), &JsValue::from_str(&wire.metrics_version)).unwrap();
+    js_sys::Reflect::set(
+        &result,
+        &JsValue::from_str("version"),
+        &JsValue::from_str(&wire.version),
+    )
+    .unwrap();
+    js_sys::Reflect::set(
+        &result,
+        &JsValue::from_str("metricsVersion"),
+        &JsValue::from_str(&wire.metrics_version),
+    )
+    .unwrap();
 
     let pages = Array::new();
     for page in wire.pages {
         let page_obj = Object::new();
-        js_sys::Reflect::set(&page_obj, &JsValue::from_str("index"), &JsValue::from_f64(page.index as f64)).unwrap();
-        js_sys::Reflect::set(&page_obj, &JsValue::from_str("widthPt"), &JsValue::from_f64(page.width_pt as f64)).unwrap();
-        js_sys::Reflect::set(&page_obj, &JsValue::from_str("heightPt"), &JsValue::from_f64(page.height_pt as f64)).unwrap();
+        js_sys::Reflect::set(
+            &page_obj,
+            &JsValue::from_str("index"),
+            &JsValue::from_f64(page.index as f64),
+        )
+        .unwrap();
+        js_sys::Reflect::set(
+            &page_obj,
+            &JsValue::from_str("widthPt"),
+            &JsValue::from_f64(page.width_pt as f64),
+        )
+        .unwrap();
+        js_sys::Reflect::set(
+            &page_obj,
+            &JsValue::from_str("heightPt"),
+            &JsValue::from_f64(page.height_pt as f64),
+        )
+        .unwrap();
 
         let systems = Array::new();
         for system in page.systems {
             let system_obj = Object::new();
-            js_sys::Reflect::set(&system_obj, &JsValue::from_str("id"), &JsValue::from_str(&system.id)).unwrap();
-            js_sys::Reflect::set(&system_obj, &JsValue::from_str("index"), &JsValue::from_f64(system.index as f64)).unwrap();
-            js_sys::Reflect::set(&system_obj, &JsValue::from_str("pageIndex"), &JsValue::from_f64(system.page_index as f64)).unwrap();
-            js_sys::Reflect::set(&system_obj, &JsValue::from_str("xPt"), &JsValue::from_f64(system.x_pt as f64)).unwrap();
-            js_sys::Reflect::set(&system_obj, &JsValue::from_str("yPt"), &JsValue::from_f64(system.y_pt as f64)).unwrap();
-            js_sys::Reflect::set(&system_obj, &JsValue::from_str("widthPt"), &JsValue::from_f64(system.width_pt as f64)).unwrap();
-            js_sys::Reflect::set(&system_obj, &JsValue::from_str("heightPt"), &JsValue::from_f64(system.height_pt as f64)).unwrap();
+            js_sys::Reflect::set(
+                &system_obj,
+                &JsValue::from_str("id"),
+                &JsValue::from_str(&system.id),
+            )
+            .unwrap();
+            js_sys::Reflect::set(
+                &system_obj,
+                &JsValue::from_str("index"),
+                &JsValue::from_f64(system.index as f64),
+            )
+            .unwrap();
+            js_sys::Reflect::set(
+                &system_obj,
+                &JsValue::from_str("pageIndex"),
+                &JsValue::from_f64(system.page_index as f64),
+            )
+            .unwrap();
+            js_sys::Reflect::set(
+                &system_obj,
+                &JsValue::from_str("xPt"),
+                &JsValue::from_f64(system.x_pt as f64),
+            )
+            .unwrap();
+            js_sys::Reflect::set(
+                &system_obj,
+                &JsValue::from_str("yPt"),
+                &JsValue::from_f64(system.y_pt as f64),
+            )
+            .unwrap();
+            js_sys::Reflect::set(
+                &system_obj,
+                &JsValue::from_str("widthPt"),
+                &JsValue::from_f64(system.width_pt as f64),
+            )
+            .unwrap();
+            js_sys::Reflect::set(
+                &system_obj,
+                &JsValue::from_str("heightPt"),
+                &JsValue::from_f64(system.height_pt as f64),
+            )
+            .unwrap();
             let measure_ids = Array::new();
             for measure_id in system.measure_ids {
                 measure_ids.push(&JsValue::from_str(&measure_id));
             }
-            js_sys::Reflect::set(&system_obj, &JsValue::from_str("measureIds"), &measure_ids.into()).unwrap();
+            js_sys::Reflect::set(
+                &system_obj,
+                &JsValue::from_str("measureIds"),
+                &measure_ids.into(),
+            )
+            .unwrap();
             systems.push(&system_obj);
         }
         js_sys::Reflect::set(&page_obj, &JsValue::from_str("systems"), &systems.into()).unwrap();
@@ -4637,14 +6289,54 @@ pub fn layout_scene_to_js(scene: &LayoutScene) -> JsValue {
         let measures = Array::new();
         for measure in page.measures {
             let measure_obj = Object::new();
-            js_sys::Reflect::set(&measure_obj, &JsValue::from_str("id"), &JsValue::from_str(&measure.id)).unwrap();
-            js_sys::Reflect::set(&measure_obj, &JsValue::from_str("index"), &JsValue::from_f64(measure.index as f64)).unwrap();
-            js_sys::Reflect::set(&measure_obj, &JsValue::from_str("globalIndex"), &JsValue::from_f64(measure.global_index as f64)).unwrap();
-            js_sys::Reflect::set(&measure_obj, &JsValue::from_str("systemId"), &JsValue::from_str(&measure.system_id)).unwrap();
-            js_sys::Reflect::set(&measure_obj, &JsValue::from_str("xPt"), &JsValue::from_f64(measure.x_pt as f64)).unwrap();
-            js_sys::Reflect::set(&measure_obj, &JsValue::from_str("yPt"), &JsValue::from_f64(measure.y_pt as f64)).unwrap();
-            js_sys::Reflect::set(&measure_obj, &JsValue::from_str("widthPt"), &JsValue::from_f64(measure.width_pt as f64)).unwrap();
-            js_sys::Reflect::set(&measure_obj, &JsValue::from_str("heightPt"), &JsValue::from_f64(measure.height_pt as f64)).unwrap();
+            js_sys::Reflect::set(
+                &measure_obj,
+                &JsValue::from_str("id"),
+                &JsValue::from_str(&measure.id),
+            )
+            .unwrap();
+            js_sys::Reflect::set(
+                &measure_obj,
+                &JsValue::from_str("index"),
+                &JsValue::from_f64(measure.index as f64),
+            )
+            .unwrap();
+            js_sys::Reflect::set(
+                &measure_obj,
+                &JsValue::from_str("globalIndex"),
+                &JsValue::from_f64(measure.global_index as f64),
+            )
+            .unwrap();
+            js_sys::Reflect::set(
+                &measure_obj,
+                &JsValue::from_str("systemId"),
+                &JsValue::from_str(&measure.system_id),
+            )
+            .unwrap();
+            js_sys::Reflect::set(
+                &measure_obj,
+                &JsValue::from_str("xPt"),
+                &JsValue::from_f64(measure.x_pt as f64),
+            )
+            .unwrap();
+            js_sys::Reflect::set(
+                &measure_obj,
+                &JsValue::from_str("yPt"),
+                &JsValue::from_f64(measure.y_pt as f64),
+            )
+            .unwrap();
+            js_sys::Reflect::set(
+                &measure_obj,
+                &JsValue::from_str("widthPt"),
+                &JsValue::from_f64(measure.width_pt as f64),
+            )
+            .unwrap();
+            js_sys::Reflect::set(
+                &measure_obj,
+                &JsValue::from_str("heightPt"),
+                &JsValue::from_f64(measure.height_pt as f64),
+            )
+            .unwrap();
             measures.push(&measure_obj);
         }
         js_sys::Reflect::set(&page_obj, &JsValue::from_str("measures"), &measures.into()).unwrap();
@@ -4652,67 +6344,287 @@ pub fn layout_scene_to_js(scene: &LayoutScene) -> JsValue {
         let items = Array::new();
         for item in page.items {
             let item_obj = Object::new();
-            js_sys::Reflect::set(&item_obj, &JsValue::from_str("id"), &JsValue::from_str(&item.id)).unwrap();
+            js_sys::Reflect::set(
+                &item_obj,
+                &JsValue::from_str("id"),
+                &JsValue::from_str(&item.id),
+            )
+            .unwrap();
             if let Some(measure_id) = item.measure_id {
-                js_sys::Reflect::set(&item_obj, &JsValue::from_str("measureId"), &JsValue::from_str(&measure_id)).unwrap();
+                js_sys::Reflect::set(
+                    &item_obj,
+                    &JsValue::from_str("measureId"),
+                    &JsValue::from_str(&measure_id),
+                )
+                .unwrap();
             }
             if let Some(anchor_item_id) = item.anchor_item_id {
-                js_sys::Reflect::set(&item_obj, &JsValue::from_str("anchorItemId"), &JsValue::from_str(&anchor_item_id)).unwrap();
+                js_sys::Reflect::set(
+                    &item_obj,
+                    &JsValue::from_str("anchorItemId"),
+                    &JsValue::from_str(&anchor_item_id),
+                )
+                .unwrap();
             }
-            js_sys::Reflect::set(&item_obj, &JsValue::from_str("role"), &JsValue::from_str(&item.role)).unwrap();
-            js_sys::Reflect::set(&item_obj, &JsValue::from_str("kind"), &JsValue::from_str(item.kind)).unwrap();
-            js_sys::Reflect::set(&item_obj, &JsValue::from_str("zIndex"), &JsValue::from_f64(item.z_index as f64)).unwrap();
+            js_sys::Reflect::set(
+                &item_obj,
+                &JsValue::from_str("role"),
+                &JsValue::from_str(&item.role),
+            )
+            .unwrap();
+            js_sys::Reflect::set(
+                &item_obj,
+                &JsValue::from_str("kind"),
+                &JsValue::from_str(item.kind),
+            )
+            .unwrap();
+            js_sys::Reflect::set(
+                &item_obj,
+                &JsValue::from_str("zIndex"),
+                &JsValue::from_f64(item.z_index as f64),
+            )
+            .unwrap();
             let primitive = Object::new();
             match item.primitive {
-                WireScenePrimitive::GlyphRun { x_pt, y_pt, glyph_role, glyph_count, codepoint, font_family, font_size_pt, fill } => {
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("xPt"), &JsValue::from_f64(x_pt as f64)).unwrap();
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("yPt"), &JsValue::from_f64(y_pt as f64)).unwrap();
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("glyphRole"), &JsValue::from_str(glyph_role)).unwrap();
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("glyphCount"), &JsValue::from_f64(glyph_count as f64)).unwrap();
+                WireScenePrimitive::GlyphRun {
+                    x_pt,
+                    y_pt,
+                    glyph_role,
+                    glyph_count,
+                    codepoint,
+                    font_family,
+                    font_size_pt,
+                    fill,
+                } => {
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("xPt"),
+                        &JsValue::from_f64(x_pt as f64),
+                    )
+                    .unwrap();
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("yPt"),
+                        &JsValue::from_f64(y_pt as f64),
+                    )
+                    .unwrap();
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("glyphRole"),
+                        &JsValue::from_str(glyph_role),
+                    )
+                    .unwrap();
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("glyphCount"),
+                        &JsValue::from_f64(glyph_count as f64),
+                    )
+                    .unwrap();
                     if let Some(codepoint) = codepoint {
-                        js_sys::Reflect::set(&primitive, &JsValue::from_str("codepoint"), &JsValue::from_f64(codepoint as f64)).unwrap();
+                        js_sys::Reflect::set(
+                            &primitive,
+                            &JsValue::from_str("codepoint"),
+                            &JsValue::from_f64(codepoint as f64),
+                        )
+                        .unwrap();
                     }
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("fontFamily"), &JsValue::from_str(&font_family)).unwrap();
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("fontSizePt"), &JsValue::from_f64(font_size_pt as f64)).unwrap();
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("fill"), &JsValue::from_str(&fill)).unwrap();
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("fontFamily"),
+                        &JsValue::from_str(&font_family),
+                    )
+                    .unwrap();
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("fontSizePt"),
+                        &JsValue::from_f64(font_size_pt as f64),
+                    )
+                    .unwrap();
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("fill"),
+                        &JsValue::from_str(&fill),
+                    )
+                    .unwrap();
                 }
-                WireScenePrimitive::TextRun { x_pt, y_pt, text_role, text, font_family, font_size_pt, fill, text_anchor, font_weight } => {
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("xPt"), &JsValue::from_f64(x_pt as f64)).unwrap();
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("yPt"), &JsValue::from_f64(y_pt as f64)).unwrap();
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("textRole"), &JsValue::from_str(text_role)).unwrap();
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("text"), &JsValue::from_str(&text)).unwrap();
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("fontFamily"), &JsValue::from_str(&font_family)).unwrap();
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("fontSizePt"), &JsValue::from_f64(font_size_pt as f64)).unwrap();
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("fill"), &JsValue::from_str(&fill)).unwrap();
+                WireScenePrimitive::TextRun {
+                    x_pt,
+                    y_pt,
+                    text_role,
+                    text,
+                    font_family,
+                    font_size_pt,
+                    fill,
+                    text_anchor,
+                    font_weight,
+                } => {
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("xPt"),
+                        &JsValue::from_f64(x_pt as f64),
+                    )
+                    .unwrap();
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("yPt"),
+                        &JsValue::from_f64(y_pt as f64),
+                    )
+                    .unwrap();
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("textRole"),
+                        &JsValue::from_str(text_role),
+                    )
+                    .unwrap();
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("text"),
+                        &JsValue::from_str(&text),
+                    )
+                    .unwrap();
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("fontFamily"),
+                        &JsValue::from_str(&font_family),
+                    )
+                    .unwrap();
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("fontSizePt"),
+                        &JsValue::from_f64(font_size_pt as f64),
+                    )
+                    .unwrap();
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("fill"),
+                        &JsValue::from_str(&fill),
+                    )
+                    .unwrap();
                     if let Some(text_anchor) = text_anchor {
-                        js_sys::Reflect::set(&primitive, &JsValue::from_str("textAnchor"), &JsValue::from_str(&text_anchor)).unwrap();
+                        js_sys::Reflect::set(
+                            &primitive,
+                            &JsValue::from_str("textAnchor"),
+                            &JsValue::from_str(&text_anchor),
+                        )
+                        .unwrap();
                     }
                     if let Some(font_weight) = font_weight {
-                        js_sys::Reflect::set(&primitive, &JsValue::from_str("fontWeight"), &JsValue::from_str(&font_weight)).unwrap();
+                        js_sys::Reflect::set(
+                            &primitive,
+                            &JsValue::from_str("fontWeight"),
+                            &JsValue::from_str(&font_weight),
+                        )
+                        .unwrap();
                     }
                 }
-                WireScenePrimitive::LineSegment { x1_pt, y1_pt, x2_pt, y2_pt, stroke, stroke_width, stroke_line_cap } => {
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("x1Pt"), &JsValue::from_f64(x1_pt as f64)).unwrap();
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("y1Pt"), &JsValue::from_f64(y1_pt as f64)).unwrap();
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("x2Pt"), &JsValue::from_f64(x2_pt as f64)).unwrap();
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("y2Pt"), &JsValue::from_f64(y2_pt as f64)).unwrap();
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("stroke"), &JsValue::from_str(&stroke)).unwrap();
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("strokeWidth"), &JsValue::from_f64(stroke_width as f64)).unwrap();
+                WireScenePrimitive::LineSegment {
+                    x1_pt,
+                    y1_pt,
+                    x2_pt,
+                    y2_pt,
+                    stroke,
+                    stroke_width,
+                    stroke_line_cap,
+                } => {
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("x1Pt"),
+                        &JsValue::from_f64(x1_pt as f64),
+                    )
+                    .unwrap();
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("y1Pt"),
+                        &JsValue::from_f64(y1_pt as f64),
+                    )
+                    .unwrap();
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("x2Pt"),
+                        &JsValue::from_f64(x2_pt as f64),
+                    )
+                    .unwrap();
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("y2Pt"),
+                        &JsValue::from_f64(y2_pt as f64),
+                    )
+                    .unwrap();
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("stroke"),
+                        &JsValue::from_str(&stroke),
+                    )
+                    .unwrap();
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("strokeWidth"),
+                        &JsValue::from_f64(stroke_width as f64),
+                    )
+                    .unwrap();
                     if let Some(cap) = stroke_line_cap {
-                        js_sys::Reflect::set(&primitive, &JsValue::from_str("strokeLineCap"), &JsValue::from_str(&cap)).unwrap();
+                        js_sys::Reflect::set(
+                            &primitive,
+                            &JsValue::from_str("strokeLineCap"),
+                            &JsValue::from_str(&cap),
+                        )
+                        .unwrap();
                     }
                 }
-                WireScenePrimitive::Rect { x_pt, y_pt, width_pt, height_pt, fill, stroke, stroke_width } => {
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("xPt"), &JsValue::from_f64(x_pt as f64)).unwrap();
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("yPt"), &JsValue::from_f64(y_pt as f64)).unwrap();
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("widthPt"), &JsValue::from_f64(width_pt as f64)).unwrap();
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("heightPt"), &JsValue::from_f64(height_pt as f64)).unwrap();
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("fill"), &JsValue::from_str(&fill)).unwrap();
+                WireScenePrimitive::Rect {
+                    x_pt,
+                    y_pt,
+                    width_pt,
+                    height_pt,
+                    fill,
+                    stroke,
+                    stroke_width,
+                } => {
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("xPt"),
+                        &JsValue::from_f64(x_pt as f64),
+                    )
+                    .unwrap();
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("yPt"),
+                        &JsValue::from_f64(y_pt as f64),
+                    )
+                    .unwrap();
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("widthPt"),
+                        &JsValue::from_f64(width_pt as f64),
+                    )
+                    .unwrap();
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("heightPt"),
+                        &JsValue::from_f64(height_pt as f64),
+                    )
+                    .unwrap();
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("fill"),
+                        &JsValue::from_str(&fill),
+                    )
+                    .unwrap();
                     if let Some(stroke) = stroke {
-                        js_sys::Reflect::set(&primitive, &JsValue::from_str("stroke"), &JsValue::from_str(&stroke)).unwrap();
+                        js_sys::Reflect::set(
+                            &primitive,
+                            &JsValue::from_str("stroke"),
+                            &JsValue::from_str(&stroke),
+                        )
+                        .unwrap();
                     }
                     if let Some(stroke_width) = stroke_width {
-                        js_sys::Reflect::set(&primitive, &JsValue::from_str("strokeWidth"), &JsValue::from_f64(stroke_width as f64)).unwrap();
+                        js_sys::Reflect::set(
+                            &primitive,
+                            &JsValue::from_str("strokeWidth"),
+                            &JsValue::from_f64(stroke_width as f64),
+                        )
+                        .unwrap();
                     }
                 }
                 WireScenePrimitive::Polyline { points_pt } => {
@@ -4723,20 +6635,55 @@ pub fn layout_scene_to_js(scene: &LayoutScene) -> JsValue {
                         point.push(&JsValue::from_f64(y as f64));
                         points.push(&point.into());
                     }
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("pointsPt"), &points.into()).unwrap();
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("pointsPt"),
+                        &points.into(),
+                    )
+                    .unwrap();
                 }
-                WireScenePrimitive::Path { d, fill, stroke, stroke_width } => {
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("d"), &JsValue::from_str(&d)).unwrap();
-                    js_sys::Reflect::set(&primitive, &JsValue::from_str("fill"), &JsValue::from_str(&fill)).unwrap();
+                WireScenePrimitive::Path {
+                    d,
+                    fill,
+                    stroke,
+                    stroke_width,
+                } => {
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("d"),
+                        &JsValue::from_str(&d),
+                    )
+                    .unwrap();
+                    js_sys::Reflect::set(
+                        &primitive,
+                        &JsValue::from_str("fill"),
+                        &JsValue::from_str(&fill),
+                    )
+                    .unwrap();
                     if let Some(stroke) = stroke {
-                        js_sys::Reflect::set(&primitive, &JsValue::from_str("stroke"), &JsValue::from_str(&stroke)).unwrap();
+                        js_sys::Reflect::set(
+                            &primitive,
+                            &JsValue::from_str("stroke"),
+                            &JsValue::from_str(&stroke),
+                        )
+                        .unwrap();
                     }
                     if let Some(stroke_width) = stroke_width {
-                        js_sys::Reflect::set(&primitive, &JsValue::from_str("strokeWidth"), &JsValue::from_f64(stroke_width as f64)).unwrap();
+                        js_sys::Reflect::set(
+                            &primitive,
+                            &JsValue::from_str("strokeWidth"),
+                            &JsValue::from_f64(stroke_width as f64),
+                        )
+                        .unwrap();
                     }
                 }
             }
-            js_sys::Reflect::set(&item_obj, &JsValue::from_str("primitive"), &primitive.into()).unwrap();
+            js_sys::Reflect::set(
+                &item_obj,
+                &JsValue::from_str("primitive"),
+                &primitive.into(),
+            )
+            .unwrap();
             items.push(&item_obj);
         }
         js_sys::Reflect::set(&page_obj, &JsValue::from_str("items"), &items.into()).unwrap();
@@ -4744,29 +6691,74 @@ pub fn layout_scene_to_js(scene: &LayoutScene) -> JsValue {
         let composites = Array::new();
         for composite in page.composites {
             let composite_obj = Object::new();
-            js_sys::Reflect::set(&composite_obj, &JsValue::from_str("id"), &JsValue::from_str(&composite.id)).unwrap();
-            js_sys::Reflect::set(&composite_obj, &JsValue::from_str("kind"), &JsValue::from_str(composite.kind)).unwrap();
-            js_sys::Reflect::set(&composite_obj, &JsValue::from_str("fragment"), &JsValue::from_str(composite.fragment)).unwrap();
+            js_sys::Reflect::set(
+                &composite_obj,
+                &JsValue::from_str("id"),
+                &JsValue::from_str(&composite.id),
+            )
+            .unwrap();
+            js_sys::Reflect::set(
+                &composite_obj,
+                &JsValue::from_str("kind"),
+                &JsValue::from_str(composite.kind),
+            )
+            .unwrap();
+            js_sys::Reflect::set(
+                &composite_obj,
+                &JsValue::from_str("fragment"),
+                &JsValue::from_str(composite.fragment),
+            )
+            .unwrap();
             let child_ids = Array::new();
             for child_id in composite.child_item_ids {
                 child_ids.push(&JsValue::from_str(&child_id));
             }
-            js_sys::Reflect::set(&composite_obj, &JsValue::from_str("childItemIds"), &child_ids.into()).unwrap();
+            js_sys::Reflect::set(
+                &composite_obj,
+                &JsValue::from_str("childItemIds"),
+                &child_ids.into(),
+            )
+            .unwrap();
             if let Some(label) = composite.label {
-                js_sys::Reflect::set(&composite_obj, &JsValue::from_str("label"), &JsValue::from_str(&label)).unwrap();
+                js_sys::Reflect::set(
+                    &composite_obj,
+                    &JsValue::from_str("label"),
+                    &JsValue::from_str(&label),
+                )
+                .unwrap();
             }
             if let Some(count) = composite.count {
-                js_sys::Reflect::set(&composite_obj, &JsValue::from_str("count"), &JsValue::from_f64(count as f64)).unwrap();
+                js_sys::Reflect::set(
+                    &composite_obj,
+                    &JsValue::from_str("count"),
+                    &JsValue::from_f64(count as f64),
+                )
+                .unwrap();
             }
             if let Some(start_anchor_id) = composite.start_anchor_id {
-                js_sys::Reflect::set(&composite_obj, &JsValue::from_str("startAnchorId"), &JsValue::from_str(&start_anchor_id)).unwrap();
+                js_sys::Reflect::set(
+                    &composite_obj,
+                    &JsValue::from_str("startAnchorId"),
+                    &JsValue::from_str(&start_anchor_id),
+                )
+                .unwrap();
             }
             if let Some(end_anchor_id) = composite.end_anchor_id {
-                js_sys::Reflect::set(&composite_obj, &JsValue::from_str("endAnchorId"), &JsValue::from_str(&end_anchor_id)).unwrap();
+                js_sys::Reflect::set(
+                    &composite_obj,
+                    &JsValue::from_str("endAnchorId"),
+                    &JsValue::from_str(&end_anchor_id),
+                )
+                .unwrap();
             }
             composites.push(&composite_obj);
         }
-        js_sys::Reflect::set(&page_obj, &JsValue::from_str("composites"), &composites.into()).unwrap();
+        js_sys::Reflect::set(
+            &page_obj,
+            &JsValue::from_str("composites"),
+            &composites.into(),
+        )
+        .unwrap();
         pages.push(&page_obj);
     }
     js_sys::Reflect::set(&result, &JsValue::from_str("pages"), &pages.into()).unwrap();
@@ -4800,17 +6792,40 @@ fn test_slot_mapper() {
 #[test]
 fn test_place_notes() {
     let measure = NormalizedMeasure {
-        index: 0, global_index: 0, paragraph_index: 0, measure_in_paragraph: 0, source_line: 1,
+        index: 0,
+        global_index: 0,
+        paragraph_index: 0,
+        measure_in_paragraph: 0,
+        source_line: 1,
         events: vec![NormalizedEvent {
-            track: "HH".into(), start: Fraction{numerator:0,denominator:1},
+            track: "HH".into(),
+            start: Fraction {
+                numerator: 0,
+                denominator: 1,
+            },
             track_family: "cymbal".into(),
-            duration: Fraction{numerator:1,denominator:8}, kind: EventKind::Hit,
-            glyph: "x".into(), modifiers: vec![], modifier: None, voice: 1,
-            beam: "none".into(), tuplet: None,
+            duration: Fraction {
+                numerator: 1,
+                denominator: 8,
+            },
+            kind: EventKind::Hit,
+            glyph: "x".into(),
+            modifiers: vec![],
+            modifier: None,
+            voice: 1,
+            beam: "none".into(),
+            tuplet: None,
         }],
-        barline: Some("regular".into()), closing_barline: Some("regular".into()), start_nav: None, end_nav: None,
-        volta_indices: None, hairpins: vec![], measure_repeat_slashes: None,
-        multi_rest_count: None, note_value: 8, volta_terminator: false,
+        barline: Some("regular".into()),
+        closing_barline: Some("regular".into()),
+        start_nav: None,
+        end_nav: None,
+        volta_indices: None,
+        hairpins: vec![],
+        measure_repeat_slashes: None,
+        multi_rest_count: None,
+        note_value: 8,
+        volta_terminator: false,
     };
     let mapper = SlotMapper::new(80.0);
     let opts = LayoutOptions::default();
@@ -4823,8 +6838,40 @@ fn test_place_notes() {
 #[test]
 fn test_stacking_no_overlap() {
     let mut elements = vec![
-        LayoutElement { kind: ElementKind::NavMarker, x: 50.0, y: -15.0, width: 10.0, height: 10.0, smufl_codepoint: None, voice: None, stem_up: None, barline_type: None, text: None, from_x: None, to_x: None, priority: 6, can_shift_y: true, can_shift_x: false },
-        LayoutElement { kind: ElementKind::Volta, x: 50.0, y: -20.0, width: 100.0, height: 8.0, smufl_codepoint: None, voice: None, stem_up: None, barline_type: None, text: None, from_x: None, to_x: None, priority: 7, can_shift_y: false, can_shift_x: false },
+        LayoutElement {
+            kind: ElementKind::NavMarker,
+            x: 50.0,
+            y: -15.0,
+            width: 10.0,
+            height: 10.0,
+            smufl_codepoint: None,
+            voice: None,
+            stem_up: None,
+            barline_type: None,
+            text: None,
+            from_x: None,
+            to_x: None,
+            priority: 6,
+            can_shift_y: true,
+            can_shift_x: false,
+        },
+        LayoutElement {
+            kind: ElementKind::Volta,
+            x: 50.0,
+            y: -20.0,
+            width: 100.0,
+            height: 8.0,
+            smufl_codepoint: None,
+            voice: None,
+            stem_up: None,
+            barline_type: None,
+            text: None,
+            from_x: None,
+            to_x: None,
+            priority: 7,
+            can_shift_y: false,
+            can_shift_x: false,
+        },
     ];
     let warnings = stack_edge_elements(&mut elements, 4.0);
     assert!(warnings.is_empty(), "unexpected warnings: {:?}", warnings);
@@ -4835,10 +6882,22 @@ fn test_stacking_no_overlap() {
 #[test]
 fn test_barlines() {
     let measure = NormalizedMeasure {
-        index: 0, global_index: 0, paragraph_index: 0, measure_in_paragraph: 0, source_line: 1,
-        events: vec![], barline: Some("|:".into()), closing_barline: Some("|:".into()), start_nav: None, end_nav: None,
-        volta_indices: None, hairpins: vec![], measure_repeat_slashes: None,
-        multi_rest_count: None, note_value: 8, volta_terminator: false,
+        index: 0,
+        global_index: 0,
+        paragraph_index: 0,
+        measure_in_paragraph: 0,
+        source_line: 1,
+        events: vec![],
+        barline: Some("|:".into()),
+        closing_barline: Some("|:".into()),
+        start_nav: None,
+        end_nav: None,
+        volta_indices: None,
+        hairpins: vec![],
+        measure_repeat_slashes: None,
+        multi_rest_count: None,
+        note_value: 8,
+        volta_terminator: false,
     };
     let elements = place_barlines(&measure, 50.0);
     assert_eq!(elements.len(), 1);
@@ -4861,7 +6920,10 @@ fn test_contract_scene_smoke() {
             subtitle: None,
             composer: None,
         },
-        tracks: vec![RenderTrack { id: "HH".into(), family: "cymbal".into() }],
+        tracks: vec![RenderTrack {
+            id: "HH".into(),
+            family: "cymbal".into(),
+        }],
         measures: vec![RenderMeasure {
             index: 0,
             global_index: 0,
@@ -4871,8 +6933,14 @@ fn test_contract_scene_smoke() {
             events: vec![RenderEvent {
                 track: "HH".into(),
                 track_family: "cymbal".into(),
-                start: Fraction { numerator: 0, denominator: 1 },
-                duration: Fraction { numerator: 1, denominator: 8 },
+                start: Fraction {
+                    numerator: 0,
+                    denominator: 1,
+                },
+                duration: Fraction {
+                    numerator: 1,
+                    denominator: 8,
+                },
                 kind: EventKind::Hit,
                 glyph: "x".into(),
                 modifiers: vec![],
@@ -4893,7 +6961,11 @@ fn test_contract_scene_smoke() {
             volta_terminator: false,
         }],
         errors: vec![],
-        repeat_spans: vec![RepeatSpan { start_measure: 0, end_measure: 0, times: 2 }],
+        repeat_spans: vec![RepeatSpan {
+            start_measure: 0,
+            end_measure: 0,
+            times: 2,
+        }],
     };
     let scene = build_layout_scene(&score, &LayoutOptions::default());
     assert_eq!(scene.version, LAYOUT_SCENE_VERSION);
@@ -4902,9 +6974,18 @@ fn test_contract_scene_smoke() {
     assert_eq!(scene.pages[0].systems.len(), 1);
     assert_eq!(scene.pages[0].measures.len(), 1);
     assert_eq!(scene.pages[0].measures[0].index, 0);
-    assert!(scene.pages[0].composites.iter().any(|c| c.kind == CompositeKind::RepeatSpan));
-    assert!(scene.pages[0].composites.iter().any(|c| c.kind == CompositeKind::TextBlock && c.label.as_deref() == Some("title")));
-    assert!(scene.pages[0].composites.iter().any(|c| c.kind == CompositeKind::TextBlock && c.label.as_deref() == Some("tempo")));
+    assert!(scene.pages[0]
+        .composites
+        .iter()
+        .any(|c| c.kind == CompositeKind::RepeatSpan));
+    assert!(scene.pages[0]
+        .composites
+        .iter()
+        .any(|c| c.kind == CompositeKind::TextBlock && c.label.as_deref() == Some("title")));
+    assert!(scene.pages[0]
+        .composites
+        .iter()
+        .any(|c| c.kind == CompositeKind::TextBlock && c.label.as_deref() == Some("tempo")));
 }
 
 #[test]
@@ -4922,7 +7003,10 @@ fn test_volta_composites_are_emitted() {
             subtitle: None,
             composer: None,
         },
-        tracks: vec![RenderTrack { id: "HH".into(), family: "cymbal".into() }],
+        tracks: vec![RenderTrack {
+            id: "HH".into(),
+            family: "cymbal".into(),
+        }],
         measures: vec![
             RenderMeasure {
                 index: 0,
@@ -4962,7 +7046,11 @@ fn test_volta_composites_are_emitted() {
             },
         ],
         errors: vec![],
-        repeat_spans: vec![RepeatSpan { start_measure: 0, end_measure: 1, times: 2 }],
+        repeat_spans: vec![RepeatSpan {
+            start_measure: 0,
+            end_measure: 1,
+            times: 2,
+        }],
     };
 
     let scene = build_layout_scene(&score, &LayoutOptions::default());
@@ -4993,7 +7081,10 @@ fn test_two_bar_measure_repeat_expands_into_two_display_measures() {
             subtitle: None,
             composer: None,
         },
-        tracks: vec![RenderTrack { id: "HH".into(), family: "cymbal".into() }],
+        tracks: vec![RenderTrack {
+            id: "HH".into(),
+            family: "cymbal".into(),
+        }],
         measures: vec![
             RenderMeasure {
                 index: 0,
@@ -5047,14 +7138,20 @@ fn test_two_bar_measure_repeat_expands_into_two_display_measures() {
         })
         .collect::<Vec<_>>();
     assert_eq!(repeat_items.len(), 1);
-    assert_eq!(repeat_items[0].glyph_role, GlyphRole::MeasureRepeatMark2Bars);
+    assert_eq!(
+        repeat_items[0].glyph_role,
+        GlyphRole::MeasureRepeatMark2Bars
+    );
     let repeat_composite = scene.pages[0]
         .composites
         .iter()
         .find(|composite| composite.kind == CompositeKind::MeasureRepeat)
         .expect("expected measure-repeat composite");
     assert_eq!(repeat_composite.count, Some(2));
-    assert_eq!(repeat_composite.start_anchor_id.as_deref(), Some("measure-1"));
+    assert_eq!(
+        repeat_composite.start_anchor_id.as_deref(),
+        Some("measure-1")
+    );
     assert_eq!(repeat_composite.end_anchor_id.as_deref(), Some("measure-2"));
 }
 
@@ -5073,7 +7170,10 @@ fn test_structural_composites_are_emitted() {
             subtitle: None,
             composer: None,
         },
-        tracks: vec![RenderTrack { id: "HH".into(), family: "cymbal".into() }],
+        tracks: vec![RenderTrack {
+            id: "HH".into(),
+            family: "cymbal".into(),
+        }],
         measures: vec![
             RenderMeasure {
                 index: 0,
@@ -5089,8 +7189,14 @@ fn test_structural_composites_are_emitted() {
                 volta_indices: None,
                 hairpins: vec![HairpinSpan {
                     kind: HairpinKind::Crescendo,
-                    start: Fraction { numerator: 0, denominator: 1 },
-                    end: Fraction { numerator: 1, denominator: 1 },
+                    start: Fraction {
+                        numerator: 0,
+                        denominator: 1,
+                    },
+                    end: Fraction {
+                        numerator: 1,
+                        denominator: 1,
+                    },
                     start_measure_index: 0,
                     end_measure_index: 1,
                 }],
@@ -5132,8 +7238,14 @@ fn test_structural_composites_are_emitted() {
     assert_eq!(hairpin.label.as_deref(), Some("crescendo"));
     assert_eq!(hairpin.start_anchor_id.as_deref(), Some("measure-0"));
     assert_eq!(hairpin.end_anchor_id.as_deref(), Some("measure-2"));
-    assert!(scene.pages[0].composites.iter().any(|c| c.kind == CompositeKind::MeasureRepeat && c.count == Some(2)));
-    assert!(scene.pages[0].composites.iter().any(|c| c.kind == CompositeKind::MultiRest && c.count == Some(4)));
+    assert!(scene.pages[0]
+        .composites
+        .iter()
+        .any(|c| c.kind == CompositeKind::MeasureRepeat && c.count == Some(2)));
+    assert!(scene.pages[0]
+        .composites
+        .iter()
+        .any(|c| c.kind == CompositeKind::MultiRest && c.count == Some(4)));
 }
 
 #[test]
@@ -5151,7 +7263,10 @@ fn test_system_boundaries_align_with_staff_edges() {
             subtitle: None,
             composer: None,
         },
-        tracks: vec![RenderTrack { id: "HH".into(), family: "cymbal".into() }],
+        tracks: vec![RenderTrack {
+            id: "HH".into(),
+            family: "cymbal".into(),
+        }],
         measures: vec![RenderMeasure {
             index: 0,
             global_index: 0,
@@ -5161,8 +7276,14 @@ fn test_system_boundaries_align_with_staff_edges() {
             events: vec![RenderEvent {
                 track: "HH".into(),
                 track_family: "cymbal".into(),
-                start: Fraction { numerator: 0, denominator: 1 },
-                duration: Fraction { numerator: 1, denominator: 4 },
+                start: Fraction {
+                    numerator: 0,
+                    denominator: 1,
+                },
+                duration: Fraction {
+                    numerator: 1,
+                    denominator: 4,
+                },
                 kind: EventKind::Hit,
                 glyph: "x".into(),
                 modifiers: vec![],
@@ -5202,15 +7323,20 @@ fn test_system_boundaries_align_with_staff_edges() {
     match (&opening.primitive, &final_thick.primitive) {
         (ScenePrimitive::Rect(opening_rect), ScenePrimitive::Rect(final_rect)) => {
             assert!((opening_rect.x_pt - opts.left_margin_pt).abs() < 0.01);
-            assert!(((final_rect.x_pt + final_rect.width_pt) - (opts.page_width_pt - opts.right_margin_pt)).abs() < 0.01);
+            assert!(
+                ((final_rect.x_pt + final_rect.width_pt)
+                    - (opts.page_width_pt - opts.right_margin_pt))
+                    .abs()
+                    < 0.01
+            );
         }
         _ => panic!("barlines should be rectangles"),
     }
 }
 
 #[test]
-    fn test_later_system_uses_smaller_start_zone_than_first_system() {
-        let measures = [0_u32, 1_u32]
+fn test_later_system_uses_smaller_start_zone_than_first_system() {
+    let measures = [0_u32, 1_u32]
         .into_iter()
         .map(|index| RenderMeasure {
             index,
@@ -5221,8 +7347,14 @@ fn test_system_boundaries_align_with_staff_edges() {
             events: vec![RenderEvent {
                 track: "HH".into(),
                 track_family: "cymbal".into(),
-                start: Fraction { numerator: 0, denominator: 1 },
-                duration: Fraction { numerator: 1, denominator: 4 },
+                start: Fraction {
+                    numerator: 0,
+                    denominator: 1,
+                },
+                duration: Fraction {
+                    numerator: 1,
+                    denominator: 4,
+                },
                 kind: EventKind::Hit,
                 glyph: "x".into(),
                 modifiers: vec![],
@@ -5232,7 +7364,11 @@ fn test_system_boundaries_align_with_staff_edges() {
                 tuplet: None,
             }],
             barline: Some("regular".into()),
-            closing_barline: Some(if index == 1 { "final".into() } else { "regular".into() }),
+            closing_barline: Some(if index == 1 {
+                "final".into()
+            } else {
+                "regular".into()
+            }),
             start_nav: None,
             end_nav: None,
             volta_indices: None,
@@ -5257,7 +7393,10 @@ fn test_system_boundaries_align_with_staff_edges() {
             subtitle: None,
             composer: None,
         },
-        tracks: vec![RenderTrack { id: "HH".into(), family: "cymbal".into() }],
+        tracks: vec![RenderTrack {
+            id: "HH".into(),
+            family: "cymbal".into(),
+        }],
         measures,
         errors: vec![],
         repeat_spans: vec![],
@@ -5283,7 +7422,10 @@ fn test_system_boundaries_align_with_staff_edges() {
         })
         .expect("expected later-system notehead");
 
-    assert!(second_x < first_x, "later systems should not retain first-system time-signature padding");
+    assert!(
+        second_x < first_x,
+        "later systems should not retain first-system time-signature padding"
+    );
 }
 
 #[test]
@@ -5301,7 +7443,10 @@ fn test_later_system_measure_number_uses_absolute_measure_index() {
             subtitle: None,
             composer: None,
         },
-        tracks: vec![RenderTrack { id: "HH".into(), family: "cymbal".into() }],
+        tracks: vec![RenderTrack {
+            id: "HH".into(),
+            family: "cymbal".into(),
+        }],
         measures: vec![
             RenderMeasure {
                 index: 3,
@@ -5371,7 +7516,10 @@ fn test_down_stem_keeps_notehead_on_right_and_flag_on_stem_right_side() {
             subtitle: None,
             composer: None,
         },
-        tracks: vec![RenderTrack { id: "BD".into(), family: "drum".into() }],
+        tracks: vec![RenderTrack {
+            id: "BD".into(),
+            family: "drum".into(),
+        }],
         measures: vec![RenderMeasure {
             index: 0,
             global_index: 0,
@@ -5381,8 +7529,14 @@ fn test_down_stem_keeps_notehead_on_right_and_flag_on_stem_right_side() {
             events: vec![RenderEvent {
                 track: "BD".into(),
                 track_family: "drum".into(),
-                start: Fraction { numerator: 0, denominator: 1 },
-                duration: Fraction { numerator: 1, denominator: 8 },
+                start: Fraction {
+                    numerator: 0,
+                    denominator: 1,
+                },
+                duration: Fraction {
+                    numerator: 1,
+                    denominator: 8,
+                },
                 kind: EventKind::Hit,
                 glyph: "d".into(),
                 modifiers: vec![],
@@ -5436,8 +7590,14 @@ fn test_down_stem_keeps_notehead_on_right_and_flag_on_stem_right_side() {
         _ => panic!("flag should be glyph"),
     };
 
-    assert!(stem_x < note_x + 4.0, "down stem should anchor on the notehead left side");
-    assert!(flag_x >= stem_x - 0.75, "down flag glyph should start on the stem and extend on its right side");
+    assert!(
+        stem_x < note_x + 4.0,
+        "down stem should anchor on the notehead left side"
+    );
+    assert!(
+        flag_x >= stem_x - 0.75,
+        "down flag glyph should start on the stem and extend on its right side"
+    );
     assert_eq!(flag_role, GlyphRole::Flag8thDown);
 }
 
@@ -5456,7 +7616,10 @@ fn test_crash_maps_to_top_ledger_line() {
             subtitle: None,
             composer: None,
         },
-        tracks: vec![RenderTrack { id: "C".into(), family: "cymbal".into() }],
+        tracks: vec![RenderTrack {
+            id: "C".into(),
+            family: "cymbal".into(),
+        }],
         measures: vec![RenderMeasure {
             index: 0,
             global_index: 0,
@@ -5466,8 +7629,14 @@ fn test_crash_maps_to_top_ledger_line() {
             events: vec![RenderEvent {
                 track: "C".into(),
                 track_family: "cymbal".into(),
-                start: Fraction { numerator: 0, denominator: 1 },
-                duration: Fraction { numerator: 1, denominator: 4 },
+                start: Fraction {
+                    numerator: 0,
+                    denominator: 1,
+                },
+                duration: Fraction {
+                    numerator: 1,
+                    denominator: 4,
+                },
                 kind: EventKind::Hit,
                 glyph: "x".into(),
                 modifiers: vec![],
@@ -5539,7 +7708,10 @@ fn test_bottom_ledger_lines_render_for_notes_below_staff() {
             subtitle: None,
             composer: None,
         },
-        tracks: vec![RenderTrack { id: "WB".into(), family: "percussion".into() }],
+        tracks: vec![RenderTrack {
+            id: "WB".into(),
+            family: "percussion".into(),
+        }],
         measures: vec![RenderMeasure {
             index: 0,
             global_index: 0,
@@ -5549,8 +7721,14 @@ fn test_bottom_ledger_lines_render_for_notes_below_staff() {
             events: vec![RenderEvent {
                 track: "WB".into(),
                 track_family: "percussion".into(),
-                start: Fraction { numerator: 0, denominator: 1 },
-                duration: Fraction { numerator: 1, denominator: 4 },
+                start: Fraction {
+                    numerator: 0,
+                    denominator: 1,
+                },
+                duration: Fraction {
+                    numerator: 1,
+                    denominator: 4,
+                },
                 kind: EventKind::Hit,
                 glyph: "d".into(),
                 modifiers: vec![],
@@ -5595,6 +7773,10 @@ fn test_bottom_ledger_lines_render_for_notes_below_staff() {
         .collect::<Vec<_>>();
 
     assert_eq!(ledger_ys.len(), 2);
-    assert!(ledger_ys.iter().any(|y| (*y - (staff_top + 50.0)).abs() < 0.01));
-    assert!(ledger_ys.iter().any(|y| (*y - (staff_top + 60.0)).abs() < 0.01));
+    assert!(ledger_ys
+        .iter()
+        .any(|y| (*y - (staff_top + 50.0)).abs() < 0.01));
+    assert!(ledger_ys
+        .iter()
+        .any(|y| (*y - (staff_top + 60.0)).abs() < 0.01));
 }
