@@ -133,7 +133,7 @@ export function renderSceneToSvg(scene: Scene, options?: RenderOptions): string 
           fill?: string;
         };
         const glyph = p.codepoint ? String.fromCodePoint(p.codepoint) : "";
-        svg += `<text${roleAttr}${measureAttr}${anchorAttr} x="${p.xPt}" y="${p.yPt}" dominant-baseline="central" font-family="${p.fontFamily || "Bravura"}" font-size="${p.fontSizePt || 12}pt" fill="${p.fill || "#333"}">${esc(glyph)}</text>`;
+        svg += `<text${roleAttr}${measureAttr}${anchorAttr} x="${p.xPt}" y="${p.yPt}" font-family="${p.fontFamily || "Bravura"}" font-size="${p.fontSizePt || 12}pt" fill="${p.fill || "#333"}">${esc(glyph)}</text>`;
         break;
       }
       case "lineSegment": {
@@ -196,7 +196,7 @@ export function renderSceneToSvg(scene: Scene, options?: RenderOptions): string 
         };
         const anchor = p.textAnchor ? ` text-anchor="${p.textAnchor}"` : "";
         const weight = p.fontWeight ? ` font-weight="${p.fontWeight}"` : "";
-        svg += `<text${roleAttr}${measureAttr}${anchorAttr} x="${p.xPt}" y="${p.yPt}" dominant-baseline="central" font-family="${p.fontFamily || "Bravura"}" font-size="${p.fontSizePt || 12}pt" fill="${p.fill || "#333"}"${anchor}${weight}>${esc(p.text)}</text>`;
+        svg += `<text${roleAttr}${measureAttr}${anchorAttr} x="${p.xPt}" y="${p.yPt}" font-family="${p.fontFamily || "Bravura"}" font-size="${p.fontSizePt || 12}pt" fill="${p.fill || "#333"}"${anchor}${weight}>${esc(p.text)}</text>`;
         break;
       }
       default:
@@ -289,7 +289,7 @@ function renderRepeatSpanComposite(
     svg += `<line data-role="repeat-span-end" x1="${x2}" y1="${y}" x2="${x2}" y2="${y + 8}" stroke="#333" stroke-width="1.2"/>`;
   }
   if (countText) {
-    svg += `<text data-role="repeat-span-count" x="${(x1 + x2) / 2}" y="${y - 4}" dominant-baseline="central" font-family="Bravura" font-size="10pt" fill="#333" text-anchor="middle">${esc(countText)}</text>`;
+    svg += `<text data-role="repeat-span-count" x="${(x1 + x2) / 2}" y="${y - 4}" font-family="Bravura" font-size="10pt" fill="#333" text-anchor="middle">${esc(countText)}</text>`;
   }
   return svg;
 }
@@ -311,7 +311,7 @@ function renderVoltaComposite(
     svg += `<line data-role="volta-end-hook" x1="${x2}" y1="${y}" x2="${x2}" y2="${y + 10}" stroke="#333" stroke-width="1.2"/>`;
   }
   if (composite.label && composite.fragment !== "continuation" && composite.fragment !== "end") {
-    svg += `<text data-role="volta-label" x="${x1 + 4}" y="${y - 4}" dominant-baseline="central" font-family="Bravura" font-size="10pt" fill="#333">${esc(composite.label)}</text>`;
+    svg += `<text data-role="volta-label" x="${x1 + 4}" y="${y - 4}" font-family="Bravura" font-size="10pt" fill="#333">${esc(composite.label)}</text>`;
   }
   return svg;
 }

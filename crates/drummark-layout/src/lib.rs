@@ -162,6 +162,7 @@ pub enum GlyphRole {
     MultiRestBar,
     NavigationSegno,
     NavigationCoda,
+    MetNoteQuarterUp,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -535,20 +536,21 @@ pub fn canonical_glyph_metric(role: GlyphRole) -> CanonicalGlyphMetric {
         GlyphRole::MultiRestBar => CanonicalGlyphMetric { role, smufl_codepoint: 0xE4EE, width_pt: 20.0, height_pt: 8.0, anchor_x_pt: 10.0, anchor_y_pt: 4.0, stem_offset_y_pt: 0.0 },
         GlyphRole::NavigationSegno => CanonicalGlyphMetric { role, smufl_codepoint: 0xE047, width_pt: 12.0, height_pt: 18.0, anchor_x_pt: 6.0, anchor_y_pt: 9.0, stem_offset_y_pt: 0.0 },
         GlyphRole::NavigationCoda => CanonicalGlyphMetric { role, smufl_codepoint: 0xE048, width_pt: 14.0, height_pt: 14.0, anchor_x_pt: 7.0, anchor_y_pt: 7.0, stem_offset_y_pt: 0.0 },
+        GlyphRole::MetNoteQuarterUp => CanonicalGlyphMetric { role, smufl_codepoint: 0xE1D5, width_pt: 8.0, height_pt: 16.0, anchor_x_pt: 4.0, anchor_y_pt: 8.0, stem_offset_y_pt: 0.0 },
     }
 }
 
 pub fn canonical_text_metric(role: TextRole) -> CanonicalTextMetric {
     match role {
-        TextRole::Title => CanonicalTextMetric { role, font_family: "Bravura", font_size_pt: 24.0, line_height_pt: 28.0, average_advance_pt: 11.0, ascent_pt: 18.0, descent_pt: 6.0 },
-        TextRole::Subtitle => CanonicalTextMetric { role, font_family: "Bravura", font_size_pt: 18.0, line_height_pt: 22.0, average_advance_pt: 8.0, ascent_pt: 14.0, descent_pt: 4.0 },
-        TextRole::Composer => CanonicalTextMetric { role, font_family: "Bravura", font_size_pt: 14.0, line_height_pt: 18.0, average_advance_pt: 7.0, ascent_pt: 11.0, descent_pt: 3.0 },
-        TextRole::Tempo => CanonicalTextMetric { role, font_family: "Bravura", font_size_pt: 14.0, line_height_pt: 18.0, average_advance_pt: 7.0, ascent_pt: 11.0, descent_pt: 3.0 },
+        TextRole::Title => CanonicalTextMetric { role, font_family: "Academico", font_size_pt: 24.0, line_height_pt: 28.0, average_advance_pt: 11.0, ascent_pt: 18.0, descent_pt: 6.0 },
+        TextRole::Subtitle => CanonicalTextMetric { role, font_family: "Academico", font_size_pt: 18.0, line_height_pt: 22.0, average_advance_pt: 8.0, ascent_pt: 14.0, descent_pt: 4.0 },
+        TextRole::Composer => CanonicalTextMetric { role, font_family: "Academico", font_size_pt: 14.0, line_height_pt: 18.0, average_advance_pt: 7.0, ascent_pt: 11.0, descent_pt: 3.0 },
+        TextRole::Tempo => CanonicalTextMetric { role, font_family: "Academico", font_size_pt: 14.0, line_height_pt: 18.0, average_advance_pt: 7.0, ascent_pt: 11.0, descent_pt: 3.0 },
         TextRole::PercussionClef => CanonicalTextMetric { role, font_family: "Bravura", font_size_pt: 30.0, line_height_pt: 32.0, average_advance_pt: 14.0, ascent_pt: 24.0, descent_pt: 6.0 },
         TextRole::TimeSignatureDigit => CanonicalTextMetric { role, font_family: "Bravura", font_size_pt: 30.0, line_height_pt: 32.0, average_advance_pt: 10.0, ascent_pt: 24.0, descent_pt: 6.0 },
-        TextRole::Sticking => CanonicalTextMetric { role, font_family: "Bravura", font_size_pt: 12.0, line_height_pt: 14.0, average_advance_pt: 6.0, ascent_pt: 9.0, descent_pt: 3.0 },
+        TextRole::Sticking => CanonicalTextMetric { role, font_family: "Academico", font_size_pt: 12.0, line_height_pt: 14.0, average_advance_pt: 6.0, ascent_pt: 9.0, descent_pt: 3.0 },
         TextRole::CountLabel => CanonicalTextMetric { role, font_family: "Bravura", font_size_pt: 12.0, line_height_pt: 14.0, average_advance_pt: 6.0, ascent_pt: 9.0, descent_pt: 3.0 },
-        TextRole::MeasureNumber => CanonicalTextMetric { role, font_family: "Bravura", font_size_pt: 10.0, line_height_pt: 12.0, average_advance_pt: 5.0, ascent_pt: 8.0, descent_pt: 2.0 },
+        TextRole::MeasureNumber => CanonicalTextMetric { role, font_family: "Academico", font_size_pt: 10.0, line_height_pt: 12.0, average_advance_pt: 5.0, ascent_pt: 8.0, descent_pt: 2.0 },
     }
 }
 
@@ -675,6 +677,7 @@ fn glyph_role_name(role: GlyphRole) -> &'static str {
         GlyphRole::MultiRestBar => "multiRestBar",
         GlyphRole::NavigationSegno => "navigationSegno",
         GlyphRole::NavigationCoda => "navigationCoda",
+        GlyphRole::MetNoteQuarterUp => "metNoteQuarterUp",
     }
 }
 
@@ -724,7 +727,7 @@ pub struct GlyphMetrics {
     pub width_ss: f32,
     /// Height in staff-space units.
     pub height_ss: f32,
-    /// Stem connection offset in SS from notehead center (negative = above center).
+    /// Stem connection offset in pt from notehead edge (positive = gap, stem shorter).
     pub stem_offset_y: f32,
 }
 
@@ -735,7 +738,7 @@ pub fn notehead_glyph(track: &str, modifiers: &[String], _glyph: &str) -> GlyphM
     // Cymbal tracks and hi-hat pedal use X notehead
     if family == "cymbal" || track == "HF" {
         let metric = canonical_glyph_metric(GlyphRole::NoteheadX);
-        return GlyphMetrics { codepoint: metric.smufl_codepoint, width_ss: 1.0, height_ss: 1.0, stem_offset_y: 0.0 };
+        return GlyphMetrics { codepoint: metric.smufl_codepoint, width_ss: 1.0, height_ss: 1.0, stem_offset_y: 5.0 };
     }
 
     // Drum tracks: check modifiers for special noteheads
@@ -747,7 +750,7 @@ pub fn notehead_glyph(track: &str, modifiers: &[String], _glyph: &str) -> GlyphM
             }
             "cross" => {
                 let metric = canonical_glyph_metric(GlyphRole::NoteheadX);
-                return GlyphMetrics { codepoint: metric.smufl_codepoint, width_ss: 1.0, height_ss: 1.0, stem_offset_y: 0.0 };
+                return GlyphMetrics { codepoint: metric.smufl_codepoint, width_ss: 1.0, height_ss: 1.0, stem_offset_y: 5.0 };
             }
             "bell" => {
                 let metric = canonical_glyph_metric(GlyphRole::NoteheadCircleX);
@@ -763,7 +766,7 @@ pub fn notehead_glyph(track: &str, modifiers: &[String], _glyph: &str) -> GlyphM
 
     // Standard drum notehead
     let metric = canonical_glyph_metric(GlyphRole::NoteheadBlack);
-    GlyphMetrics { codepoint: metric.smufl_codepoint, width_ss: 1.0, height_ss: 1.0, stem_offset_y: 0.0 }
+    GlyphMetrics { codepoint: metric.smufl_codepoint, width_ss: 1.0, height_ss: 1.0, stem_offset_y: 2.0 }
 }
 
 /// Returns SMuFL metrics for a rest glyph by duration denominator.
@@ -866,7 +869,7 @@ impl Default for LayoutOptions {
             sticking_offset_y: -8.0,
             accent_offset_y: -6.0,
             text_offset_y: -40.0,
-            tempo_offset_y: -25.0,
+            tempo_offset_y: -10.0,
             measure_num_offset_y: -4.0,
             edge_padding: 4.0,
             stem_len_pt: 31.0,
@@ -2332,6 +2335,7 @@ struct NotePlacement {
     note_id: String,
     note_x: f32,
     note_y: f32,
+    stem_offset_y: f32,
 }
 
 /// Build systems from a NormalizedScore.
@@ -2914,12 +2918,12 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
         });
     }
     if score.header.tempo > 0 {
-        let tempo_glyph_x = margin + 32.0;
-        let tempo_glyph_width = canonical_glyph_metric(GlyphRole::NoteheadBlack).width_pt * 2.2;
+        let tempo_glyph_x = margin + 9.0;
+        let tempo_glyph_width = canonical_glyph_metric(GlyphRole::MetNoteQuarterUp).width_pt;
         let tempo_equals_x = tempo_glyph_x + tempo_glyph_width + 8.0;
         let tempo_value_text = score.header.tempo.to_string();
         let tempo_value_x = tempo_equals_x + canonical_text_width(TextRole::Tempo, "=") + 6.0;
-        let tempo_glyph_id = push_text_item(&mut page.items, &mut item_counter, None, "tempo-glyph", tempo_glyph_x, tempo_y, TextRole::Tempo, "\u{E0A4}".to_string(), "Bravura", 25.0, "#333", None, None);
+        let tempo_glyph_id = push_text_item(&mut page.items, &mut item_counter, None, "tempo-glyph", tempo_glyph_x, tempo_y, TextRole::Tempo, "\u{ECA5}".to_string(), "Bravura", 25.0, "#333", None, None);
         let tempo_equals_id = push_text_item(&mut page.items, &mut item_counter, None, "tempo-equals", tempo_equals_x, tempo_y, TextRole::Tempo, "=".to_string(), tempo_metric.font_family, tempo_metric.font_size_pt, "#333", None, None);
         let tempo_value_id = push_text_item(&mut page.items, &mut item_counter, None, "tempo", tempo_value_x, tempo_y, TextRole::Tempo, tempo_value_text, tempo_metric.font_family, tempo_metric.font_size_pt, "#333", None, None);
         page.composites.push(SceneComposite {
@@ -2954,13 +2958,14 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
         }
         let clef_metric = canonical_text_metric(TextRole::PercussionClef);
         let count_metric = canonical_text_metric(TextRole::CountLabel);
-        push_text_item(&mut page.items, &mut item_counter, None, "percussion-clef", margin + 18.0, s_mid, TextRole::PercussionClef, "\u{E069}".to_string(), "Bravura", clef_metric.font_size_pt, "#333", None, None);
+        push_text_item(&mut page.items, &mut item_counter, None, "percussion-clef", margin + 5.0, s_mid, TextRole::PercussionClef, "\u{E069}".to_string(), "Bravura", clef_metric.font_size_pt, "#333", None, None);
         if is_first_system {
-            let tsx = margin + 62.0;
+            let tsx = margin + 35.0;
             let time_sig_metric = canonical_text_metric(TextRole::TimeSignatureDigit);
-            push_text_item(&mut page.items, &mut item_counter, None, "time-signature-digit", tsx, sy + staff_ss * 2.0, TextRole::TimeSignatureDigit, num_to_glyph(score.header.time_beats), "Bravura", time_sig_metric.font_size_pt, "#333", None, None);
-            push_text_item(&mut page.items, &mut item_counter, None, "time-signature-digit", tsx, sy + staff_ss * 4.0, TextRole::TimeSignatureDigit, num_to_glyph(score.header.time_beat_unit), "Bravura", time_sig_metric.font_size_pt, "#333", None, None);
+            push_text_item(&mut page.items, &mut item_counter, None, "time-signature-digit", tsx, sy + staff_ss * 2.0, TextRole::TimeSignatureDigit, num_to_glyph(score.header.time_beats), time_sig_metric.font_family, time_sig_metric.font_size_pt, "#333", None, None);
+            push_text_item(&mut page.items, &mut item_counter, None, "time-signature-digit", tsx, sy + staff_ss * 4.0, TextRole::TimeSignatureDigit, num_to_glyph(score.header.time_beat_unit), time_sig_metric.font_family, time_sig_metric.font_size_pt, "#333", None, None);
         }
+        let measure_number_metric = canonical_text_metric(TextRole::MeasureNumber);
         if !is_first_system {
             push_text_item(
                 &mut page.items,
@@ -2968,11 +2973,11 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
                 None,
                 "measure-number",
                 margin,
-                sy - staff_ss,
+                sy,
                 TextRole::MeasureNumber,
                 format!("{}", system.measures[0].measure.global_index + 1),
-                "Bravura",
-                11.0,
+                measure_number_metric.font_family,
+                measure_number_metric.font_size_pt,
                 "#333",
                 None,
                 None,
@@ -3646,6 +3651,7 @@ fn render_hit_cluster(
             note_id: note_id.clone(),
             note_x: base_note_x,
             note_y: actual_note_y,
+            stem_offset_y: glyph_metric.stem_offset_y,
         });
 
         if slot_event.event.modifiers.iter().any(|modifier| modifier == "accent") {
@@ -3677,8 +3683,8 @@ fn render_hit_cluster(
                 } else {
                     attach_note.note_x + 0.10 * smufl_ss
                 };
-                let stem_y1 = if stem_up { attach_note.note_y - stem_len_pt } else { attach_note.note_y };
-                let stem_y2 = if stem_up { attach_note.note_y } else { attach_note.note_y + stem_len_pt };
+                let stem_y1 = if stem_up { attach_note.note_y - stem_len_pt } else { attach_note.note_y + attach_note.stem_offset_y };
+                let stem_y2 = if stem_up { attach_note.note_y - attach_note.stem_offset_y } else { attach_note.note_y + stem_len_pt };
                 let stem_id = push_line_item(items, counter, Some(measure_id), "stem", stem_x, stem_y1, stem_x, stem_y2, "#333", 1.5, Some("round"));
                 if let Some(item) = items.last_mut() {
                     item.anchor_item_id = Some(attach_note.note_id.clone());
