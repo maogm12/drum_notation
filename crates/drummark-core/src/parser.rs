@@ -1,12 +1,14 @@
 use logos::Logos;
 use crate::lexer::Token;
 use crate::ast::*;
+use std::ops::Range;
 
 pub struct Parser<'a> {
     lexer: logos::Lexer<'a, Token>,
-    peek_buf: Vec<Token>,
+    peek_buf: Vec<(Token, Range<usize>)>,
     errors: Vec<ParseError>,
     source: &'a str,
+    last_start: usize,
     last_end: usize,
 }
 
@@ -21,6 +23,7 @@ impl<'a> Parser<'a> {
             peek_buf: Vec::new(),
             errors: Vec::new(),
             source,
+            last_start: 0,
             last_end: 0,
         }
     }
@@ -42,7 +45,7 @@ impl<'a> Parser<'a> {
 
     fn peek_raw(&mut self) -> Option<Token> {
         if !self.peek_buf.is_empty() {
-            return Some(self.peek_buf[0].clone());
+            return Some(self.peek_buf[0].0.clone());
         }
         let mut iter = self.lexer.clone();
         loop {
@@ -67,19 +70,19 @@ impl<'a> Parser<'a> {
             }
             match self.lexer.next() {
                 Some(Ok(Token::Space | Token::Comment)) => continue,
-                Some(Ok(t)) => self.peek_buf.push(t),
+                Some(Ok(t)) => self.peek_buf.push((t, self.lexer.span())),
                 Some(Err(())) => {
                     let span = self.lexer.span();
                     let text = &self.source[span.start..span.end];
-                    self.peek_buf.push(Token::FreeText(text.to_string()));
+                    self.peek_buf.push((Token::FreeText(text.to_string()), span));
                 }
                 None => return None,
             }
         }
-        Some(self.peek_buf[n].clone())
+        Some(self.peek_buf[n].0.clone())
     }
 
-    fn try_scan_multi_rest(&mut self) -> Option<Token> {
+    fn try_scan_multi_rest(&mut self) -> Option<(Token, Range<usize>)> {
         let pos = self.lexer.span().end;
         let rest = &self.source[pos..];
         let bytes = rest.as_bytes();
@@ -106,11 +109,11 @@ impl<'a> Parser<'a> {
         for _ in 0..i {
             let _ = self.lexer.next();
         }
-        Some(Token::MultiRest(count))
+        Some((Token::MultiRest(count), pos..pos + i))
     }
 
     fn next(&mut self) -> Result<Token, ParseError> {
-        let t = if !self.peek_buf.is_empty() {
+        let (t, span) = if !self.peek_buf.is_empty() {
             self.peek_buf.remove(0)
         } else {
             loop {
@@ -120,17 +123,18 @@ impl<'a> Parser<'a> {
                 }
                 match self.lexer.next() {
                     Some(Ok(Token::Space | Token::Comment)) => continue,
-                    Some(Ok(t)) => break t,
+                    Some(Ok(t)) => break (t, self.lexer.span()),
                     Some(Err(())) => {
                         let span = self.lexer.span();
                         let text = &self.source[span.start..span.end];
-                        break Token::FreeText(text.to_string());
+                        break (Token::FreeText(text.to_string()), span);
                     }
                     None => return Err(self.error_at(self.last_end, "unexpected end of input")),
                 }
             }
         };
-        self.last_end = self.lexer.span().end;
+        self.last_start = span.start;
+        self.last_end = span.end;
         Ok(t)
     }
 
@@ -140,12 +144,15 @@ impl<'a> Parser<'a> {
         }
         match self.lexer.next() {
             Some(Ok(t)) => {
-                self.last_end = self.lexer.span().end;
+                let span = self.lexer.span();
+                self.last_start = span.start;
+                self.last_end = span.end;
                 Ok(t)
             }
             Some(Err(())) => {
                 let span = self.lexer.span();
                 let s = &self.source[span.start..span.end];
+                self.last_start = span.start;
                 self.last_end = span.end;
                 Ok(Token::FreeText(s.to_string()))
             }
@@ -193,6 +200,15 @@ impl<'a> Parser<'a> {
         let last_nl = prefix.rfind('\n').map(|i| i + 1).unwrap_or(0);
         let column = (offset - last_nl + 1) as u32;
         (line, column)
+    }
+
+    fn source_location(&self, offset: usize) -> SourceLocation {
+        let (line, column) = self.line_column(offset);
+        SourceLocation {
+            line,
+            column,
+            offset: offset as u32,
+        }
     }
 
     fn token_text(&self, t: &Token) -> String {
@@ -415,7 +431,7 @@ impl<'a> Parser<'a> {
 
     fn consume_newline(&mut self) {
         // Check buffer first, then lexer
-        if self.peek_buf.first() == Some(&Token::Newline) {
+        if self.peek_buf.first().map(|(token, _)| token) == Some(&Token::Newline) {
             self.peek_buf.remove(0);
             return;
         }
@@ -544,8 +560,10 @@ impl<'a> Parser<'a> {
                 Some(Token::RepeatEnd) => {
                     // :| is always a closing barline, never an opening
                     self.next().ok(); // consume :|
+                    let repeat_end_location = self.source_location(self.last_start);
                     if let Some(last) = measures.last_mut() {
                         last.closing_barline = Some(Barline::RepeatEnd);
+                        last.closing_barline_location = Some(repeat_end_location.clone());
                     }
                     // After :|, there may be a Dot (.→volta terminator) or volta number
                     match self.peek() {
@@ -555,6 +573,7 @@ impl<'a> Parser<'a> {
                             if let Some(last) = measures.last_mut() {
                                 // Mark as volta-terminator: store in closing info
                                 last.closing_barline = Some(Barline::RepeatEndVoltaTerminator);
+                                last.closing_barline_location = Some(repeat_end_location);
                             }
                             match self.peek() {
                                 Some(Token::Newline) | None => break,
@@ -589,6 +608,7 @@ impl<'a> Parser<'a> {
 
     fn parse_measure_section(&mut self) -> Result<Option<MeasureSection>, ParseError> {
         let barline = self.parse_barline()?;
+        let barline_location = self.source_location(self.last_start);
         let mut tokens = Vec::new();
         loop {
             match self.peek() {
@@ -598,9 +618,11 @@ impl<'a> Parser<'a> {
             }
         }
         // Capture distinct closing barlines after the measure payload.
+        let mut closing_barline_location = None;
         let closing_barline = match self.peek() {
             Some(Token::RepeatEnd) => {
                 self.next().ok(); // consume :|
+                closing_barline_location = Some(self.source_location(self.last_start));
                 if let Some(Token::Dot) = self.peek() {
                     self.next().ok();
                     Some(Barline::RepeatEndVoltaTerminator)
@@ -610,14 +632,17 @@ impl<'a> Parser<'a> {
             }
             Some(Token::DoubleBarline) => {
                 self.next().ok();
+                closing_barline_location = Some(self.source_location(self.last_start));
                 Some(Barline::Double)
             }
             Some(Token::VoltaTerminator) => {
                 self.next().ok();
+                closing_barline_location = Some(self.source_location(self.last_start));
                 Some(Barline::VoltaTerminator)
             }
             Some(Token::DoubleVoltaTerminator) => {
                 self.next().ok();
+                closing_barline_location = Some(self.source_location(self.last_start));
                 Some(Barline::DoubleVoltaTerminator)
             }
             _ => None,
@@ -625,7 +650,7 @@ impl<'a> Parser<'a> {
         if tokens.is_empty() && closing_barline.is_none() && matches!(self.peek(), Some(Token::Newline) | None) {
             return Ok(None);
         }
-        Ok(Some(MeasureSection { barline, tokens, closing_barline }))
+        Ok(Some(MeasureSection { barline, barline_location, tokens, closing_barline, closing_barline_location }))
     }
 
     fn parse_optional_track_name(&mut self) -> Option<String> {
@@ -1075,6 +1100,18 @@ mod tests {
         let measures = &doc.paragraphs[0].lines[0].measures;
         assert_eq!(measures.len(), 1);
         assert!(matches!(measures[0].closing_barline, Some(Barline::RepeatEndVoltaTerminator)));
+    }
+
+    #[test]
+    fn test_closing_repeat_end_location_is_preserved() {
+        let doc = parse_ok("time 4/4\nnote 1/8\ngrouping 2+2\n|: ssss |1. ssSs :|2. cCcc :|\n");
+        let measures = &doc.paragraphs[0].lines[0].measures;
+        let location = measures[2]
+            .closing_barline_location
+            .as_ref()
+            .expect("expected closing repeat-end location");
+        assert_eq!(location.line, 4);
+        assert_eq!(location.column, 28);
     }
 
     #[test]

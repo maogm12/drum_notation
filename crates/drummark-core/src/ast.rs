@@ -32,8 +32,17 @@ pub struct TrackLine {
 #[derive(Debug)]
 pub struct MeasureSection {
     pub barline: Barline,
+    pub barline_location: SourceLocation,
     pub tokens: Vec<MeasureExpr>,
     pub closing_barline: Option<Barline>,
+    pub closing_barline_location: Option<SourceLocation>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SourceLocation {
+    pub line: u32,
+    pub column: u32,
+    pub offset: u32,
 }
 
 #[derive(Debug, Clone)]

@@ -141,6 +141,7 @@ export type ParsedMeasure = {
   tokens: MeasureToken[];
   repeatStart: boolean;
   repeatEnd: boolean;
+  repeatEndLocation?: SourceLocation;
   repeatTimes?: number;
   repeatCount?: number;
   barline?: BarlineType;
@@ -374,6 +375,7 @@ export type NormalizedMeasure = {
   events: NormalizedEvent[];
   generated?: boolean;
   barline?: BarlineType;
+  repeatEndLocation?: SourceLocation;
   startNav?: StartNav;
   endNav?: EndNav;
   volta?: VoltaIntent;

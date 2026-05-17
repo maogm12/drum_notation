@@ -5,7 +5,7 @@ use crate::hairpin::{HairpinState, HairpinIntent, collect_track_hairpins, close_
 use crate::nav::{StartNav, EndNav, Anchor, BarlineType};
 use crate::volta::{VoltaMeasure, propagate_voltas};
 use crate::event::{NormalizedEvent, TokenGlyph, token_to_events, scan_hairpin_tokens};
-use crate::ast::{Document, Barline, MeasureExpr, TrackLine, HeaderSection};
+use crate::ast::{Document, Barline, MeasureExpr, TrackLine, HeaderSection, SourceLocation};
 use std::collections::{HashMap, HashSet};
 
 // ── Inline-Repeat Expansion Helpers ────────────────────────────────
@@ -15,7 +15,9 @@ use std::collections::{HashMap, HashSet};
 struct ExpandedSection {
     tokens: Vec<MeasureExpr>,
     barline: Barline,
+    barline_location: SourceLocation,
     closing_barline: Option<Barline>,
+    closing_barline_location: Option<SourceLocation>,
 }
 
 /// Split tokens into content and optional trailing InlineRepeat(n).
@@ -45,7 +47,9 @@ fn expand_line_sections(line: &TrackLine, errors: &mut Vec<String>) -> Vec<Expan
                 result.push(ExpandedSection {
                     tokens: content.clone(),
                     barline: section.barline.clone(),
+                    barline_location: section.barline_location.clone(),
                     closing_barline: section.closing_barline.clone(),
+                    closing_barline_location: section.closing_barline_location.clone(),
                 });
             } else {
                 // Expand content into n total copies
@@ -55,7 +59,9 @@ fn expand_line_sections(line: &TrackLine, errors: &mut Vec<String>) -> Vec<Expan
                     result.push(ExpandedSection {
                         tokens: content.clone(),
                         barline: if is_first { section.barline.clone() } else { Barline::Regular },
+                        barline_location: section.barline_location.clone(),
                         closing_barline: if is_last { section.closing_barline.clone() } else { None },
+                        closing_barline_location: if is_last { section.closing_barline_location.clone() } else { None },
                     });
                 }
             }
@@ -67,7 +73,9 @@ fn expand_line_sections(line: &TrackLine, errors: &mut Vec<String>) -> Vec<Expan
             result.push(ExpandedSection {
                 tokens: content,
                 barline: section.barline.clone(),
+                barline_location: section.barline_location.clone(),
                 closing_barline: section.closing_barline.clone(),
+                closing_barline_location: section.closing_barline_location.clone(),
             });
             if !section.tokens.is_empty() {
                 _prev_tokens = Some(section.tokens.clone());
@@ -700,6 +708,27 @@ mod volta_test {
         assert_eq!(score.repeat_spans.len(), 1);
         assert_eq!(score.repeat_spans[0].start_measure, 0);
         assert_eq!(score.repeat_spans[0].end_measure, 1);
+    }
+
+    #[test]
+    fn test_volta_continues_across_paragraph_after_repeat_end() {
+        let p = parser::Parser::new(
+            "time 4/4\nnote 1/8\ngrouping 2+2\n\n|: ssss ssss |1. ssSs ssSs :|2. cCcc cccc :|\n\n| ssss ssss |3. bbbb bbbb |.\n",
+        );
+        let doc = p.parse().unwrap();
+        let score = normalize::normalize_document(&doc);
+        assert_eq!(score.errors, Vec::<String>::new());
+        assert_eq!(score.measures.len(), 5);
+        assert_eq!(score.measures[0].barline.as_deref(), Some("repeat-start"));
+        assert_eq!(score.measures[0].volta, None);
+        assert_eq!(score.measures[1].barline.as_deref(), Some("repeat-end"));
+        assert_eq!(score.measures[1].volta, Some(vec![1]));
+        assert_eq!(score.measures[2].barline.as_deref(), Some("repeat-end"));
+        assert_eq!(score.measures[2].volta, Some(vec![2]));
+        assert_eq!(score.measures[3].barline.as_deref(), Some("regular"));
+        assert_eq!(score.measures[3].volta, Some(vec![2]));
+        assert_eq!(score.measures[4].barline.as_deref(), Some("final"));
+        assert_eq!(score.measures[4].volta, Some(vec![3]));
     }
 
     #[test]

@@ -126,7 +126,7 @@ divisions 4
     });
   });
 
-  it("propagates volta metadata until a terminator, new volta, or repeat end", () => {
+  it("propagates volta metadata until a terminator, new volta, or repeat-both", () => {
     const score = buildNormalizedScore(`time 4/4
 divisions 4
 

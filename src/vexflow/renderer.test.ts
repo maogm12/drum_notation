@@ -83,4 +83,19 @@ describe("vexflow structural helpers", () => {
     expect(voltaTypeForMeasure(score, score.measures[1]!)).toBe(VoltaType.END);
     expect(voltaTypeForMeasure(score, score.measures[2]!)).toBeNull();
   });
+
+  it("does not close a volta shape solely because a measure has repeat-end", () => {
+    const score = makeScore();
+    score.measures[1] = {
+      ...score.measures[1]!,
+      barline: "repeat-end",
+    };
+    score.measures[2] = {
+      ...score.measures[2]!,
+      volta: { indices: [1] },
+    };
+
+    expect(voltaTypeForMeasure(score, score.measures[1]!)).toBe(VoltaType.MID);
+    expect(voltaTypeForMeasure(score, score.measures[2]!)).toBe(VoltaType.END);
+  });
 });

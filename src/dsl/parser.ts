@@ -783,6 +783,7 @@ function parseTrackName(line: PreprocessedLine, errors: ParseError[]): { track: 
 function parseMeasureTail(remainder: string, line: PreprocessedLine, errors: ParseError[]): RawMeasure[] {
   const measures: RawMeasure[] = [];
   let cursor = 0;
+  const remainderStart = line.content.length - remainder.length;
   let currentLeftBoundary:
     | { kind: "barline" | "repeat_start"; voltaIndices?: number[]; voltaTerminator?: boolean }
     | null = null;
@@ -803,7 +804,13 @@ function parseMeasureTail(remainder: string, line: PreprocessedLine, errors: Par
     voltaTerminator?: boolean;
     double?: boolean;
     final?: boolean;
+    column: number;
+    offset: number;
   } | null => {
+    const location = {
+      column: remainderStart + index + 1,
+      offset: line.startOffset + remainderStart + index,
+    };
     const repeatEndWithVoltaMatch = remainder.slice(index).match(/^:\|\s*(\d+(?:,\d+)*)\./);
     if (repeatEndWithVoltaMatch?.[1] !== undefined) {
       return {
@@ -811,6 +818,7 @@ function parseMeasureTail(remainder: string, line: PreprocessedLine, errors: Par
         kind: "repeat_end",
         times: 2,
         voltaIndices: repeatEndWithVoltaMatch[1].split(",").map(Number),
+        ...location,
       };
     }
 
@@ -820,15 +828,16 @@ function parseMeasureTail(remainder: string, line: PreprocessedLine, errors: Par
         length: voltaStartMatch[0].length,
         kind: "barline",
         voltaIndices: voltaStartMatch[1].split(",").map(Number),
+        ...location,
       };
     }
 
     if (remainder.startsWith("|.", index)) {
-      return { length: 2, kind: "barline", voltaTerminator: true };
+      return { length: 2, kind: "barline", voltaTerminator: true, ...location };
     }
 
     if (remainder.startsWith("|:", index)) {
-      return { length: 2, kind: "repeat_start" };
+      return { length: 2, kind: "repeat_start", ...location };
     }
 
     if (remainder.startsWith(":|", index)) {
@@ -838,21 +847,22 @@ function parseMeasureTail(remainder: string, line: PreprocessedLine, errors: Par
           length: 2 + 1 + timesMatch[1].length,
           kind: "repeat_end",
           times: parseInt(timesMatch[1], 10),
+          ...location,
         };
       }
-      return { length: 2, kind: "repeat_end", times: 2 };
+      return { length: 2, kind: "repeat_end", times: 2, ...location };
     }
 
     if (remainder.startsWith("||.", index)) {
-      return { length: 3, kind: "barline", double: true, voltaTerminator: true };
+      return { length: 3, kind: "barline", double: true, voltaTerminator: true, ...location };
     }
 
     if (remainder.startsWith("||", index)) {
-      return { length: 2, kind: "barline", double: true };
+      return { length: 2, kind: "barline", double: true, ...location };
     }
 
     if (remainder.startsWith("|", index)) {
-      return { length: 1, kind: "barline" };
+      return { length: 1, kind: "barline", ...location };
     }
 
     return null;
@@ -928,6 +938,10 @@ function parseMeasureTail(remainder: string, line: PreprocessedLine, errors: Par
       content,
       repeatStart: currentLeftBoundary.kind === "repeat_start",
       repeatEnd: endBoundary.kind === "repeat_end" || inferredRepeatEnd,
+      repeatEndLocation:
+        endBoundary.kind === "repeat_end"
+          ? { line: line.lineNumber, column: endBoundary.column, offset: endBoundary.offset }
+          : undefined,
       repeatTimes:
         endBoundary.kind === "repeat_end" || inferredRepeatEnd
           ? endBoundary.times ?? 2

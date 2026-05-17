@@ -69,13 +69,25 @@ fn measures_to_js(measures: &[MeasureSection]) -> JsValue {
     for m in measures {
         let obj = Object::new();
         set(&obj, "barline", &barline_to_js(&m.barline));
+        set(&obj, "barlineLocation", &source_location_to_js(&m.barline_location));
         if let Some(ref closing) = m.closing_barline {
             set(&obj, "closingBarline", &barline_to_js(closing));
+        }
+        if let Some(ref location) = m.closing_barline_location {
+            set(&obj, "closingBarlineLocation", &source_location_to_js(location));
         }
         set(&obj, "tokens", &exprs_to_js(&m.tokens));
         arr.push(&obj);
     }
     arr.into()
+}
+
+fn source_location_to_js(location: &SourceLocation) -> JsValue {
+    let obj = Object::new();
+    set(&obj, "line", &JsValue::from_f64(location.line as f64));
+    set(&obj, "column", &JsValue::from_f64(location.column as f64));
+    set(&obj, "offset", &JsValue::from_f64(location.offset as f64));
+    obj.into()
 }
 
 fn exprs_to_js(exprs: &[MeasureExpr]) -> JsValue {

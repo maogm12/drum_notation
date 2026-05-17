@@ -739,6 +739,7 @@ export function normalizeScoreAst(ast: ScoreAst): NormalizedScore {
 
       const mergedRepeatStart = trackMeasures.some((measure) => measure.repeatStart);
       const mergedRepeatEnd = trackMeasures.some((measure) => measure.repeatEnd);
+      const mergedRepeatEndLocation = trackMeasures.find((measure) => measure.repeatEndLocation !== undefined)?.repeatEndLocation;
       const mergedMeasureRepeat = trackMeasures.find((measure) => measure.measureRepeat !== undefined)?.measureRepeat;
       const mergedMultiRest = trackMeasures.find((measure) => measure.multiRest !== undefined)?.multiRest;
       let mergedBarline =
@@ -804,6 +805,7 @@ export function normalizeScoreAst(ast: ScoreAst): NormalizedScore {
         : {
             generated: trackMeasures.every((measure) => measure.generated),
             barline: mergedBarline,
+            repeatEndLocation: mergedRepeatEndLocation,
             startNav: mergedStartNav,
             endNav: mergedEndNav,
             volta: trackMeasures.find((measure) => measure.volta !== undefined)?.volta,
@@ -822,6 +824,7 @@ export function normalizeScoreAst(ast: ScoreAst): NormalizedScore {
         events,
         generated: measureMeta?.generated,
         barline: measureMeta?.barline,
+        repeatEndLocation: measureMeta?.repeatEndLocation,
         startNav: measureMeta?.startNav,
         endNav: measureMeta?.endNav,
         volta: measureMeta?.volta,
@@ -850,10 +853,28 @@ export function normalizeScoreAst(ast: ScoreAst): NormalizedScore {
 
     if (
       voltaTerminators[index]
-      || measure.barline === "repeat-end"
       || measure.barline === "repeat-both"
     ) {
       activeVolta = undefined;
+    }
+  }
+
+  for (let index = 0; index < measures.length - 1; index += 1) {
+    const current = measures[index];
+    const next = measures[index + 1];
+    const currentVolta = current?.volta?.indices.join(",");
+    const nextVolta = next?.volta?.indices.join(",");
+    if (
+      current &&
+      current.barline === "repeat-end" &&
+      currentVolta !== undefined &&
+      currentVolta === nextVolta
+    ) {
+      ast.errors.push({
+        line: current.repeatEndLocation?.line ?? current.sourceLine,
+        column: current.repeatEndLocation?.column ?? 1,
+        message: `Repeat end cannot appear before volta ${currentVolta} continues; move \`:|\` to the ending's final measure or terminate the volta before it`,
+      });
     }
   }
 

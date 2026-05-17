@@ -836,3 +836,15 @@ Nav markers (`@segno`, `@fine`, `@to-coda`, etc.) were converted to `TokenGlyph:
 - When a numbered ending continues onto a later system, the continuation fragment should still draw a left hook at that system's start. The label should remain only on the true begin fragment, but the hook makes the later system's half of the bracket visibly read as the same house.
 
 - Fragment semantics should still be derived from the global volta begin/end state. A continuation hook is a visual affordance for system breaks, not a new volta begin.
+
+## 2026-05-17 Addendum: Repeat-End Does Not Terminate Volta Brackets
+
+- A plain repeat-end barline (`:|`) closes the repeat playback range, but it does not by itself terminate the visible numbered-ending bracket. The active volta continues across paragraph/system breaks until an explicit volta terminator (`|.` / `||.`), a repeat-both boundary, or a new volta seed changes the active label.
+
+- Layout should derive right hooks from neighboring measure volta labels, not from repeat-end status. If measure N has volta `[2]`, measure N is `repeat-end`, and measure N+1 also has volta `[2]`, the first fragment stays open and the continuation fragment closes only where the `[2]` span actually ends.
+
+## 2026-05-17 Addendum: Rust Parser Must Preserve Barline Source Locations
+
+- Editor diagnostics that point at structural barlines cannot be reconstructed reliably from normalized measures alone. The Rust parser should attach source locations to opening and closing barlines before exporting the WASM skeleton.
+
+- For continuing-volta validation, the important location is the offending closing repeat-end token. `MeasureSection.closing_barline_location` should point at the `:|` start column, and the TS adapter should carry that through as `repeatEndLocation` so CodeMirror can underline the exact token.

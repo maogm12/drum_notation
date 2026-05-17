@@ -108,6 +108,7 @@ function normalizeExplicitMeasure(
     globalIndex,
     sourceLine: lineNumber,
     barline,
+    repeatEndLocation: measure.repeatEndLocation,
     ...(measure.voltaIndices ? { volta: { indices: [...measure.voltaIndices] } } : {}),
     ...(measure.measureRepeatSlashes !== undefined ? { measureRepeat: { slashes: measure.measureRepeatSlashes } } : {}),
     ...(measure.multiRestCount !== undefined ? { multiRest: { count: measure.multiRestCount } } : {}),

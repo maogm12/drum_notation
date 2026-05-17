@@ -348,7 +348,7 @@ export function voltaTypeForMeasure(score: NormalizedScore, measure: NormalizedS
   const previous = score.measures[measure.globalIndex - 1]?.volta?.indices.join(",");
   const next = score.measures[measure.globalIndex + 1]?.volta?.indices.join(",");
   const begins = current !== previous;
-  const ends = current !== next || score.measures[measure.globalIndex]?.barline === "repeat-end";
+  const ends = current !== next;
 
   if (begins && ends) return VoltaType.BEGIN_END;
   if (begins) return VoltaType.BEGIN;

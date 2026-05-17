@@ -1714,6 +1714,43 @@ mod tests {
     }
 
     #[test]
+    fn test_volta_segment_type_does_not_end_on_repeat_end_when_next_measure_matches() {
+        let mut source_measures = vec![
+            regular_measure(0, 0, 1),
+            regular_measure(1, 0, 1),
+            regular_measure(2, 0, 1),
+        ];
+        source_measures[0].volta_indices = Some(vec![2]);
+        source_measures[1].volta_indices = Some(vec![2]);
+        source_measures[1].barline = Some("repeat-end".into());
+        source_measures[2].volta_indices = Some(vec![2]);
+
+        let display_measures = source_measures
+            .iter()
+            .map(|measure| DisplayMeasure {
+                measure,
+                global_index: measure.global_index,
+                paragraph_index: measure.paragraph_index,
+                barline: measure.barline.clone(),
+                closing_barline: measure.closing_barline.clone(),
+                start_nav: measure.start_nav.clone(),
+                end_nav: measure.end_nav.clone(),
+                hairpins: measure.hairpins.clone(),
+                repeat_part: None,
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            volta_type_for_measure(&display_measures, 1),
+            VoltaSegmentType::Mid
+        );
+        assert_eq!(
+            volta_type_for_measure(&display_measures, 2),
+            VoltaSegmentType::End
+        );
+    }
+
+    #[test]
     fn test_structural_span_fragments_emit_child_items_and_navigation() {
         let scene = build_layout_scene(&cross_system_fixture_score(), &LayoutOptions::default());
         let page = &scene.pages[0];
@@ -4553,10 +4590,7 @@ fn volta_type_for_measure(measures: &[DisplayMeasure<'_>], global_index: u32) ->
         .find(|measure| measure.global_index == global_index + 1)
         .and_then(volta_key);
     let begins = current_key != previous_key;
-    let ends = current_key != next_key
-        || current
-            .and_then(|measure| measure.barline.as_deref())
-            == Some("repeat-end");
+    let ends = current_key != next_key;
 
     match (begins, ends) {
         (true, true) => VoltaSegmentType::BeginEnd,

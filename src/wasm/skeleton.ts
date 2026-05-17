@@ -90,8 +90,16 @@ interface WasmTrackLine {
 
 interface WasmMeasure {
   barline: WasmBarline;
+  barlineLocation?: WasmSourceLocation;
   closingBarline?: WasmBarline;
+  closingBarlineLocation?: WasmSourceLocation;
   tokens: WasmToken[];
+}
+
+interface WasmSourceLocation {
+  line: number;
+  column: number;
+  offset: number;
 }
 
 type WasmBarline =
@@ -187,6 +195,7 @@ function adaptToSkeleton(
       const measures: ParsedMeasure[] = [];
 
       for (const wm of wl.measures) {
+        const openingLocation = wasmLocationToSourceLocation(wm.barlineLocation);
         const previousMeasure = measures[measures.length - 1];
         if (previousMeasure) {
           switch (wm.barline.type) {
@@ -312,6 +321,7 @@ function adaptToSkeleton(
         let barline: BarlineType | undefined;
         let repeatStart = false;
         let repeatEnd = false;
+        let repeatEndLocation: ParsedMeasure["repeatEndLocation"];
         let voltaIndices: number[] | undefined;
         let voltaTerminator = false;
 
@@ -326,6 +336,7 @@ function adaptToSkeleton(
             break;
           case ":|":
             repeatEnd = true;
+            repeatEndLocation = openingLocation;
             break;
           case "|.":
             break;
@@ -337,18 +348,23 @@ function adaptToSkeleton(
           case "volta":
             voltaIndices = bl.numbers;
             if (bl.prefix === "|:") repeatStart = true;
-            if (bl.prefix === ":|") repeatEnd = true;
+            if (bl.prefix === ":|") {
+              repeatEnd = true;
+              repeatEndLocation = openingLocation;
+            }
             break;
         }
 
         const closing = wm.closingBarline;
         if (closing) {
+          const closingLocation = wasmLocationToSourceLocation(wm.closingBarlineLocation);
           switch (closing.type) {
             case "||":
               barline = "double";
               break;
             case ":|":
               repeatEnd = true;
+              repeatEndLocation = closingLocation;
               break;
             case "|.":
               voltaTerminator = true;
@@ -365,6 +381,7 @@ function adaptToSkeleton(
           tokens,
           repeatStart,
           repeatEnd,
+          repeatEndLocation,
           repeatTimes: repeatEnd ? inlineRepeatTimes : undefined,
           repeatCount: inlineRepeatTimes && inlineRepeatTimes > 0 ? inlineRepeatTimes : undefined,
           barline,
@@ -396,6 +413,7 @@ function adaptToSkeleton(
             ...parsedMeasure,
             repeatStart: i === 0 ? parsedMeasure.repeatStart : false,
             repeatEnd: i === inlineRepeatTimes - 1 ? parsedMeasure.repeatEnd : false,
+            repeatEndLocation: i === inlineRepeatTimes - 1 ? parsedMeasure.repeatEndLocation : undefined,
             repeatTimes: i === inlineRepeatTimes - 1 ? parsedMeasure.repeatTimes : undefined,
             barline: i === inlineRepeatTimes - 1 ? parsedMeasure.barline : undefined,
             startNav: i === 0 ? parsedMeasure.startNav : undefined,
@@ -435,6 +453,11 @@ function adaptToSkeleton(
           lastMeasure.voltaTerminator = true;
         } else if (trimmedLine.endsWith(":|")) {
           lastMeasure.repeatEnd = true;
+          lastMeasure.repeatEndLocation ??= {
+            line: lineNumber,
+            column: rawLine.lastIndexOf(":|") + 1 || 1,
+            offset: 0,
+          };
         }
       }
 
@@ -549,6 +572,15 @@ function tokenToString(t: WasmToken): string {
     default:
       return "?";
   }
+}
+
+function wasmLocationToSourceLocation(location: WasmSourceLocation | undefined): ParsedMeasure["repeatEndLocation"] {
+  if (!location) return undefined;
+  return {
+    line: location.line,
+    column: location.column,
+    offset: location.offset,
+  };
 }
 
 // ── Grouping Inference ───────────────────────────────────────────
