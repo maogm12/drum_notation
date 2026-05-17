@@ -1094,6 +1094,8 @@ pub struct LayoutOptions {
     pub edge_padding: f32,
     // Stem
     pub stem_len_pt: f32,
+    // Inter-system spacing (pt)
+    pub system_spacing_pt: f32,
 }
 
 impl Default for LayoutOptions {
@@ -1117,6 +1119,7 @@ impl Default for LayoutOptions {
             measure_num_offset_y: -4.0,
             edge_padding: 4.0,
             stem_len_pt: 31.0,
+            system_spacing_pt: 30.0,
         }
     }
 }
@@ -3862,7 +3865,7 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
         let is_last = sys_idx + 1 == planned_systems.len();
         let system_id = format!("system-{sys_idx}");
         let sy = sys_y;
-        sys_y += 130.0;
+        sys_y += 100.0 + opts.system_spacing_pt;
         let s_top = sy + staff_ss;
         let s_bot = sy + staff_ss * 5.0;
         let s_mid = sy + staff_ss * 3.0;

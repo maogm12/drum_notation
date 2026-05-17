@@ -1146,6 +1146,20 @@ input {
 
 html {
   overscroll-behavior-x: none;
+  touch-action: pan-x pan-y;
+}
+
+.app-shell,
+.editor-pane,
+.editor-shell,
+.editor-container,
+.settings-panel,
+.surface-toolbar,
+.zoom-popover-content,
+input,
+textarea,
+button {
+  touch-action: pan-x pan-y;
 }
 
 .staff-preview-shell {
@@ -1154,6 +1168,7 @@ html {
   overflow: auto;
   background: var(--bg-app);
   display: grid;
+  touch-action: pan-x pan-y;
 }
 
 .staff-printable-frame {
@@ -1191,6 +1206,18 @@ html {
 
 .staff-preview-shell-dark .staff-preview-page svg {
   filter: invert(1) hue-rotate(180deg);
+}
+
+@media (max-width: 768px) {
+  input,
+  textarea,
+  select,
+  .setting-stepper-input,
+  .editor-container .cm-editor,
+  .editor-container .cm-content,
+  .editor-container .cm-line {
+    font-size: 16px !important;
+  }
 }
 
 .staff-preview svg {

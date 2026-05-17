@@ -796,3 +796,17 @@ Nav markers (`@segno`, `@fine`, `@to-coda`, etc.) were converted to `TokenGlyph:
 - Bravura exposes accent articulations as `articAccentAbove` (`U+E4A0`) and `articAccentBelow` (`U+E4A1`). They have separate above/below bboxes and no anchor metadata, so placement should center the glyph bbox over the notehead bbox rather than using a text `>` character.
 
 - Accent placement depends on stem direction: up-stem accents belong above the stem tip or beam, while down-stem voice-2 accents belong below the stem tip or beam. Rendering accents while drawing the notehead is too early because the code has not computed stem and beam positions yet.
+
+## 2026-05-16 Addendum: Layout `systemSpacing` Is Extra Gap, Not System Height
+
+- The user-facing `systemSpacing` setting matches the VexFlow path: it is the extra gap after the fixed logical staff system band, not the full distance between system origins.
+
+- In the layout scene engine, the origin-to-origin advance should therefore be `100.0 + system_spacing_pt`. Using the visible five-line staff height (`40.0`) as the base compresses multi-system scores because ornaments, stems, labels, and skyline content still need the same logical system band as the VexFlow renderer.
+
+## 2026-05-16 Addendum: Zero-Valued WASM Options Must Stay Explicit
+
+- Layout options crossing the JS/WASM boundary need to distinguish "field missing" from "field present with value 0". `systemSpacing: 0` is a valid user setting, so parsing it through `unwrap_or(0.0)` and then treating `<= 0` as default creates a non-monotonic control where 0 jumps to the default but 1 becomes nearly zero.
+
+- Optional numeric settings should be read as `Option<f64>` and defaulted only when the property is absent or non-numeric. Range validation belongs at the UI/settings layer, not in the WASM bridge.
+
+- The JS scene adapter must also preserve that distinction. When `renderScoreToSvg()` or tests omit `systemSpacing`, the adapter should pass the UI default; when the caller explicitly passes `0`, it should pass `0` through to WASM.

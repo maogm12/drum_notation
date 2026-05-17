@@ -1,5 +1,6 @@
 import { build_layout_scene } from "../wasm/pkg/drummark_core";
 import { initWasm } from "../wasm/drummark_wasm";
+import { SETTINGS_RANGES } from "../vexflow/config";
 
 let cachedSource = "";
 initWasm().catch(() => {});
@@ -17,6 +18,7 @@ type RenderOptions = {
   leftMargin?: number;
   rightMargin?: number;
   stemLength?: number;
+  systemSpacing?: number;
   debug?: boolean;
 };
 
@@ -93,6 +95,7 @@ export function buildLayoutSceneFromSource(source: string, options?: RenderOptio
     staffScale: 1.0,
     pxPerQuarter: 80,
     stemLenPt: options?.stemLength ?? 31,
+    systemSpacing: (options?.systemSpacing ?? SETTINGS_RANGES.systemSpacing.default) / ss,
     debug: options?.debug ? 1 : 0,
   };
   const scene = build_layout_scene(source, opts as any) as Scene;

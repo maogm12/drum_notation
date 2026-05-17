@@ -6,7 +6,7 @@
         "pages": 1,
         "systems": 1,
         "measures": 1,
-        "items": 51,
+        "items": 44,
         "composites": 2,
         "itemRoles": {
           "title": 1,
@@ -20,7 +20,8 @@
           "notehead": 12,
           "stem": 10,
           "rest": 4,
-          "flag": 10,
+          "beam": 1,
+          "flag": 2,
           "final-barline-thin": 1,
           "final-barline-thick": 1
         },
@@ -38,7 +39,7 @@
         "pages": 1,
         "systems": 1,
         "measures": 1,
-        "items": 41,
+        "items": 40,
         "composites": 2,
         "itemRoles": {
           "title": 1,
@@ -52,7 +53,8 @@
           "notehead": 10,
           "stem": 6,
           "rest": 4,
-          "flag": 6,
+          "flag": 4,
+          "beam": 1,
           "final-barline-thin": 1,
           "final-barline-thick": 1
         },
@@ -70,7 +72,7 @@
         "pages": 1,
         "systems": 1,
         "measures": 1,
-        "items": 86,
+        "items": 78,
         "composites": 2,
         "itemRoles": {
           "title": 1,
@@ -84,7 +86,9 @@
           "notehead": 23,
           "stem": 20,
           "rest": 8,
-          "flag": 20,
+          "beam": 4,
+          "beam-secondary": 4,
+          "flag": 4,
           "final-barline-thin": 1,
           "final-barline-thick": 1
         },
@@ -102,7 +106,7 @@
         "pages": 1,
         "systems": 1,
         "measures": 1,
-        "items": 51,
+        "items": 47,
         "composites": 2,
         "itemRoles": {
           "title": 1,
@@ -116,7 +120,8 @@
           "notehead": 12,
           "stem": 10,
           "rest": 4,
-          "flag": 10,
+          "beam": 4,
+          "flag": 2,
           "final-barline-thin": 1,
           "final-barline-thick": 1
         },
@@ -134,7 +139,7 @@
         "pages": 1,
         "systems": 1,
         "measures": 1,
-        "items": 84,
+        "items": 70,
         "composites": 2,
         "itemRoles": {
           "title": 1,
@@ -148,7 +153,9 @@
           "notehead": 25,
           "stem": 19,
           "rest": 6,
-          "flag": 19,
+          "beam": 1,
+          "beam-secondary": 1,
+          "flag": 3,
           "final-barline-thin": 1,
           "final-barline-thick": 1
         },
@@ -166,7 +173,7 @@
         "pages": 1,
         "systems": 1,
         "measures": 1,
-        "items": 46,
+        "items": 42,
         "composites": 2,
         "itemRoles": {
           "title": 1,
@@ -180,7 +187,8 @@
           "notehead": 10,
           "stem": 9,
           "rest": 3,
-          "flag": 9,
+          "beam": 4,
+          "flag": 1,
           "final-barline-thin": 1,
           "final-barline-thick": 1
         },
@@ -198,7 +206,7 @@
         "pages": 1,
         "systems": 1,
         "measures": 1,
-        "items": 77,
+        "items": 69,
         "composites": 2,
         "itemRoles": {
           "title": 1,
@@ -212,7 +220,9 @@
           "notehead": 20,
           "stem": 18,
           "rest": 6,
-          "flag": 18,
+          "beam": 4,
+          "beam-secondary": 4,
+          "flag": 2,
           "final-barline-thin": 1,
           "final-barline-thick": 1
         },
@@ -230,7 +240,7 @@
         "pages": 1,
         "systems": 1,
         "measures": 1,
-        "items": 51,
+        "items": 47,
         "composites": 2,
         "itemRoles": {
           "title": 1,
@@ -244,7 +254,8 @@
           "notehead": 12,
           "stem": 10,
           "rest": 4,
-          "flag": 10,
+          "beam": 4,
+          "flag": 2,
           "final-barline-thin": 1,
           "final-barline-thick": 1
         },
@@ -262,7 +273,7 @@
         "pages": 1,
         "systems": 1,
         "measures": 1,
-        "items": 66,
+        "items": 63,
         "composites": 2,
         "itemRoles": {
           "title": 1,
@@ -276,7 +287,8 @@
           "notehead": 17,
           "stem": 15,
           "rest": 4,
-          "flag": 15,
+          "flag": 11,
+          "beam": 1,
           "final-barline-thin": 1,
           "final-barline-thick": 1
         },
@@ -294,7 +306,7 @@
         "pages": 1,
         "systems": 1,
         "measures": 1,
-        "items": 46,
+        "items": 44,
         "composites": 2,
         "itemRoles": {
           "title": 1,
@@ -308,7 +320,9 @@
           "rest": 8,
           "notehead": 13,
           "stem": 5,
-          "flag": 5,
+          "beam": 1,
+          "beam-secondary": 1,
+          "flag": 1,
           "final-barline-thin": 1,
           "final-barline-thick": 1
         },
@@ -326,7 +340,7 @@
         "pages": 1,
         "systems": 7,
         "measures": 10,
-        "items": 385,
+        "items": 356,
         "composites": 10,
         "itemRoles": {
           "title": 1,
@@ -338,21 +352,20 @@
           "staff-line": 35,
           "percussion-clef": 7,
           "time-signature-digit": 2,
-          "opening-barline": 6,
+          "opening-barline": 7,
           "notehead": 92,
           "stem": 70,
           "rest": 51,
-          "flag": 70,
+          "beam": 10,
+          "flag": 32,
           "nav-start": 2,
           "barline": 7,
           "measure-number": 6,
           "accent": 6,
           "sticking": 8,
-          "repeat-start-thick": 1,
-          "repeat-start-thin": 1,
-          "repeat-dot": 2,
-          "repeat-end-thin": 1,
-          "repeat-end-thick": 1,
+          "repeat-start": 1,
+          "ledger-line": 2,
+          "repeat-end": 1,
           "nav-end": 2,
           "double-barline-left": 1,
           "double-barline-right": 1,
@@ -382,7 +395,7 @@
         "pages": 1,
         "systems": 7,
         "measures": 7,
-        "items": 346,
+        "items": 315,
         "composites": 2,
         "itemRoles": {
           "title": 1,
@@ -396,7 +409,9 @@
           "notehead": 91,
           "stem": 79,
           "rest": 28,
-          "flag": 79,
+          "beam": 28,
+          "beam-secondary": 6,
+          "flag": 14,
           "barline": 6,
           "measure-number": 6,
           "final-barline-thin": 1,
@@ -416,7 +431,7 @@
         "pages": 1,
         "systems": 1,
         "measures": 2,
-        "items": 86,
+        "items": 77,
         "composites": 4,
         "itemRoles": {
           "title": 1,
@@ -430,7 +445,8 @@
           "notehead": 21,
           "stem": 18,
           "rest": 9,
-          "flag": 18,
+          "beam": 3,
+          "flag": 6,
           "barline": 1,
           "final-barline-thin": 1,
           "final-barline-thick": 1,
@@ -453,7 +469,7 @@
         "pages": 1,
         "systems": 1,
         "measures": 1,
-        "items": 52,
+        "items": 46,
         "composites": 4,
         "itemRoles": {
           "title": 1,
@@ -469,7 +485,8 @@
           "notehead": 13,
           "stem": 11,
           "rest": 2,
-          "flag": 9,
+          "beam": 2,
+          "flag": 1,
           "final-barline-thin": 1,
           "final-barline-thick": 1
         },
@@ -487,7 +504,7 @@
         "pages": 1,
         "systems": 1,
         "measures": 4,
-        "items": 114,
+        "items": 86,
         "composites": 2,
         "itemRoles": {
           "title": 1,
@@ -500,7 +517,7 @@
           "opening-barline": 1,
           "notehead": 32,
           "stem": 32,
-          "flag": 32,
+          "beam": 4,
           "barline": 3,
           "final-barline-thin": 1,
           "final-barline-thick": 1
@@ -519,7 +536,7 @@
         "pages": 1,
         "systems": 6,
         "measures": 6,
-        "items": 151,
+        "items": 152,
         "composites": 2,
         "itemRoles": {
           "title": 1,
@@ -536,6 +553,7 @@
           "flag": 20,
           "barline": 5,
           "measure-number": 5,
+          "ledger-line": 1,
           "accent": 2,
           "final-barline-thin": 1,
           "final-barline-thick": 1
@@ -554,7 +572,7 @@
         "pages": 1,
         "systems": 1,
         "measures": 1,
-        "items": 17,
+        "items": 19,
         "composites": 3,
         "itemRoles": {
           "title": 1,
@@ -566,6 +584,7 @@
           "time-signature-digit": 2,
           "opening-barline": 1,
           "multi-rest-bar": 1,
+          "multi-rest-serif": 2,
           "multi-rest-count": 1,
           "final-barline-thin": 1,
           "final-barline-thick": 1
@@ -586,7 +605,7 @@
         "pages": 1,
         "systems": 1,
         "measures": 1,
-        "items": 51,
+        "items": 44,
         "composites": 2,
         "itemRoles": {
           "title": 1,
@@ -600,7 +619,8 @@
           "notehead": 12,
           "stem": 10,
           "rest": 4,
-          "flag": 10,
+          "beam": 1,
+          "flag": 2,
           "final-barline-thin": 1,
           "final-barline-thick": 1
         },
@@ -618,7 +638,7 @@
         "pages": 1,
         "systems": 1,
         "measures": 1,
-        "items": 51,
+        "items": 47,
         "composites": 2,
         "itemRoles": {
           "title": 1,
@@ -632,7 +652,8 @@
           "notehead": 12,
           "stem": 10,
           "rest": 4,
-          "flag": 10,
+          "beam": 4,
+          "flag": 2,
           "final-barline-thin": 1,
           "final-barline-thick": 1
         },
@@ -649,8 +670,8 @@
       "summary": {
         "pages": 1,
         "systems": 6,
-        "measures": 17,
-        "items": 461,
+        "measures": 18,
+        "items": 424,
         "composites": 20,
         "itemRoles": {
           "title": 1,
@@ -660,18 +681,17 @@
           "staff-line": 30,
           "percussion-clef": 6,
           "time-signature-digit": 2,
-          "repeat-start-thick": 1,
-          "repeat-start-thin": 1,
-          "repeat-dot": 2,
+          "opening-barline": 6,
+          "repeat-start": 1,
           "notehead": 132,
           "stem": 116,
           "rest": 26,
-          "barline": 11,
-          "flag": 78,
-          "repeat-end-thin": 1,
-          "repeat-end-thick": 1,
+          "barline": 12,
+          "beam": 35,
+          "repeat-end": 1,
+          "beam-secondary": 4,
           "measure-number": 5,
-          "opening-barline": 5,
+          "ledger-line": 4,
           "measure-repeat": 2,
           "nav-start": 2,
           "nav-end": 5,
@@ -713,7 +733,7 @@
         "pages": 1,
         "systems": 1,
         "measures": 1,
-        "items": 47,
+        "items": 40,
         "composites": 2,
         "itemRoles": {
           "title": 1,
@@ -727,7 +747,7 @@
           "notehead": 8,
           "stem": 8,
           "sticking": 8,
-          "flag": 8,
+          "beam": 1,
           "final-barline-thin": 1,
           "final-barline-thick": 1
         },
@@ -777,7 +797,7 @@
         "pages": 1,
         "systems": 3,
         "measures": 5,
-        "items": 231,
+        "items": 211,
         "composites": 2,
         "itemRoles": {
           "title": 1,
@@ -789,9 +809,12 @@
           "time-signature-digit": 2,
           "opening-barline": 3,
           "notehead": 59,
+          "ledger-line": 4,
           "stem": 57,
           "rest": 13,
-          "flag": 56,
+          "beam": 20,
+          "beam-secondary": 6,
+          "flag": 6,
           "barline": 4,
           "measure-number": 2,
           "sticking": 11,
@@ -812,7 +835,7 @@
         "pages": 1,
         "systems": 1,
         "measures": 1,
-        "items": 28,
+        "items": 26,
         "composites": 2,
         "itemRoles": {
           "title": 1,
@@ -826,7 +849,8 @@
           "notehead": 4,
           "stem": 4,
           "rest": 1,
-          "flag": 4,
+          "beam": 1,
+          "beam-secondary": 1,
           "final-barline-thin": 1,
           "final-barline-thick": 1
         },
@@ -844,7 +868,7 @@
         "pages": 1,
         "systems": 19,
         "measures": 73,
-        "items": 1779,
+        "items": 1566,
         "composites": 12,
         "itemRoles": {
           "title": 1,
@@ -854,17 +878,15 @@
           "staff-line": 95,
           "percussion-clef": 19,
           "time-signature-digit": 2,
-          "opening-barline": 17,
+          "opening-barline": 19,
           "notehead": 555,
           "stem": 555,
-          "flag": 414,
+          "beam": 147,
           "barline": 70,
           "measure-number": 18,
-          "repeat-start-thick": 2,
-          "repeat-start-thin": 2,
-          "repeat-dot": 4,
-          "repeat-end-thin": 2,
-          "repeat-end-thick": 2,
+          "repeat-start": 2,
+          "beam-secondary": 60,
+          "repeat-end": 2,
           "final-barline-thin": 1,
           "final-barline-thick": 1,
           "repeat-span-line": 10,
@@ -890,7 +912,7 @@
         "pages": 1,
         "systems": 21,
         "measures": 80,
-        "items": 3105,
+        "items": 2749,
         "composites": 90,
         "itemRoles": {
           "title": 1,
@@ -901,20 +923,20 @@
           "staff-line": 105,
           "percussion-clef": 21,
           "time-signature-digit": 2,
-          "opening-barline": 14,
+          "opening-barline": 21,
           "notehead": 980,
+          "ledger-line": 17,
           "stem": 802,
           "rest": 169,
-          "flag": 703,
+          "beam": 346,
           "barline": 65,
           "measure-number": 20,
-          "repeat-start-thick": 7,
-          "repeat-start-thin": 7,
-          "repeat-dot": 17,
-          "repeat-end-thin": 10,
-          "repeat-end-thick": 10,
+          "repeat-start": 7,
+          "repeat-end": 10,
           "double-barline-left": 5,
           "double-barline-right": 5,
+          "flag": 10,
+          "beam-secondary": 1,
           "repeat-span-line": 67,
           "repeat-span-start": 10,
           "repeat-span-count": 10,
@@ -959,10 +981,6 @@
           "layout": 3,
           "vexflow": 15
         },
-        "textCount": {
-          "layout": 33,
-          "vexflow": 25
-        },
         "openingBarlines": {
           "layout": 1,
           "vexflow": 0
@@ -1001,7 +1019,7 @@
           "vexflow": 15
         },
         "textCount": {
-          "layout": 27,
+          "layout": 25,
           "vexflow": 30
         },
         "openingBarlines": {
@@ -1041,10 +1059,6 @@
           "layout": 3,
           "vexflow": 29
         },
-        "textCount": {
-          "layout": 58,
-          "vexflow": 42
-        },
         "openingBarlines": {
           "layout": 1,
           "vexflow": 0
@@ -1081,10 +1095,6 @@
         "rectCount": {
           "layout": 3,
           "vexflow": 15
-        },
-        "textCount": {
-          "layout": 33,
-          "vexflow": 25
         },
         "openingBarlines": {
           "layout": 1,
@@ -1124,7 +1134,7 @@
           "vexflow": 25
         },
         "textCount": {
-          "layout": 57,
+          "layout": 41,
           "vexflow": 40
         },
         "openingBarlines": {
@@ -1164,10 +1174,6 @@
           "layout": 3,
           "vexflow": 14
         },
-        "textCount": {
-          "layout": 29,
-          "vexflow": 21
-        },
         "openingBarlines": {
           "layout": 1,
           "vexflow": 0
@@ -1206,7 +1212,7 @@
           "vexflow": 25
         },
         "textCount": {
-          "layout": 51,
+          "layout": 35,
           "vexflow": 36
         },
         "openingBarlines": {
@@ -1246,10 +1252,6 @@
           "layout": 3,
           "vexflow": 15
         },
-        "textCount": {
-          "layout": 33,
-          "vexflow": 25
-        },
         "openingBarlines": {
           "layout": 1,
           "vexflow": 0
@@ -1288,7 +1290,7 @@
           "vexflow": 22
         },
         "textCount": {
-          "layout": 43,
+          "layout": 39,
           "vexflow": 32
         },
         "openingBarlines": {
@@ -1332,10 +1334,6 @@
           "layout": 3,
           "vexflow": 25
         },
-        "textCount": {
-          "layout": 33,
-          "vexflow": 29
-        },
         "openingBarlines": {
           "layout": 1,
           "vexflow": 0
@@ -1366,19 +1364,19 @@
       "file": "docs/examples/full-example.drum",
       "diffs": {
         "lineCount": {
-          "layout": 109,
+          "layout": 111,
           "vexflow": 0
         },
         "rectCount": {
-          "layout": 21,
+          "layout": 18,
           "vexflow": 82
         },
         "textCount": {
-          "layout": 255,
+          "layout": 217,
           "vexflow": 140
         },
         "openingBarlines": {
-          "layout": 6,
+          "layout": 7,
           "vexflow": 0
         },
         "genericBarlines": {
@@ -1434,7 +1432,7 @@
           "vexflow": 0
         },
         "semanticTextTokens": {
-          "layout": "10 || 108 || 2 || 2x || 3 || 4 || 5 || 6 || > || > || > || > || > || > || @coda || @fine || @segno || @to-coda || Demo — Full Feature Showcase || Fusion Groove || G. Mao || L || L || L || L || R || R || R || R",
+          "layout": "10 || 108 || 2 || 2x || 3 || 4 || 5 || 6 || @coda || @fine || @segno || @to-coda || Demo — Full Feature Showcase || Fusion Groove || G. Mao || L || L || L || L || R || R || R || R",
           "vexflow": "108 || 2 || 3 || 4 || 5 || 6 || Demo — Full Feature Showcase || Fine || Fusion Groove || G. Mao || L || L || L || L || R || R || R || R"
         }
       }
@@ -1451,7 +1449,7 @@
           "vexflow": 145
         },
         "textCount": {
-          "layout": 217,
+          "layout": 152,
           "vexflow": 165
         },
         "openingBarlines": {
@@ -1494,10 +1492,6 @@
         "rectCount": {
           "layout": 4,
           "vexflow": 30
-        },
-        "textCount": {
-          "layout": 55,
-          "vexflow": 43
         },
         "openingBarlines": {
           "layout": 1,
@@ -1548,10 +1542,6 @@
           "layout": 3,
           "vexflow": 16
         },
-        "textCount": {
-          "layout": 33,
-          "vexflow": 25
-        },
         "openingBarlines": {
           "layout": 1,
           "vexflow": 0
@@ -1590,7 +1580,7 @@
           "vexflow": 45
         },
         "textCount": {
-          "layout": 71,
+          "layout": 39,
           "vexflow": 43
         },
         "openingBarlines": {
@@ -1623,7 +1613,7 @@
       "file": "docs/examples/modifiers.drum",
       "diffs": {
         "lineCount": {
-          "layout": 50,
+          "layout": 51,
           "vexflow": 0
         },
         "rectCount": {
@@ -1665,10 +1655,6 @@
         "accents": {
           "layout": 2,
           "vexflow": 0
-        },
-        "semanticTextTokens": {
-          "layout": "2 || 3 || 4 || 5 || 6 || 96 || > || > || Articulation Techniques",
-          "vexflow": "2 || 3 || 4 || 5 || 6 || 96 || Articulation Techniques"
         }
       }
     },
@@ -1676,7 +1662,7 @@
       "file": "docs/examples/multi-rest.drum",
       "diffs": {
         "lineCount": {
-          "layout": 6,
+          "layout": 8,
           "vexflow": 0
         },
         "textCount": {
@@ -1702,10 +1688,6 @@
         "multiRestCounts": {
           "layout": 1,
           "vexflow": 0
-        },
-        "semanticTextTokens": {
-          "layout": "120 || 16 || Extended Rest",
-          "vexflow": "120 || Extended Rest"
         }
       }
     },
@@ -1719,10 +1701,6 @@
         "rectCount": {
           "layout": 3,
           "vexflow": 15
-        },
-        "textCount": {
-          "layout": 33,
-          "vexflow": 25
         },
         "openingBarlines": {
           "layout": 1,
@@ -1761,10 +1739,6 @@
           "layout": 3,
           "vexflow": 15
         },
-        "textCount": {
-          "layout": 33,
-          "vexflow": 25
-        },
         "openingBarlines": {
           "layout": 1,
           "vexflow": 0
@@ -1795,23 +1769,23 @@
       "file": "docs/examples/repeats.drum",
       "diffs": {
         "lineCount": {
-          "layout": 163,
+          "layout": 167,
           "vexflow": 0
         },
         "rectCount": {
-          "layout": 30,
+          "layout": 28,
           "vexflow": 195
         },
         "textCount": {
-          "layout": 268,
+          "layout": 190,
           "vexflow": 188
         },
         "openingBarlines": {
-          "layout": 5,
+          "layout": 6,
           "vexflow": 0
         },
         "genericBarlines": {
-          "layout": 11,
+          "layout": 12,
           "vexflow": 0
         },
         "finalBarlineThin": {
@@ -1863,7 +1837,7 @@
           "vexflow": 0
         },
         "semanticTextTokens": {
-          "layout": "% || %% || 1. || 10 || 120 || 13 || 16 || 2. || 2x || 3. || 4 || 7 || @coda || @dc-al-coda || @dc-al-fine || @ds-al-coda || @fine || @segno || @to-coda || Repeat Structure",
+          "layout": "1. || 10 || 120 || 13 || 16 || 2. || 2x || 3. || 4 || 7 || @coda || @dc-al-coda || @dc-al-fine || @ds-al-coda || @fine || @segno || @to-coda || Repeat Structure",
           "vexflow": "1. || 10 || 120 || 13 || 16 || 2. || 3. || 4 || 7 || D.C. al Coda || D.C. al Fine || D.S. al Coda || Fine || Repeat Structure || To"
         }
       }
@@ -1880,7 +1854,7 @@
           "vexflow": 12
         },
         "textCount": {
-          "layout": 31,
+          "layout": 23,
           "vexflow": 24
         },
         "openingBarlines": {
@@ -1954,16 +1928,12 @@
       "file": "docs/examples/tracks.drum",
       "diffs": {
         "lineCount": {
-          "layout": 72,
+          "layout": 76,
           "vexflow": 0
         },
         "rectCount": {
           "layout": 9,
           "vexflow": 79
-        },
-        "textCount": {
-          "layout": 150,
-          "vexflow": 100
         },
         "openingBarlines": {
           "layout": 3,
@@ -2011,7 +1981,7 @@
           "vexflow": 9
         },
         "textCount": {
-          "layout": 16,
+          "layout": 12,
           "vexflow": 14
         },
         "openingBarlines": {
@@ -2048,15 +2018,15 @@
           "vexflow": 0
         },
         "rectCount": {
-          "layout": 97,
+          "layout": 91,
           "vexflow": 785
         },
         "textCount": {
-          "layout": 1018,
+          "layout": 604,
           "vexflow": 675
         },
         "openingBarlines": {
-          "layout": 17,
+          "layout": 19,
           "vexflow": 0
         },
         "genericBarlines": {
@@ -2093,19 +2063,19 @@
       "file": "examples/李白-李荣浩.drum",
       "diffs": {
         "lineCount": {
-          "layout": 1042,
+          "layout": 1059,
           "vexflow": 0
         },
         "rectCount": {
-          "layout": 123,
+          "layout": 96,
           "vexflow": 1198
         },
         "textCount": {
-          "layout": 1940,
+          "layout": 1247,
           "vexflow": 1220
         },
         "openingBarlines": {
-          "layout": 14,
+          "layout": 21,
           "vexflow": 0
         },
         "genericBarlines": {

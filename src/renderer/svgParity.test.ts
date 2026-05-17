@@ -97,18 +97,19 @@ describe("SVG Renderer parity", () => {
 
   it("renders X notehead on cymbal", () => {
     const svg = render(HEADER + "HH | x |\n");
-    expect(svg).toContain("");
+    expect(svg).toContain("\u{E0A9}");
   });
 
   it("renders accent modifier", () => {
     const svg = render(HEADER + "SD | d:accent |\n");
     expect(countRole(svg, "accent")).toBe(1);
-    expect(svg).toContain("");
+    expect(svg).toContain("\u{E4A0}");
   });
 
   it("renders ghost modifier", () => {
     const svg = render(HEADER + "SD | d:ghost |\n");
-    expect(svg).toContain("");
+    expect(countRole(svg, "notehead")).toBe(1);
+    expect(svg).toContain("\u{E0A4}");
   });
 
   it("renders double barline", () => {

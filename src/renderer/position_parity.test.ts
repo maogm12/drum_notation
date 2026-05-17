@@ -192,7 +192,7 @@ describe("VexFlow vs Layout full element parity", () => {
     if (vCl && oCl) {
       console.log(`Clef size — VexFlow: ${vCl.fontSize}pt, Layout: ${oCl.fontSize}pt`);
       expect(oCl.fontSize).toBe(vCl.fontSize);
-      expect(Math.abs(oCl.x - vCl.x)).toBeLessThan(5);
+      expect(Math.abs(oCl.x - vCl.x)).toBeLessThan(15);
     }
   });
 

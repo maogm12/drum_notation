@@ -363,6 +363,11 @@ fn parse_layout_options(options: &JsValue) -> drummark_layout::LayoutOptions {
                 .and_then(|v| v.as_f64())
                 .unwrap_or(0.0)
         };
+        let get_optional_f64 = |key: &str| -> Option<f64> {
+            js_sys::Reflect::get(options, &JsValue::from_str(key))
+                .ok()
+                .and_then(|v| v.as_f64())
+        };
         let width = get_f64("pageWidth");
         let height = get_f64("pageHeight");
         let top = get_f64("topMargin");
@@ -372,6 +377,7 @@ fn parse_layout_options(options: &JsValue) -> drummark_layout::LayoutOptions {
         let scale = get_f64("staffScale");
         let px_q = get_f64("pxPerQuarter");
         let stem_len = get_f64("stemLenPt");
+        let sys_spacing = get_optional_f64("systemSpacing");
         if width > 0.0 && height > 0.0 {
             drummark_layout::LayoutOptions {
                 page_width_pt: width as f32,
@@ -383,6 +389,7 @@ fn parse_layout_options(options: &JsValue) -> drummark_layout::LayoutOptions {
                 staff_scale: if scale > 0.0 { scale as f32 } else { 0.75 },
                 px_per_quarter: if px_q > 0.0 { px_q as f32 } else { 80.0 },
                 stem_len_pt: if stem_len > 0.0 { stem_len as f32 } else { 31.0 },
+                system_spacing_pt: sys_spacing.unwrap_or(30.0) as f32,
                 ..drummark_layout::LayoutOptions::default()
             }
         } else {

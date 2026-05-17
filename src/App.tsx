@@ -451,7 +451,7 @@ const PagePreview = memo(function PagePreview({
     if (useLayoutEngine) {
       import("./renderer/svgRenderer")
         .then(({ renderScoreToSvg }) => {
-          const svg = renderScoreToSvg(score, { staffScale, pageWidth: pdfPageWidth, showTitle: true, topMargin: pagePadding.top, bottomMargin: pagePadding.bottom, leftMargin: pagePadding.left, rightMargin: pagePadding.right, stemLength, debug: showDebugBbox });
+          const svg = renderScoreToSvg(score, { staffScale, pageWidth: pdfPageWidth, showTitle: true, topMargin: pagePadding.top, bottomMargin: pagePadding.bottom, leftMargin: pagePadding.left, rightMargin: pagePadding.right, stemLength, systemSpacing, debug: showDebugBbox });
           setRenderedMarkup(`<section class="staff-preview-page" data-page="1">${svg}</section>`);
           setIsRendering(false);
           if (shellRef.current) { shellRef.current.scrollTop = targetTop; shellRef.current.scrollLeft = targetLeft; }
@@ -989,6 +989,13 @@ export function App() {
     applyScaleCss(newScale);
   }
 
+  function getPageZoomShell(target: EventTarget | null): HTMLElement | null {
+    if (activeTabRef.current !== "page") return null;
+    if (!(target instanceof Node)) return null;
+    const shell = pageSurfaceBodyRef.current?.querySelector(".staff-preview-shell") as HTMLElement | null;
+    return shell?.contains(target) ? shell : null;
+  }
+
     const touchStateRef = useRef({ distance: 0, initialScale: 1, centerX: 0, centerY: 0 });
     const activeTabRef = useRef(settings.activeTab);
     useEffect(() => { activeTabRef.current = settings.activeTab; }, [settings.activeTab]);
@@ -996,10 +1003,9 @@ export function App() {
     useEffect(() => {
     const handleGlobalWheel = (event: WheelEvent) => {
       if (event.ctrlKey || event.metaKey) {
+        const shell = getPageZoomShell(event.target);
         event.preventDefault();
-        if (activeTabRef.current !== "page") return;
-        const shell = pageSurfaceBodyRef.current?.querySelector(".staff-preview-shell") as HTMLElement | null;
-        if (!shell?.contains(event.target as Node)) return;
+        if (!shell) return;
 
         const oldScale = pageScaleRef.current;
         const delta = event.deltaY < 0 ? 0.1 : -0.1;
@@ -1035,7 +1041,8 @@ export function App() {
     };
 
     const handleTouchStart = (event: TouchEvent) => {
-      if (event.touches.length === 2 && pageSurfaceBodyRef.current?.contains(event.target as Node)) {
+      const shell = getPageZoomShell(event.target);
+      if (event.touches.length === 2 && shell) {
         const t1 = event.touches[0];
         const t2 = event.touches[1];
         if (!t1 || !t2) return;
@@ -1051,12 +1058,16 @@ export function App() {
     };
 
     const handleTouchMove = (event: TouchEvent) => {
-      if (event.touches.length === 2 && pageSurfaceBodyRef.current?.contains(event.target as Node)) {
+      if (event.touches.length === 2) {
+        event.preventDefault();
+
+        const shell = getPageZoomShell(event.target);
+        if (!shell) return;
+
         const t1 = event.touches[0];
         const t2 = event.touches[1];
         if (!t1 || !t2) return;
 
-        event.preventDefault(); 
         setFitWidth(false);
 
         const dx = t1.pageX - t2.pageX;
@@ -1071,8 +1082,6 @@ export function App() {
           const scaleRatio = newScale / oldScale;
           applyScaleCss(newScale);
 
-          const shell = pageSurfaceBodyRef.current?.querySelector(".staff-preview-shell") as HTMLElement | null;
-          if (shell) {
             const BASE = 800;
             const oldWidth = BASE * oldScale;
             const newWidth = BASE * newScale;
@@ -1094,9 +1103,12 @@ export function App() {
             void shell.scrollWidth;
             shell.scrollLeft = targetScrollX;
             shell.scrollTop = targetScrollY;
-          }
         }
       }
+    };
+
+    const preventNativeGestureZoom = (event: Event) => {
+      event.preventDefault();
     };
 
     const handleTouchEnd = () => {
@@ -1110,12 +1122,18 @@ export function App() {
     window.addEventListener("touchstart", handleTouchStart, { passive: true });
     window.addEventListener("touchmove", handleTouchMove, { passive: false });
     window.addEventListener("touchend", handleTouchEnd, { passive: true });
+    window.addEventListener("gesturestart", preventNativeGestureZoom, { passive: false });
+    window.addEventListener("gesturechange", preventNativeGestureZoom, { passive: false });
+    window.addEventListener("gestureend", preventNativeGestureZoom, { passive: false });
 
     return () => {
       window.removeEventListener("wheel", handleGlobalWheel);
       window.removeEventListener("touchstart", handleTouchStart);
       window.removeEventListener("touchmove", handleTouchMove);
       window.removeEventListener("touchend", handleTouchEnd);
+      window.removeEventListener("gesturestart", preventNativeGestureZoom);
+      window.removeEventListener("gesturechange", preventNativeGestureZoom);
+      window.removeEventListener("gestureend", preventNativeGestureZoom);
     };
     }, []); // Empty dependency array means listeners are stable and never re-bind
 
