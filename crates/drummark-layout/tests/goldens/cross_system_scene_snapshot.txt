@@ -64,8 +64,8 @@ page index=0 widthPt=612.000 heightPt=792.000
   item id=item-52 measureId=- anchorItemId=- role=measure-number kind=textRun zIndex=0 primitive={textRole=measureNumber text="4" xPt=50.000 yPt=550.000 fontFamily=Academico fontSizePt=10.000 fill=#333 textAnchor=- fontWeight=-}
   item id=item-53 measureId=measure-3 anchorItemId=- role=opening-barline kind=rect zIndex=0 primitive={xPt=50.000 yPt=560.000 widthPt=1.000 heightPt=41.000 fill=#333 stroke=- strokeWidth=-}
   item id=item-54 measureId=measure-3 anchorItemId=- role=notehead kind=textRun zIndex=0 primitive={textRole=tempo text="\u{e0a4}" xPt=87.000 yPt=575.000 fontFamily=Bravura fontSizePt=30.000 fill=#333 textAnchor=- fontWeight=-}
-  item id=item-55 measureId=measure-3 anchorItemId=item-54 role=accent kind=textRun zIndex=0 primitive={textRole=countLabel text=">" xPt=94.000 yPt=559.000 fontFamily=Bravura fontSizePt=12.000 fill=#333 textAnchor=middle fontWeight=bold}
-  item id=item-56 measureId=measure-3 anchorItemId=item-54 role=stem kind=lineSegment zIndex=0 primitive={x1Pt=95.850 y1Pt=542.740 x2Pt=95.850 y2Pt=573.740 stroke=#333 strokeWidth=1.500}
+  item id=item-55 measureId=measure-3 anchorItemId=item-54 role=stem kind=lineSegment zIndex=0 primitive={x1Pt=95.850 y1Pt=542.740 x2Pt=95.850 y2Pt=573.740 stroke=#333 strokeWidth=1.500}
+  item id=item-56 measureId=measure-3 anchorItemId=item-54 role=accent kind=glyphRun zIndex=0 primitive={glyphRole=articAccentAbove glyphCount=1 codepoint=58528 xPt=86.120 yPt=538.740 fontFamily=Bravura fontSizePt=30.000 fill=#333}
   item id=item-57 measureId=measure-3 anchorItemId=- role=nav-end kind=textRun zIndex=0 primitive={textRole=countLabel text="@ds-al-coda" xPt=558.000 yPt=556.000 fontFamily=Bravura fontSizePt=12.000 fill=#333 textAnchor=end fontWeight=bold}
   item id=item-58 measureId=measure-3 anchorItemId=- role=final-barline-thin kind=rect zIndex=0 primitive={xPt=558.000 yPt=560.000 widthPt=1.000 heightPt=41.000 fill=#333 stroke=- strokeWidth=-}
   item id=item-59 measureId=measure-3 anchorItemId=- role=final-barline-thick kind=rect zIndex=0 primitive={xPt=559.000 yPt=560.000 widthPt=3.000 heightPt=41.000 fill=#333 stroke=- strokeWidth=-}

@@ -102,7 +102,8 @@ describe("SVG Renderer parity", () => {
 
   it("renders accent modifier", () => {
     const svg = render(HEADER + "SD | d:accent |\n");
-    expect(svg).toContain(">");
+    expect(countRole(svg, "accent")).toBe(1);
+    expect(svg).toContain("");
   });
 
   it("renders ghost modifier", () => {

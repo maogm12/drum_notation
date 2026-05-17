@@ -160,6 +160,8 @@ pub enum GlyphRole {
     RepeatLeft,
     RepeatRight,
     RepeatDot,
+    ArticAccentAbove,
+    ArticAccentBelow,
     MeasureRepeatMark1Bar,
     MeasureRepeatMark2Bars,
     MultiRestBar,
@@ -732,6 +734,12 @@ pub fn canonical_glyph_metric(role: GlyphRole) -> CanonicalGlyphMetric {
             glyph_metric(role, 0xE041, [0.004, 0.0], [1.468, 4.0], None, None)
         }
         GlyphRole::RepeatDot => glyph_metric(role, 0xE044, [0.0, -0.2], [0.4, 0.2], None, None),
+        GlyphRole::ArticAccentAbove => {
+            glyph_metric(role, 0xE4A0, [0.0, 0.004], [1.356, 0.98], None, None)
+        }
+        GlyphRole::ArticAccentBelow => {
+            glyph_metric(role, 0xE4A1, [0.0, -0.976], [1.356, 0.0], None, None)
+        }
         GlyphRole::MeasureRepeatMark1Bar => {
             glyph_metric(role, 0xE500, [0.0, -1.0], [2.128, 1.116], None, None)
         }
@@ -963,6 +971,8 @@ fn glyph_role_name(role: GlyphRole) -> &'static str {
         GlyphRole::RepeatLeft => "repeatLeft",
         GlyphRole::RepeatRight => "repeatRight",
         GlyphRole::RepeatDot => "repeatDot",
+        GlyphRole::ArticAccentAbove => "articAccentAbove",
+        GlyphRole::ArticAccentBelow => "articAccentBelow",
         GlyphRole::MeasureRepeatMark1Bar => "measureRepeatMark1Bar",
         GlyphRole::MeasureRepeatMark2Bars => "measureRepeatMark2Bars",
         GlyphRole::MultiRestBar => "multiRestBar",
@@ -1759,13 +1769,7 @@ mod tests {
         let page = &scene.pages[0];
         let count_metric = canonical_text_metric(TextRole::CountLabel);
 
-        for role in [
-            "nav-start",
-            "nav-end",
-            "repeat-span-count",
-            "volta-label",
-            "accent",
-        ] {
+        for role in ["nav-start", "nav-end", "repeat-span-count", "volta-label"] {
             let text_item = page
                 .items
                 .iter()
@@ -1778,6 +1782,18 @@ mod tests {
             assert_eq!(text.font_family, count_metric.font_family);
             assert_eq!(text.font_size_pt, count_metric.font_size_pt);
         }
+
+        let accent_item = page
+            .items
+            .iter()
+            .find(|item| item.role == "accent")
+            .expect("expected accent scene item");
+        let ScenePrimitive::GlyphRun(accent_glyph) = &accent_item.primitive else {
+            panic!("expected glyph primitive for accent");
+        };
+        assert_eq!(accent_glyph.glyph_role, GlyphRole::ArticAccentAbove);
+        assert_eq!(accent_glyph.font_family, "Bravura");
+        assert_eq!(accent_glyph.font_size_pt, BASE_FONT_SIZE_PT);
 
         let sticking_score = RenderScore {
             version: RENDER_SCORE_VERSION.to_string(),
@@ -2552,8 +2568,8 @@ mod tests {
                     },
                     kind: EventKind::Hit,
                     glyph: "d".into(),
-                    modifiers: vec![],
-                    modifier: None,
+                    modifiers: vec!["accent".into()],
+                    modifier: Some("accent".into()),
                     voice: 2,
                     beam: "none".into(),
                     tuplet: None,
@@ -2595,10 +2611,7 @@ mod tests {
         );
         let noteheads = items_by_role(&scene, "notehead");
         let stems = items_by_role(&scene, "stem");
-        let accent = items_by_role(&scene, "accent")
-            .into_iter()
-            .next()
-            .expect("expected accent");
+        let accents = items_by_role(&scene, "accent");
         let sticking = items_by_role(&scene, "sticking")
             .into_iter()
             .next()
@@ -2619,8 +2632,19 @@ mod tests {
             "opposing voices on the same slot should be horizontally separated: {xs:?}"
         );
         assert!(
-            accent.anchor_item_id.is_some(),
-            "accent should preserve its note anchor"
+            accents.iter().all(|accent| accent.anchor_item_id.is_some()),
+            "accents should preserve their note anchors"
+        );
+        let accent_roles = accents
+            .iter()
+            .map(|accent| match &accent.primitive {
+                ScenePrimitive::GlyphRun(glyph) => glyph.glyph_role,
+                _ => panic!("accent should be glyph"),
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            accent_roles,
+            vec![GlyphRole::ArticAccentAbove, GlyphRole::ArticAccentBelow]
         );
         assert!(
             sticking.anchor_item_id.is_some(),
@@ -2630,6 +2654,101 @@ mod tests {
             stems.iter().all(|stem| stem.anchor_item_id.is_some()),
             "stems should preserve note anchors"
         );
+    }
+
+    #[test]
+    fn test_accent_uses_smufl_glyph_centered_on_notehead_and_clears_stem_tip() {
+        let measure = RenderMeasure {
+            index: 0,
+            global_index: 0,
+            paragraph_index: 0,
+            measure_in_paragraph: 0,
+            source_line: 1,
+            events: vec![
+                RenderEvent {
+                    track: "HH".into(),
+                    track_family: "cymbal".into(),
+                    start: Fraction {
+                        numerator: 0,
+                        denominator: 1,
+                    },
+                    duration: Fraction {
+                        numerator: 1,
+                        denominator: 8,
+                    },
+                    kind: EventKind::Hit,
+                    glyph: "x".into(),
+                    modifiers: vec!["accent".into()],
+                    modifier: Some("accent".into()),
+                    voice: 1,
+                    beam: "none".into(),
+                    tuplet: None,
+                },
+                RenderEvent {
+                    track: "HH".into(),
+                    track_family: "cymbal".into(),
+                    start: Fraction {
+                        numerator: 1,
+                        denominator: 8,
+                    },
+                    duration: Fraction {
+                        numerator: 1,
+                        denominator: 8,
+                    },
+                    kind: EventKind::Hit,
+                    glyph: "x".into(),
+                    modifiers: vec![],
+                    modifier: None,
+                    voice: 1,
+                    beam: "none".into(),
+                    tuplet: None,
+                },
+            ],
+            barline: Some("regular".into()),
+            closing_barline: Some("final".into()),
+            start_nav: None,
+            end_nav: None,
+            volta_indices: None,
+            hairpins: vec![],
+            measure_repeat_slashes: None,
+            multi_rest_count: None,
+            note_value: 8,
+            volta_terminator: false,
+        };
+        let scene = build_layout_scene(
+            &simple_layout_score(vec![measure]),
+            &LayoutOptions::default(),
+        );
+        let accent = items_by_role(&scene, "accent")
+            .into_iter()
+            .next()
+            .expect("expected accent");
+        let notehead = items_by_role(&scene, "notehead")
+            .into_iter()
+            .next()
+            .expect("expected notehead");
+        let stem = items_by_role(&scene, "stem")
+            .into_iter()
+            .next()
+            .expect("expected stem");
+
+        let ScenePrimitive::GlyphRun(accent_glyph) = &accent.primitive else {
+            panic!("accent should be glyph");
+        };
+        let ScenePrimitive::TextRun(note_text) = &notehead.primitive else {
+            panic!("notehead should be text");
+        };
+        let ScenePrimitive::LineSegment(stem_line) = &stem.primitive else {
+            panic!("stem should be line");
+        };
+
+        assert_eq!(accent_glyph.glyph_role, GlyphRole::ArticAccentAbove);
+        let note_center = note_text.x_pt
+            + rendered_glyph_width(GlyphRole::NoteheadX, note_text.font_size_pt) * 0.5;
+        let accent_center = accent_glyph.x_pt
+            + rendered_glyph_width(GlyphRole::ArticAccentAbove, accent_glyph.font_size_pt) * 0.5;
+        assert!((note_center - accent_center).abs() < 0.01);
+        assert!(accent_glyph.y_pt < stem_line.y1_pt);
     }
 }
 
@@ -2960,6 +3079,8 @@ struct NotePlacement {
     note_id: String,
     note_x: f32,
     note_y: f32,
+    note_center_x: f32,
+    has_accent: bool,
     stem_up_anchor_ss: Option<GlyphPoint>,
     stem_down_anchor_ss: Option<GlyphPoint>,
 }
@@ -3080,12 +3201,20 @@ fn start_repeat_vertical_origin(top: f32, bottom: f32) -> f32 {
 }
 
 fn repeat_barline_rendered_width(role: GlyphRole) -> f32 {
-    canonical_glyph_metric(role).width_pt(REPEAT_BARLINE_FONT_SIZE_PT) * SVG_POINT_TO_USER_UNIT
+    rendered_glyph_width(role, REPEAT_BARLINE_FONT_SIZE_PT)
 }
 
 fn repeat_barline_rendered_height(role: GlyphRole) -> f32 {
+    rendered_glyph_height(role, REPEAT_BARLINE_FONT_SIZE_PT)
+}
+
+fn rendered_glyph_width(role: GlyphRole, font_size_pt: f32) -> f32 {
+    canonical_glyph_metric(role).width_pt(font_size_pt) * SVG_POINT_TO_USER_UNIT
+}
+
+fn rendered_glyph_height(role: GlyphRole, font_size_pt: f32) -> f32 {
     let metric = canonical_glyph_metric(role);
-    metric.bbox_height_ss() * (REPEAT_BARLINE_FONT_SIZE_PT / 4.0) * SVG_POINT_TO_USER_UNIT
+    metric.bbox_height_ss() * (font_size_pt / 4.0) * SVG_POINT_TO_USER_UNIT
 }
 
 fn measure_left_pad(
@@ -4856,42 +4985,25 @@ fn render_hit_cluster(
                 item.anchor_item_id = Some(note_id.clone());
             }
         }
+        let note_role = glyph_role_for_codepoint(glyph_metric.smufl_codepoint);
+        let note_center_x = base_note_x + rendered_glyph_width(note_role, note_font_size) * 0.5;
+        let has_accent = slot_event
+            .event
+            .modifiers
+            .iter()
+            .any(|modifier| modifier == "accent");
         note_placements.push(NotePlacement {
             note_id: note_id.clone(),
             note_x: base_note_x,
             note_y: actual_note_y,
+            note_center_x,
+            has_accent,
             stem_up_anchor_ss: glyph_metric.stem_up_anchor_ss,
             stem_down_anchor_ss: glyph_metric.stem_down_anchor_ss,
         });
-
-        if slot_event
-            .event
-            .modifiers
-            .iter()
-            .any(|modifier| modifier == "accent")
-        {
-            let count_metric = canonical_text_metric(TextRole::CountLabel);
-            push_text_item(
-                items,
-                counter,
-                Some(measure_id),
-                "accent",
-                event_x,
-                actual_note_y - count_metric.line_height_pt - 2.0,
-                TextRole::CountLabel,
-                ">".to_string(),
-                count_metric.font_family,
-                count_metric.font_size_pt,
-                "#333",
-                Some("middle"),
-                Some("bold"),
-            );
-            if let Some(item) = items.last_mut() {
-                item.anchor_item_id = Some(note_id.clone());
-            }
-        }
     }
 
+    let mut accent_reference_y = None;
     if let Some(first_hit) = voice_hits.first() {
         let needs_stem =
             first_hit.event.duration.denominator >= 4 || first_hit.event.tuplet.is_some();
@@ -4945,6 +5057,7 @@ fn render_hit_cluster(
                 } else {
                     stem_attach_y + stem_len_pt
                 };
+                accent_reference_y = Some(if stem_up { stem_y1 } else { stem_y2 });
                 let stem_id = push_line_item(
                     items,
                     counter,
@@ -4986,7 +5099,73 @@ fn render_hit_cluster(
         }
     }
 
+    let fallback_accent_y = if stem_up {
+        note_placements
+            .iter()
+            .map(|placement| placement.note_y)
+            .fold(f32::INFINITY, f32::min)
+            - 18.0
+    } else {
+        note_placements
+            .iter()
+            .map(|placement| placement.note_y)
+            .fold(f32::NEG_INFINITY, f32::max)
+            + 18.0
+    };
+    render_accent_glyphs(
+        items,
+        counter,
+        measure_id,
+        &note_placements,
+        stem_up,
+        accent_reference_y.unwrap_or(fallback_accent_y),
+    );
+
     note_placements
+}
+
+fn render_accent_glyphs(
+    items: &mut Vec<SceneItem>,
+    counter: &mut usize,
+    measure_id: &str,
+    note_placements: &[NotePlacement],
+    stem_up: bool,
+    reference_y: f32,
+) {
+    let accent_role = if stem_up {
+        GlyphRole::ArticAccentAbove
+    } else {
+        GlyphRole::ArticAccentBelow
+    };
+    let accent_font_size = BASE_FONT_SIZE_PT;
+    let accent_gap = 4.0_f32;
+    let accent_width = rendered_glyph_width(accent_role, accent_font_size);
+    let accent_y = if stem_up {
+        reference_y - accent_gap
+    } else {
+        reference_y + accent_gap
+    };
+
+    for placement in note_placements
+        .iter()
+        .filter(|placement| placement.has_accent)
+    {
+        push_glyph_item(
+            items,
+            counter,
+            Some(measure_id),
+            "accent",
+            placement.note_center_x - accent_width * 0.5,
+            accent_y,
+            accent_role,
+            "Bravura",
+            accent_font_size,
+            "#333",
+        );
+        if let Some(item) = items.last_mut() {
+            item.anchor_item_id = Some(placement.note_id.clone());
+        }
+    }
 }
 
 fn glyph_role_for_codepoint(codepoint: u32) -> GlyphRole {

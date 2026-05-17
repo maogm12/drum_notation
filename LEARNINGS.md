@@ -790,3 +790,9 @@ Nav markers (`@segno`, `@fine`, `@to-coda`, etc.) were converted to `TokenGlyph:
 - Although `repeatLeft` / `repeatRight` have a 4-staff-space metadata bbox, browser SVG renders `font-size="Npt"` in CSS points, where `1pt = 4/3` viewBox user units. For a 10-unit staff space and a 40-unit four-space staff height, the repeat font size should therefore be `40 / (4/3) = 30pt`, not the literal 40pt implied by metadata units alone.
 
 - First-system start repeats need two independent horizontal controls: pull the glyph toward the clef/time-signature preamble, then reserve a separate trailing gap before note content. Tying both to a single "width" value makes the repeat either too far from the preamble or too close to the first note.
+
+## 2026-05-16 Addendum: Accents Should Use SMuFL Articulation Glyphs
+
+- Bravura exposes accent articulations as `articAccentAbove` (`U+E4A0`) and `articAccentBelow` (`U+E4A1`). They have separate above/below bboxes and no anchor metadata, so placement should center the glyph bbox over the notehead bbox rather than using a text `>` character.
+
+- Accent placement depends on stem direction: up-stem accents belong above the stem tip or beam, while down-stem voice-2 accents belong below the stem tip or beam. Rendering accents while drawing the notehead is too early because the code has not computed stem and beam positions yet.
