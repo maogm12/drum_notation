@@ -24,6 +24,8 @@ type RenderOptions = {
   voltaSpacing?: number;
   hairpinOffsetY?: number;
   hideVoice2Rests?: boolean;
+  durationSpacingCompression?: number;
+  measureWidthCompression?: number;
   debug?: boolean;
 };
 
@@ -106,6 +108,8 @@ export function buildLayoutSceneFromSource(source: string, options?: RenderOptio
     voltaSpacing: (options?.voltaSpacing ?? SETTINGS_RANGES.voltaSpacing.default) / ss,
     hairpinOffsetY: (options?.hairpinOffsetY ?? SETTINGS_RANGES.hairpinOffsetY.default) / ss,
     hideVoice2Rests: options?.hideVoice2Rests ?? false,
+    durationSpacingCompression: options?.durationSpacingCompression ?? SETTINGS_RANGES.durationSpacingCompression.default,
+    measureWidthCompression: options?.measureWidthCompression ?? SETTINGS_RANGES.measureWidthCompression.default,
     debug: options?.debug ? 1 : 0,
   };
   const scene = build_layout_scene(source, opts as any) as Scene;

@@ -622,20 +622,20 @@ pub fn canonical_glyph_metric(role: GlyphRole) -> CanonicalGlyphMetric {
             0xE0A4,
             [0.0, -0.5],
             [1.18, 0.5],
-            Some([1.18, 0.168]),
-            Some([0.0, -0.168]),
+            Some([1.49, 0.16]),
+            Some([0.1, -0.16]),
         ),
         GlyphRole::NoteheadX => glyph_metric(
             role,
             0xE0A9,
             [0.0, -0.5],
             [1.16, 0.5],
-            Some([1.16, 0.444]),
-            Some([0.0, -0.44]),
+            Some([1.49, 0.5]),
+            Some([0.0, -0.5]),
         ),
         GlyphRole::NoteheadDiamond => glyph_metric(
             role,
-            0xE0B3,
+            0xE0B2,
             [0.0, -0.5],
             [1.0, 0.5],
             Some([1.0, 0.0]),
@@ -643,7 +643,7 @@ pub fn canonical_glyph_metric(role: GlyphRole) -> CanonicalGlyphMetric {
         ),
         GlyphRole::NoteheadCircleX => glyph_metric(
             role,
-            0xE0DB,
+            0xE0B3,
             [0.0, -0.5],
             [0.996, 0.5],
             Some([0.996, 0.0]),
@@ -1021,22 +1021,22 @@ fn fragment_kind_name(kind: SpanFragmentKind) -> &'static str {
 
 /// Returns SMuFL glyph metrics for a notehead given track + modifiers.
 pub fn notehead_glyph(track: &str, modifiers: &[String], _glyph: &str) -> CanonicalGlyphMetric {
-    let family = track_family(track);
-
-    // Cymbal tracks and hi-hat pedal use X notehead
-    if family == "cymbal" || track == "HF" {
-        return canonical_glyph_metric(GlyphRole::NoteheadX);
-    }
-
-    // Drum tracks: check modifiers for special noteheads
+    // Modifier-based noteheads take priority over track family defaults
     for m in modifiers {
         match m.as_str() {
-            "open" => return canonical_glyph_metric(GlyphRole::NoteheadDiamond),
+            "open" => return canonical_glyph_metric(GlyphRole::NoteheadCircleX),
             "cross" => return canonical_glyph_metric(GlyphRole::NoteheadX),
-            "bell" => return canonical_glyph_metric(GlyphRole::NoteheadCircleX),
+            "bell" => return canonical_glyph_metric(GlyphRole::NoteheadDiamond),
             "rim" => return canonical_glyph_metric(GlyphRole::NoteheadRim),
             _ => {}
         }
+    }
+
+    let family = track_family(track);
+
+    // Cymbal tracks and hi-hat pedal default to X notehead
+    if family == "cymbal" || track == "HF" {
+        return canonical_glyph_metric(GlyphRole::NoteheadX);
     }
 
     // Standard drum notehead
@@ -1102,6 +1102,12 @@ pub struct LayoutOptions {
     pub system_spacing_pt: f32,
     // Whether to hide lower-voice rests (matching VexFlow hideVoice2Rests)
     pub hide_voice2_rests: bool,
+    // Note spacing compression: higher values give more space to longer durations.
+    // VexFlow default: 0.6
+    pub duration_spacing_compression: f32,
+    // Measure width compression: higher values widen busy measures more.
+    // VexFlow default: 0.75
+    pub measure_width_compression: f32,
 }
 
 impl Default for LayoutOptions {
@@ -1129,6 +1135,8 @@ impl Default for LayoutOptions {
             stem_len_pt: 31.0,
             system_spacing_pt: 30.0,
             hide_voice2_rests: false,
+            duration_spacing_compression: 0.6,
+            measure_width_compression: 0.75,
         }
     }
 }
@@ -1366,15 +1374,15 @@ mod tests {
         assert_eq!(
             notehead.stem_up_anchor_ss,
             Some(GlyphPoint {
-                x_ss: 1.18,
-                y_ss: 0.168
+                x_ss: 1.49,
+                y_ss: 0.16
             })
         );
         assert_eq!(
             notehead.stem_down_anchor_ss,
             Some(GlyphPoint {
-                x_ss: 0.0,
-                y_ss: -0.168
+                x_ss: 0.1,
+                y_ss: -0.16
             })
         );
 
@@ -3064,9 +3072,12 @@ impl SlotMapper {
 
 #[derive(Debug, Clone)]
 struct GroupGeometry {
-    start_slot: u32,
     end_slot: u32,
     width_pt: f32,
+    /// Position of each event start within the group, as fraction of group width.
+    /// Maps slot → cumulative offset fraction (0..1). Used by x_for_fraction.
+    segment_offsets: Vec<f32>,
+    segment_slots: Vec<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -3092,15 +3103,16 @@ impl MeasureGeometry {
 
         for group in &self.groups {
             if slot < group.end_slot {
-                let group_slots = (group.end_slot - group.start_slot).max(1);
-                let slot_in_group = slot.saturating_sub(group.start_slot).min(group_slots);
-                let offset = self.slot_offset_within_group(
-                    header,
-                    slot_in_group,
-                    group_slots,
-                    group.width_pt,
-                );
-                return group_start_x + offset;
+                if group.segment_slots.is_empty() {
+                    return group_start_x;
+                }
+                // Binary search for the segment containing this slot
+                let seg = match group.segment_slots.binary_search(&slot) {
+                    Ok(i) => i,
+                    Err(i) => i.saturating_sub(1),
+                };
+                let offset_frac = group.segment_offsets[seg.min(group.segment_offsets.len() - 1)];
+                return group_start_x + offset_frac * group.width_pt;
             }
             group_start_x += group.width_pt;
         }
@@ -3108,30 +3120,6 @@ impl MeasureGeometry {
         self.inner_left_pt + self.inner_width_pt
     }
 
-    fn slot_offset_within_group(
-        &self,
-        header: &RenderHeader,
-        slot_in_group: u32,
-        group_slots: u32,
-        group_width_pt: f32,
-    ) -> f32 {
-        if group_slots == 0 {
-            return 0.0;
-        }
-
-        let slots_per_beat_unit = (header.divisions / header.time_beats.max(1)).max(1);
-        let beat_units_in_group = (group_slots / slots_per_beat_unit).max(1);
-        let beat_unit_width = group_width_pt / beat_units_in_group as f32;
-        let beat_index = slot_in_group / slots_per_beat_unit;
-        let slot_in_beat = slot_in_group % slots_per_beat_unit;
-        beat_index as f32 * beat_unit_width
-            + self_slot_x_within_beat(slot_in_beat, slots_per_beat_unit, beat_unit_width)
-    }
-}
-
-fn self_slot_x_within_beat(slot: u32, slots_per_beat: u32, beat_width: f32) -> f32 {
-    let frac = slot as f32 / slots_per_beat.max(1) as f32;
-    frac * beat_width
 }
 
 // ── Layout Element Type (Tasks 3-6) ─────────────────────────────
@@ -3571,27 +3559,6 @@ fn fraction_to_measure_slot(
     ((numerator + denominator / 2) / denominator) as u32
 }
 
-fn event_count_in_slot_range(
-    measure: &RenderMeasure,
-    header: &RenderHeader,
-    start_slot: u32,
-    end_slot: u32,
-) -> usize {
-    measure
-        .events
-        .iter()
-        .filter(|event| {
-            let slot = fraction_to_measure_slot(
-                event.start,
-                header.time_beats,
-                header.time_beat_unit,
-                header.divisions,
-            );
-            slot >= start_slot && slot < end_slot
-        })
-        .count()
-}
-
 fn grouping_segment_index_for_slot(header: &RenderHeader, slot: u32) -> usize {
     let grouping = normalized_grouping(header);
     let slots_per_beat_unit = (header.divisions / header.time_beats.max(1)).max(1);
@@ -3627,6 +3594,7 @@ fn measure_geometry(
     left_pad: f32,
     right_pad: f32,
     mapper: &SlotMapper,
+    duration_compression: f32,
 ) -> MeasureGeometry {
     let inner_left_pt = measure_x + left_pad;
     let inner_width_pt = (measure_width - left_pad - right_pad).max(1.0);
@@ -3636,43 +3604,95 @@ fn measure_geometry(
     let mut weighted_width_sum = 0.0_f32;
     let mut start_slot = 0_u32;
 
+    // Collect all event start slots for the measure (once)
+    let mut all_starts: Vec<u32> = measure
+        .events
+        .iter()
+        .map(|event| {
+            fraction_to_measure_slot(
+                event.start,
+                header.time_beats,
+                header.time_beat_unit,
+                header.divisions,
+            )
+        })
+        .collect();
+    all_starts.sort();
+    all_starts.dedup();
+
     for beat_units in grouping {
         let group_slots = beat_units.max(1) * slots_per_beat_unit;
         let end_slot = start_slot + group_slots;
-        let event_count = event_count_in_slot_range(measure, header, start_slot, end_slot);
-        let shortest_denominator = measure
-            .events
-            .iter()
-            .filter_map(|event| {
-                let slot = fraction_to_measure_slot(
-                    event.start,
-                    header.time_beats,
-                    header.time_beat_unit,
-                    header.divisions,
-                );
-                (slot >= start_slot && slot < end_slot).then_some(event.duration.denominator)
-            })
-            .max()
-            .unwrap_or(header.time_beat_unit.max(1));
         let base_quarters = beat_units as f32 * 4.0 / header.time_beat_unit.max(1) as f32;
-        let density_bonus = if event_count >= beat_units as usize * 2 {
-            1.18
-        } else if event_count > beat_units as usize {
-            1.1
+
+        // Content weight for measure-width compression
+        let group_starts: Vec<u32> = all_starts
+            .iter()
+            .copied()
+            .filter(|s| *s >= start_slot && *s < end_slot)
+            .collect();
+        let segment_count = if group_starts.is_empty() {
+            1
         } else {
-            1.0
+            group_starts.len().max(1)
         };
-        let rhythm_bonus = if shortest_denominator >= 16 {
-            1.08
-        } else {
-            1.0
-        };
-        let weighted_width = base_quarters * mapper.px_per_quarter * density_bonus * rhythm_bonus;
+        let content_weight =
+            1.0 + duration_compression * (segment_count as f32).max(1.0).log2();
+        let weighted_width = base_quarters * mapper.px_per_quarter * content_weight;
         weighted_width_sum += weighted_width;
+
+        // Duration-weighted segment offsets within this group
+        let mut segment_slots: Vec<u32> = group_starts;
+        // Ensure we have at least start_slot as first segment
+        if segment_slots.first() != Some(&start_slot) {
+            segment_slots.insert(0, start_slot);
+        }
+        // Add group end as last segment boundary
+        if segment_slots.last() != Some(&end_slot) {
+            segment_slots.push(end_slot);
+        }
+
+        let mut segment_offsets = Vec::with_capacity(segment_slots.len());
+        if segment_slots.len() <= 2 {
+            // One segment: linear
+            segment_offsets.push(0.0);
+        } else {
+            // Compute segment durations and weights
+            let slot_span = (end_slot - start_slot).max(1) as f32;
+            let mut raw_weights = Vec::with_capacity(segment_slots.len() - 1);
+            for i in 0..segment_slots.len() - 1 {
+                let seg_slots = (segment_slots[i + 1] - segment_slots[i]) as f32;
+                let seg_duration = seg_slots / slot_span;
+                raw_weights.push(seg_duration);
+            }
+
+            // Apply compression: weight = 1 + compression * log2(ratio + 1)
+            let min_dur = raw_weights
+                .iter()
+                .fold(f32::MAX, |a, &b| if b > 0.0 { a.min(b) } else { a });
+            let min_dur = min_dur.max(0.01);
+            let weights: Vec<f32> = raw_weights
+                .iter()
+                .map(|&d| {
+                    let ratio = d / min_dur;
+                    1.0 + duration_compression * (ratio + 1.0).log2()
+                })
+                .collect();
+
+            let total_weight: f32 = weights.iter().sum();
+            let mut cum = 0.0_f32;
+            segment_offsets.push(0.0);
+            for &w in &weights[..weights.len() - 1] {
+                cum += w / total_weight.max(1e-6);
+                segment_offsets.push(cum);
+            }
+        }
+
         groups.push(GroupGeometry {
-            start_slot,
             end_slot,
             width_pt: weighted_width,
+            segment_offsets,
+            segment_slots,
         });
         start_slot = end_slot;
     }
@@ -3693,6 +3713,7 @@ fn estimated_measure_width(
     header: &RenderHeader,
     measure: &RenderMeasure,
     mapper: &SlotMapper,
+    compression: f32,
 ) -> f32 {
     if measure.multi_rest_count.is_some() || measure.measure_repeat_slashes.is_some() {
         return mapper.measure_width(1, 1, true);
@@ -3700,41 +3721,42 @@ fn estimated_measure_width(
 
     let grouping = normalized_grouping(header);
     let slots_per_beat_unit = (header.divisions / header.time_beats.max(1)).max(1);
+
+    // Collect all unique event start slots
+    let mut starts: Vec<u32> = measure
+        .events
+        .iter()
+        .map(|event| {
+            fraction_to_measure_slot(
+                event.start,
+                header.time_beats,
+                header.time_beat_unit,
+                header.divisions,
+            )
+        })
+        .collect();
+    starts.sort();
+    starts.dedup();
+    let segment_count = starts.len().max(1);
+
+    // Modifier bonuses (matching VexFlow)
+    let has_tuplet = measure.events.iter().any(|event| event.tuplet.is_some());
+    let sticking_count = measure
+        .events
+        .iter()
+        .filter(|event| matches!(event.kind, EventKind::Sticking))
+        .count();
+    let modifier_bonus = (if has_tuplet { 0.15 } else { 0.0 })
+        + (if sticking_count >= 3 { 0.1 } else { 0.0 });
+
     grouping
         .into_iter()
         .scan(0_u32, |start_slot, beat_units| {
-            let group_slots = beat_units.max(1) * slots_per_beat_unit;
-            let end_slot = *start_slot + group_slots;
-            let event_count = event_count_in_slot_range(measure, header, *start_slot, end_slot);
-            let shortest_denominator = measure
-                .events
-                .iter()
-                .filter_map(|event| {
-                    let slot = fraction_to_measure_slot(
-                        event.start,
-                        header.time_beats,
-                        header.time_beat_unit,
-                        header.divisions,
-                    );
-                    (slot >= *start_slot && slot < end_slot).then_some(event.duration.denominator)
-                })
-                .max()
-                .unwrap_or(header.time_beat_unit.max(1));
             let base_quarters = beat_units as f32 * 4.0 / header.time_beat_unit.max(1) as f32;
-            let density_bonus = if event_count >= beat_units as usize * 2 {
-                1.18
-            } else if event_count > beat_units as usize {
-                1.1
-            } else {
-                1.0
-            };
-            let rhythm_bonus = if shortest_denominator >= 16 {
-                1.08
-            } else {
-                1.0
-            };
-            *start_slot = end_slot;
-            Some(base_quarters * mapper.px_per_quarter * density_bonus * rhythm_bonus)
+            let content_weight =
+                1.0 + compression * (segment_count as f32).max(1.0).log2() + modifier_bonus;
+            *start_slot += beat_units.max(1) * slots_per_beat_unit;
+            Some(base_quarters * mapper.px_per_quarter * content_weight)
         })
         .sum()
 }
@@ -3909,7 +3931,7 @@ fn plan_scene_systems<'a>(
     let mut next_is_first_system = true;
 
     for measure in measures {
-        let estimate = estimated_measure_width(header, measure.measure, &mapper);
+        let estimate = estimated_measure_width(header, measure.measure, &mapper, opts.measure_width_compression);
         let paragraph_break =
             current_paragraph.is_some() && current_paragraph != Some(measure.paragraph_index);
         if !current_measures.is_empty() && paragraph_break {
@@ -4421,6 +4443,7 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
                     &mapper,
                     opts.stem_len_pt,
                     opts.hide_voice2_rests,
+                    opts.duration_spacing_compression,
                 );
             }
 
@@ -5011,6 +5034,7 @@ fn render_measure_events(
     mapper: &SlotMapper,
     stem_len_pt: f32,
     hide_voice2_rests: bool,
+    duration_compression: f32,
 ) {
     let mut beam_anchors: Vec<BeamAnchor> = Vec::new();
     let geometry = measure_geometry(
@@ -5021,6 +5045,7 @@ fn render_measure_events(
         left_pad,
         right_pad,
         mapper,
+        duration_compression,
     );
     let mut slot_events = measure
         .events
@@ -5536,8 +5561,8 @@ fn render_accent_glyphs(
 fn glyph_role_for_codepoint(codepoint: u32) -> GlyphRole {
     match codepoint {
         0xE0A9 => GlyphRole::NoteheadX,
-        0xE0B3 => GlyphRole::NoteheadDiamond,
-        0xE0DB => GlyphRole::NoteheadCircleX,
+        0xE0B2 => GlyphRole::NoteheadDiamond,
+        0xE0B3 => GlyphRole::NoteheadCircleX,
         0xE0CE => GlyphRole::NoteheadRim,
         _ => GlyphRole::NoteheadBlack,
     }
@@ -8704,3 +8729,4 @@ fn test_bottom_ledger_lines_render_for_notes_below_staff() {
         .iter()
         .any(|y| (*y - (staff_top + 60.0)).abs() < 0.01));
 }
+// PATCH_INSERT_FOR_GOLDEN_REGENERATION
