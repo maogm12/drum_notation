@@ -274,7 +274,7 @@ Changes in v0.2:
 - **Dependencies**: Task 3, Task 5
 
 ### Task 7: Deterministic Box Pagination
-- [ ] **Status**: Pending
+- [x] **Status**: Done
 - **Scope**: `crates/drummark-layout/src/lib.rs`
 - **Input/Output Contract**: Input is ordered mock or real `SystemLayoutBox` values plus `HeaderLayoutBox` and page/header/margin options; output is ordered `PlacedSystemBox` values and overflow issue data.
 - **Commits**:

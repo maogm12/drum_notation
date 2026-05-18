@@ -496,6 +496,13 @@ struct PlacedSystemBox {
     measure_ids: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
+struct BoxPaginationResult {
+    placements: Vec<PlacedSystemBox>,
+    issues: Vec<String>,
+}
+
 #[allow(dead_code)]
 fn layout_overflow_warning(
     page_index: u32,
@@ -506,6 +513,66 @@ fn layout_overflow_warning(
     format!(
         "LAYOUT_WARNING overflow page={page_index} system={system_id} visualHeight={visual_height:.2} availableHeight={available_height:.2}"
     )
+}
+
+#[allow(dead_code)]
+fn paginate_system_boxes(
+    boxes: &[SystemLayoutBox],
+    header: &HeaderLayoutBox,
+    opts: &LayoutOptions,
+) -> BoxPaginationResult {
+    let mut placements = Vec::new();
+    let mut issues = Vec::new();
+    let content_bottom = opts.page_height_pt - opts.bottom_margin_pt;
+    let available_height = (content_bottom - opts.top_margin_pt).max(0.0);
+    let mut page_index = 0_u32;
+    let mut cursor_y = page0_first_system_cursor(opts, header);
+    let mut systems_on_page = 0usize;
+
+    for system_box in boxes {
+        let visual_height = system_box.visual_bottom - system_box.visual_top;
+        let mut placement_y = cursor_y
+            + if systems_on_page == 0 {
+                0.0
+            } else {
+                opts.system_spacing_pt
+            };
+        if systems_on_page > 0 && placement_y + visual_height > content_bottom {
+            page_index += 1;
+            systems_on_page = 0;
+            cursor_y = opts.top_margin_pt;
+            placement_y = cursor_y;
+        }
+
+        if systems_on_page == 0 && placement_y + visual_height > content_bottom {
+            issues.push(layout_overflow_warning(
+                page_index,
+                &system_box.system_id,
+                visual_height,
+                available_height,
+            ));
+        }
+
+        placements.push(PlacedSystemBox {
+            system_index: system_box.system_index,
+            system_id: system_box.system_id.clone(),
+            page_index,
+            page_x: opts.left_margin_pt,
+            page_y: placement_y,
+            local_visual_top: system_box.visual_top,
+            local_system_origin_y: system_box.local_system_origin_y,
+            width_pt: system_box.width_pt,
+            measure_ids: system_box
+                .measures
+                .iter()
+                .map(|measure| measure.id.clone())
+                .collect(),
+        });
+        cursor_y = placement_y + visual_height;
+        systems_on_page += 1;
+    }
+
+    BoxPaginationResult { placements, issues }
 }
 
 #[allow(dead_code)]
@@ -1860,7 +1927,10 @@ mod tests {
             start_measure_index: 0,
             end_measure_index: 0,
         }];
-        let scene = build_layout_scene(&simple_layout_score(vec![measure]), &LayoutOptions::default());
+        let scene = build_layout_scene(
+            &simple_layout_score(vec![measure]),
+            &LayoutOptions::default(),
+        );
         let page = &scene.pages[0];
         let top = line_for_role(page, "hairpin-top");
         let bottom = line_for_role(page, "hairpin-bottom");
@@ -3205,7 +3275,6 @@ impl MeasureGeometry {
 
         self.inner_left_pt + self.inner_width_pt
     }
-
 }
 
 // ── Layout Element Type (Tasks 3-6) ─────────────────────────────
@@ -3723,8 +3792,7 @@ fn measure_geometry(
         } else {
             group_starts.len().max(1)
         };
-        let content_weight =
-            1.0 + duration_compression * (segment_count as f32).max(1.0).log2();
+        let content_weight = 1.0 + duration_compression * (segment_count as f32).max(1.0).log2();
         let weighted_width = base_quarters * mapper.px_per_quarter * content_weight;
         weighted_width_sum += weighted_width;
 
@@ -3833,8 +3901,8 @@ fn estimated_measure_width(
         .iter()
         .filter(|event| matches!(event.kind, EventKind::Sticking))
         .count();
-    let modifier_bonus = (if has_tuplet { 0.15 } else { 0.0 })
-        + (if sticking_count >= 3 { 0.1 } else { 0.0 });
+    let modifier_bonus =
+        (if has_tuplet { 0.15 } else { 0.0 }) + (if sticking_count >= 3 { 0.1 } else { 0.0 });
 
     grouping
         .into_iter()
@@ -4018,7 +4086,12 @@ fn plan_scene_systems<'a>(
     let mut next_is_first_system = true;
 
     for measure in measures {
-        let estimate = estimated_measure_width(header, measure.measure, &mapper, opts.measure_width_compression);
+        let estimate = estimated_measure_width(
+            header,
+            measure.measure,
+            &mapper,
+            opts.measure_width_compression,
+        );
         let paragraph_break =
             current_paragraph.is_some() && current_paragraph != Some(measure.paragraph_index);
         if !current_measures.is_empty() && paragraph_break {
@@ -4854,10 +4927,12 @@ fn push_system_volta_composites(
             block_x2,
             system_measures[block_start].y_pt - 60.0,
         );
-        let line_y = occupied_top - opts.volta_offset_y - (VOLTA_LINE_HEIGHT_PT + VOLTA_TEXT_SIZE_PT + 2.0);
+        let line_y =
+            occupied_top - opts.volta_offset_y - (VOLTA_LINE_HEIGHT_PT + VOLTA_TEXT_SIZE_PT + 2.0);
         let mut index = block_start;
         while index <= block_end {
-            let Some(display_measure) = display_measure_for_scene(measures, &system_measures[index])
+            let Some(display_measure) =
+                display_measure_for_scene(measures, &system_measures[index])
             else {
                 index += 1;
                 continue;
@@ -4882,7 +4957,10 @@ fn push_system_volta_composites(
                 .unwrap_or(start_measure);
             let start_type = volta_type_for_measure(measures, start_measure);
             let end_type = volta_type_for_measure(measures, end_measure);
-            let show_label = matches!(start_type, VoltaSegmentType::Begin | VoltaSegmentType::BeginEnd);
+            let show_label = matches!(
+                start_type,
+                VoltaSegmentType::Begin | VoltaSegmentType::BeginEnd
+            );
             let show_left_hook = show_label || index == 0;
             let show_right = matches!(end_type, VoltaSegmentType::End | VoltaSegmentType::BeginEnd);
             let fragment = volta_fragment_kind(show_label, show_right);
@@ -5097,11 +5175,13 @@ fn display_measure_for_scene<'a>(
 }
 
 fn volta_key(measure: &DisplayMeasure<'_>) -> Option<String> {
-    measure
-        .measure
-        .volta_indices
-        .as_ref()
-        .map(|indices| indices.iter().map(u32::to_string).collect::<Vec<_>>().join(","))
+    measure.measure.volta_indices.as_ref().map(|indices| {
+        indices
+            .iter()
+            .map(u32::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
+    })
 }
 
 fn volta_type_for_measure(measures: &[DisplayMeasure<'_>], global_index: u32) -> VoltaSegmentType {
@@ -5111,7 +5191,11 @@ fn volta_type_for_measure(measures: &[DisplayMeasure<'_>], global_index: u32) ->
     let current_key = current.and_then(volta_key);
     let previous_key = global_index
         .checked_sub(1)
-        .and_then(|previous| measures.iter().find(|measure| measure.global_index == previous))
+        .and_then(|previous| {
+            measures
+                .iter()
+                .find(|measure| measure.global_index == previous)
+        })
         .and_then(volta_key);
     let next_key = measures
         .iter()
@@ -6099,9 +6183,7 @@ fn beam_line_segments_for_level(group: &[BeamAnchor], level: u8) -> Vec<BeamLine
                 // Direction: if any PREVIOUS anchor has this beam level → left;
                 // otherwise (first in group) → right.
                 // This matches VexFlow's partial beam direction logic.
-                let has_prev_beam = group[..index]
-                    .iter()
-                    .any(|prev| prev.level >= level);
+                let has_prev_beam = group[..index].iter().any(|prev| prev.level >= level);
                 let direction: f32 = if has_prev_beam { -1.0 } else { 1.0 };
                 segments.push(BeamLineSegment {
                     start_x: anchor.stem_x,
@@ -6418,8 +6500,7 @@ fn render_hairpin_fragments(
             );
             let fragment_total = fragments.len();
             let total_start = hairpin.start_measure_index as f32 + fraction_to_f32(hairpin.start);
-            let mut total_end =
-                hairpin.end_measure_index as f32 + fraction_to_f32(hairpin.end);
+            let mut total_end = hairpin.end_measure_index as f32 + fraction_to_f32(hairpin.end);
             if total_end <= total_start {
                 total_end = total_start + 0.05;
             }
@@ -6455,17 +6536,28 @@ fn render_hairpin_fragments(
                 }
                 let fragment_start_abs = first.global_index as f32 + start_progress;
                 let fragment_end_abs = last.global_index as f32 + end_progress;
-                let left_progress = ((fragment_start_abs - total_start) / total_span).clamp(0.0, 1.0);
-                let right_progress = ((fragment_end_abs - total_start) / total_span).clamp(0.0, 1.0);
-                let left_open_height = hairpin_open_height_at_progress(hairpin.kind, left_progress, HAIRPIN_OPEN_HEIGHT_PT);
-                let right_open_height = hairpin_open_height_at_progress(hairpin.kind, right_progress, HAIRPIN_OPEN_HEIGHT_PT);
+                let left_progress =
+                    ((fragment_start_abs - total_start) / total_span).clamp(0.0, 1.0);
+                let right_progress =
+                    ((fragment_end_abs - total_start) / total_span).clamp(0.0, 1.0);
+                let left_open_height = hairpin_open_height_at_progress(
+                    hairpin.kind,
+                    left_progress,
+                    HAIRPIN_OPEN_HEIGHT_PT,
+                );
+                let right_open_height = hairpin_open_height_at_progress(
+                    hairpin.kind,
+                    right_progress,
+                    HAIRPIN_OPEN_HEIGHT_PT,
+                );
                 let top_y = bottom_skyline_sample(
                     items,
                     fragment,
                     start_x,
                     end_x,
                     first.y_pt + first.height_pt,
-                ) + HAIRPIN_GAP_BELOW_PT + hairpin_offset_y;
+                ) + HAIRPIN_GAP_BELOW_PT
+                    + hairpin_offset_y;
                 let center_y = top_y + HAIRPIN_OPEN_HEIGHT_PT * 0.5;
                 let left_top_y = center_y - left_open_height * 0.5;
                 let left_bottom_y = center_y + left_open_height * 0.5;
@@ -8431,7 +8523,10 @@ fn test_header_layout_box_bounds_and_page0_cursor_use_actual_visual_bottom() {
     let fixed_cursor = opts.top_margin_pt + opts.header_height_pt + opts.header_staff_spacing_pt;
     let cursor = page0_first_system_cursor(&opts, &header_box);
     assert!(cursor > fixed_cursor);
-    assert_eq!(cursor, header_box.visual_bottom + opts.header_staff_spacing_pt);
+    assert_eq!(
+        cursor,
+        header_box.visual_bottom + opts.header_staff_spacing_pt
+    );
 
     let empty_header = RenderHeader {
         tempo: 0,
@@ -8443,6 +8538,75 @@ fn test_header_layout_box_bounds_and_page0_cursor_use_actual_visual_bottom() {
     let empty_box = render_header_layout_box(&empty_header, &opts);
     assert!(empty_box.items.is_empty());
     assert_eq!(page0_first_system_cursor(&opts, &empty_box), fixed_cursor);
+}
+
+#[test]
+fn test_paginate_system_boxes_with_mock_boxes() {
+    fn mock_box(index: u32, height: f32) -> SystemLayoutBox {
+        let measure_id = format!("measure-{index}");
+        SystemLayoutBox {
+            system_index: index,
+            system_id: format!("system-{index}"),
+            local_system_origin_y: 10.0,
+            staff_top: 20.0,
+            staff_bottom: 60.0,
+            visual_top: -5.0,
+            visual_bottom: height - 5.0,
+            width_pt: 160.0,
+            measures: vec![SceneMeasure {
+                id: measure_id.clone(),
+                index,
+                global_index: index,
+                system_id: format!("system-{index}"),
+                x_pt: 0.0,
+                y_pt: 10.0,
+                width_pt: 160.0,
+                height_pt: 50.0,
+            }],
+            systems: Vec::new(),
+            items: Vec::new(),
+            composites: Vec::new(),
+        }
+    }
+
+    let opts = LayoutOptions {
+        page_width_pt: 200.0,
+        page_height_pt: 220.0,
+        top_margin_pt: 20.0,
+        bottom_margin_pt: 20.0,
+        left_margin_pt: 12.0,
+        header_height_pt: 30.0,
+        header_staff_spacing_pt: 10.0,
+        system_spacing_pt: 8.0,
+        ..LayoutOptions::default()
+    };
+    let header = HeaderLayoutBox {
+        items: Vec::new(),
+        composites: Vec::new(),
+        visual_top: 0.0,
+        visual_bottom: 80.0,
+    };
+
+    let result = paginate_system_boxes(
+        &[mock_box(0, 40.0), mock_box(1, 60.0), mock_box(2, 60.0)],
+        &header,
+        &opts,
+    );
+    assert_eq!(result.issues, Vec::<String>::new());
+    assert_eq!(result.placements[0].page_index, 0);
+    assert_eq!(result.placements[0].page_y, 90.0);
+    assert_eq!(result.placements[0].page_x, 12.0);
+    assert_eq!(result.placements[1].page_index, 0);
+    assert_eq!(result.placements[1].page_y, 138.0);
+    assert_eq!(result.placements[2].page_index, 1);
+    assert_eq!(result.placements[2].page_y, 20.0);
+
+    let overflow = paginate_system_boxes(&[mock_box(9, 250.0)], &header, &opts);
+    assert_eq!(overflow.placements[0].page_index, 0);
+    assert_eq!(
+        overflow.issues,
+        ["LAYOUT_WARNING overflow page=0 system=system-9 visualHeight=250.00 availableHeight=180.00"]
+    );
 }
 
 #[test]
