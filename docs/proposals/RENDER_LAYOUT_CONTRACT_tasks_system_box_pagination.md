@@ -219,7 +219,7 @@ Changes in v0.2:
 - **Dependencies**: None
 
 ### Task 3: Scene Item Bounds Module
-- [ ] **Status**: Pending
+- [x] **Status**: Done
 - **Scope**: `crates/drummark-layout/src/lib.rs`
 - **Input/Output Contract**: Input is a `SceneItem`; output is a deterministic bounds rectangle or a test-visible error for unsupported primitives.
 - **Commits**:

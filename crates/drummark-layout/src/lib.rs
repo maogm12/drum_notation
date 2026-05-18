@@ -6377,6 +6377,20 @@ struct EdgeGroup {
     below_staff: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct SceneItemBounds {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+}
+
+impl SceneItemBounds {
+    fn as_tuple(self) -> (f32, f32, f32, f32) {
+        (self.x, self.y, self.width, self.height)
+    }
+}
+
 fn stack_scene_structural_items(
     items: &mut [SceneItem],
     composites: &[SceneComposite],
@@ -6564,7 +6578,7 @@ fn item_bounds(item: &SceneItem) -> Option<(f32, f32, f32, f32)> {
                 .fold(f32::NEG_INFINITY, f32::max);
             Some((min_x, min_y, max_x - min_x, max_y - min_y))
         }
-        ScenePrimitive::Path(path) => path_bounds(&path.d),
+        ScenePrimitive::Path(path) => path_bounds(&path.d).map(SceneItemBounds::as_tuple),
         ScenePrimitive::GlyphRun(glyph) => {
             let metric = canonical_glyph_metric(glyph.glyph_role);
             let ss_to_pt = glyph.font_size_pt / 4.0;
@@ -6574,6 +6588,106 @@ fn item_bounds(item: &SceneItem) -> Option<(f32, f32, f32, f32)> {
                 metric.bbox_width_ss() * ss_to_pt,
                 metric.bbox_height_ss() * ss_to_pt,
             ))
+        }
+    }
+}
+
+#[allow(dead_code)]
+fn scene_item_bounds(item: &SceneItem) -> Result<SceneItemBounds, String> {
+    match &item.primitive {
+        ScenePrimitive::TextRun(text) => {
+            let metric = canonical_text_metric(text.text_role);
+            let width = canonical_text_width(text.text_role, &text.text);
+            let x = match text.text_anchor.as_deref() {
+                Some("middle") => text.x_pt - width * 0.5,
+                Some("end") => text.x_pt - width,
+                _ => text.x_pt,
+            };
+            Ok(SceneItemBounds {
+                x,
+                y: text.y_pt - metric.ascent_pt,
+                width,
+                height: metric.line_height_pt,
+            })
+        }
+        ScenePrimitive::LineSegment(line) => {
+            let pad = line.stroke_width * 0.5;
+            let min_x = line.x1_pt.min(line.x2_pt) - pad;
+            let min_y = line.y1_pt.min(line.y2_pt) - pad;
+            let max_x = line.x1_pt.max(line.x2_pt) + pad;
+            let max_y = line.y1_pt.max(line.y2_pt) + pad;
+            Ok(SceneItemBounds {
+                x: min_x,
+                y: min_y,
+                width: max_x - min_x,
+                height: max_y - min_y,
+            })
+        }
+        ScenePrimitive::Rect(rect) => {
+            let pad = if rect.stroke.is_some() {
+                rect.stroke_width.unwrap_or(1.0) * 0.5
+            } else {
+                0.0
+            };
+            Ok(SceneItemBounds {
+                x: rect.x_pt - pad,
+                y: rect.y_pt - pad,
+                width: rect.width_pt + pad * 2.0,
+                height: rect.height_pt + pad * 2.0,
+            })
+        }
+        ScenePrimitive::Polyline(polyline) => {
+            if polyline.points_pt.is_empty() {
+                return Err(format!("SceneItem {} has an empty polyline", item.id));
+            }
+            let min_x = polyline
+                .points_pt
+                .iter()
+                .map(|(x, _)| *x)
+                .fold(f32::INFINITY, f32::min);
+            let min_y = polyline
+                .points_pt
+                .iter()
+                .map(|(_, y)| *y)
+                .fold(f32::INFINITY, f32::min);
+            let max_x = polyline
+                .points_pt
+                .iter()
+                .map(|(x, _)| *x)
+                .fold(f32::NEG_INFINITY, f32::max);
+            let max_y = polyline
+                .points_pt
+                .iter()
+                .map(|(_, y)| *y)
+                .fold(f32::NEG_INFINITY, f32::max);
+            Ok(SceneItemBounds {
+                x: min_x,
+                y: min_y,
+                width: max_x - min_x,
+                height: max_y - min_y,
+            })
+        }
+        ScenePrimitive::Path(path) => {
+            let mut bounds = path_bounds(&path.d)
+                .ok_or_else(|| format!("SceneItem {} has an unsupported path", item.id))?;
+            if path.stroke.is_some() {
+                let pad = path.stroke_width.unwrap_or(1.0) * 0.5;
+                bounds.x -= pad;
+                bounds.y -= pad;
+                bounds.width += pad * 2.0;
+                bounds.height += pad * 2.0;
+            }
+            Ok(bounds)
+        }
+        ScenePrimitive::GlyphRun(glyph) => {
+            let metric = canonical_glyph_metric(glyph.glyph_role);
+            let ss_to_pt = glyph.font_size_pt / 4.0;
+            Ok(SceneItemBounds {
+                x: glyph.x_pt + metric.bbox_sw_x_ss * ss_to_pt,
+                y: glyph.y_pt - metric.bbox_ne_y_ss * ss_to_pt,
+                width: metric.bbox_width_ss() * ss_to_pt,
+                height: metric.bbox_height_ss() * ss_to_pt,
+            })
         }
     }
 }
@@ -6609,7 +6723,7 @@ fn translate_item(item: &mut SceneItem, dy: f32) {
     }
 }
 
-fn path_bounds(d: &str) -> Option<(f32, f32, f32, f32)> {
+fn path_bounds(d: &str) -> Option<SceneItemBounds> {
     let numbers = d
         .split(|ch: char| !(ch.is_ascii_digit() || ch == '.' || ch == '-'))
         .filter(|segment| !segment.is_empty())
@@ -6630,7 +6744,12 @@ fn path_bounds(d: &str) -> Option<(f32, f32, f32, f32)> {
             max_y = max_y.max(*y);
         }
     }
-    Some((min_x, min_y, max_x - min_x, max_y - min_y))
+    Some(SceneItemBounds {
+        x: min_x,
+        y: min_y,
+        width: max_x - min_x,
+        height: max_y - min_y,
+    })
 }
 
 fn translate_path_y(d: &mut String, dy: f32) {
@@ -7908,6 +8027,166 @@ fn test_system_box_pagination_contracts_and_overflow_warning_schema() {
         issues[1],
         "LAYOUT_WARNING overflow page=1 system=system-2 visualHeight=900.00 availableHeight=700.00"
     );
+}
+
+#[test]
+fn test_scene_item_bounds_cover_emitted_primitive_kinds() {
+    let text = SceneItem {
+        id: "text".into(),
+        measure_id: None,
+        anchor_item_id: None,
+        role: "title".into(),
+        kind: SceneItemKind::TextRun,
+        z_index: 0,
+        primitive: ScenePrimitive::TextRun(TextRun {
+            x_pt: 100.0,
+            y_pt: 50.0,
+            text_role: TextRole::Title,
+            text: "AB".into(),
+            font_family: "Academico".into(),
+            font_size_pt: 24.0,
+            fill: "#333".into(),
+            text_anchor: Some("middle".into()),
+            font_weight: None,
+        }),
+    };
+    let text_bounds = scene_item_bounds(&text).unwrap();
+    assert_eq!(text_bounds.x, 89.0);
+    assert_eq!(text_bounds.y, 32.0);
+    assert_eq!(text_bounds.height, 28.0);
+
+    let glyph = SceneItem {
+        id: "glyph".into(),
+        measure_id: None,
+        anchor_item_id: None,
+        role: "notehead".into(),
+        kind: SceneItemKind::GlyphRun,
+        z_index: 0,
+        primitive: ScenePrimitive::GlyphRun(GlyphRun {
+            x_pt: 10.0,
+            y_pt: 20.0,
+            glyph_role: GlyphRole::NoteheadBlack,
+            glyph_count: 1,
+            smufl_codepoint: Some(0xE0A4),
+            font_family: "Bravura".into(),
+            font_size_pt: 20.0,
+            fill: "#333".into(),
+        }),
+    };
+    let glyph_bounds = scene_item_bounds(&glyph).unwrap();
+    assert_eq!(glyph_bounds.x, 10.0);
+    assert_eq!(glyph_bounds.y, 17.5);
+    assert!((glyph_bounds.width - 5.9).abs() < 0.001);
+
+    let line = SceneItem {
+        id: "line".into(),
+        measure_id: None,
+        anchor_item_id: None,
+        role: "staff-line".into(),
+        kind: SceneItemKind::LineSegment,
+        z_index: 0,
+        primitive: ScenePrimitive::LineSegment(LineSegment {
+            x1_pt: 10.0,
+            y1_pt: 20.0,
+            x2_pt: 30.0,
+            y2_pt: 20.0,
+            stroke: "#333".into(),
+            stroke_width: 2.0,
+            stroke_line_cap: None,
+        }),
+    };
+    assert_eq!(
+        scene_item_bounds(&line).unwrap(),
+        SceneItemBounds {
+            x: 9.0,
+            y: 19.0,
+            width: 22.0,
+            height: 2.0
+        }
+    );
+
+    let rect = SceneItem {
+        id: "rect".into(),
+        measure_id: None,
+        anchor_item_id: None,
+        role: "beam".into(),
+        kind: SceneItemKind::Rect,
+        z_index: 0,
+        primitive: ScenePrimitive::Rect(RectShape {
+            x_pt: 4.0,
+            y_pt: 5.0,
+            width_pt: 10.0,
+            height_pt: 3.0,
+            fill: "#333".into(),
+            stroke: Some("#333".into()),
+            stroke_width: Some(2.0),
+        }),
+    };
+    assert_eq!(
+        scene_item_bounds(&rect).unwrap(),
+        SceneItemBounds {
+            x: 3.0,
+            y: 4.0,
+            width: 12.0,
+            height: 5.0
+        }
+    );
+
+    let polyline = SceneItem {
+        id: "polyline".into(),
+        measure_id: None,
+        anchor_item_id: None,
+        role: "shape".into(),
+        kind: SceneItemKind::Polyline,
+        z_index: 0,
+        primitive: ScenePrimitive::Polyline(Polyline {
+            points_pt: vec![(5.0, 12.0), (20.0, -2.0), (7.0, 4.0)],
+        }),
+    };
+    assert_eq!(
+        scene_item_bounds(&polyline).unwrap(),
+        SceneItemBounds {
+            x: 5.0,
+            y: -2.0,
+            width: 15.0,
+            height: 14.0
+        }
+    );
+
+    let path = SceneItem {
+        id: "path".into(),
+        measure_id: None,
+        anchor_item_id: None,
+        role: "beam".into(),
+        kind: SceneItemKind::Path,
+        z_index: 0,
+        primitive: ScenePrimitive::Path(PathShape {
+            d: "M 10 10 L 30 12 L 28 16 L 8 14 Z".into(),
+            fill: "#333".into(),
+            stroke: Some("#333".into()),
+            stroke_width: Some(2.0),
+        }),
+    };
+    assert_eq!(
+        scene_item_bounds(&path).unwrap(),
+        SceneItemBounds {
+            x: 7.0,
+            y: 9.0,
+            width: 24.0,
+            height: 8.0
+        }
+    );
+
+    let empty_polyline = SceneItem {
+        id: "empty".into(),
+        measure_id: None,
+        anchor_item_id: None,
+        role: "shape".into(),
+        kind: SceneItemKind::Polyline,
+        z_index: 0,
+        primitive: ScenePrimitive::Polyline(Polyline { points_pt: vec![] }),
+    };
+    assert!(scene_item_bounds(&empty_polyline).is_err());
 }
 
 #[test]
