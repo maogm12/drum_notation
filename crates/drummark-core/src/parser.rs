@@ -48,16 +48,14 @@ impl<'a> Parser<'a> {
             return Some(self.peek_buf[0].0.clone());
         }
         let mut iter = self.lexer.clone();
-        loop {
-            match iter.next() {
-                Some(Ok(t)) => return Some(t),
-                Some(Err(())) => {
-                    let span = iter.span();
-                    let ch = &self.source[span.start..span.end];
-                    return Some(Token::FreeText(ch.to_string()));
-                }
-                None => return None,
+        match iter.next() {
+            Some(Ok(t)) => Some(t),
+            Some(Err(())) => {
+                let span = iter.span();
+                let ch = &self.source[span.start..span.end];
+                Some(Token::FreeText(ch.to_string()))
             }
+            None => None,
         }
     }
 
@@ -93,11 +91,11 @@ impl<'a> Parser<'a> {
         let num_start = i;
         if bytes.get(i) == Some(&b'1') {
             i += 1;
-            if !bytes.get(i).map_or(false, |b| b.is_ascii_digit()) { return None; }
-            while bytes.get(i).map_or(false, |b| b.is_ascii_digit()) { i += 1; }
-        } else if bytes.get(i).map_or(false, |b| (b'2'..=b'9').contains(b)) {
+            if !bytes.get(i).is_some_and(|b| b.is_ascii_digit()) { return None; }
+            while bytes.get(i).is_some_and(|b| b.is_ascii_digit()) { i += 1; }
+        } else if bytes.get(i).is_some_and(|b| (b'2'..=b'9').contains(b)) {
             i += 1;
-            while bytes.get(i).map_or(false, |b| b.is_ascii_digit()) { i += 1; }
+            while bytes.get(i).is_some_and(|b| b.is_ascii_digit()) { i += 1; }
         } else {
             return None;
         }
@@ -287,15 +285,18 @@ impl<'a> Parser<'a> {
 
     fn parse_headers(&mut self) -> HeaderSection {
         let mut hs = HeaderSection::default();
-        loop {
-            match self.peek() {
-                Some(Token::KwTitle) | Some(Token::KwSubtitle) | Some(Token::KwComposer)
-                | Some(Token::KwTempo) | Some(Token::KwTime) | Some(Token::KwGrouping)
-                | Some(Token::KwNote) | Some(Token::KwDivisions) => {
-                    self.parse_header_line(&mut hs);
-                }
-                _ => break,
-            }
+        while matches!(
+            self.peek(),
+            Some(Token::KwTitle)
+                | Some(Token::KwSubtitle)
+                | Some(Token::KwComposer)
+                | Some(Token::KwTempo)
+                | Some(Token::KwTime)
+                | Some(Token::KwGrouping)
+                | Some(Token::KwNote)
+                | Some(Token::KwDivisions)
+        ) {
+            self.parse_header_line(&mut hs);
         }
         hs
     }
@@ -891,12 +892,10 @@ impl<'a> Parser<'a> {
         // Handle standalone volta number without | prefix (appears after :|)
         if let Some(Token::Integer(n)) = self.peek() {
             self.next().ok();
-            let mut nums = vec![n as u32];
-            loop {
-                if let Some(Token::Integer(n2)) = self.peek() {
-                    self.next().ok();
-                    nums.push(n2 as u32);
-                } else { break; }
+            let mut nums = vec![n];
+            while let Some(Token::Integer(n2)) = self.peek() {
+                self.next().ok();
+                nums.push(n2);
                 if self.peek() == Some(Token::Comma) { self.next().ok(); }
                 else { break; }
             }
@@ -922,9 +921,9 @@ impl<'a> Parser<'a> {
     fn parse_volta_barline(&mut self, prefix: &str) -> Result<Barline, ParseError> {
         if matches!(self.peek(), Some(Token::Integer(_))) {
             let mut nums = Vec::new();
-            loop {
-                if let Some(Token::Integer(n)) = self.peek() { self.next().ok(); nums.push(n); }
-                else { break; }
+            while let Some(Token::Integer(n)) = self.peek() {
+                self.next().ok();
+                nums.push(n);
                 if self.peek() == Some(Token::Comma) { self.next().ok(); }
                 else { break; }
             }

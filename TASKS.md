@@ -101,3 +101,13 @@
 - [ ] Extract `drumscript/` directory and define its clean API
 - [ ] Implement `|1.`, `|2.` and `|. ` syntax in Parser
 - [ ] Update `compiler.ts` to populate `volta` and `voltaStatus`
+
+## Rust Cleanup Todo
+
+- [x] Remove obsolete `drummark-core::build_layout_plan` hand-drawn layout path
+- [x] Remove obsolete `drummark-layout::layout_plan` empty WASM export
+- [x] Preserve `LayoutOptions::default()` values when JS callers omit optional fields
+- [x] Replace lexer multi-rest no-op test with a real assertion
+- [x] Clean obvious Clippy findings in `drummark-layout`
+- [ ] Refactor scene renderer helpers to reduce argument-heavy functions
+- [ ] Design and implement true multi-page layout for long scores

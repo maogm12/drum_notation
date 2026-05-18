@@ -106,29 +106,27 @@ pub fn resolve_token(
     };
 
     // 2. Accent magic tokens
-    if ACCENT_MAGIC_TOKENS.contains(&glyph) && !(track == "ST" && is_sticking) {
-        if !has_modifier(&modifiers, "accent") {
-            modifiers.push("accent".to_string());
-        }
+    if ACCENT_MAGIC_TOKENS.contains(&glyph)
+        && !(track == "ST" && is_sticking)
+        && !has_modifier(&modifiers, "accent")
+    {
+        modifiers.push("accent".to_string());
     }
 
     // 3. Ghost/open modifiers
-    if glyph == "g" || glyph == "G" {
-        if !has_modifier(&modifiers, "ghost") {
-            modifiers.push("ghost".to_string());
-        }
+    if (glyph == "g" || glyph == "G") && !has_modifier(&modifiers, "ghost") {
+        modifiers.push("ghost".to_string());
     }
-    if glyph == "o" || glyph == "O" {
-        if !has_modifier(&modifiers, "open") {
-            modifiers.push("open".to_string());
-        }
+    if (glyph == "o" || glyph == "O") && !has_modifier(&modifiers, "open") {
+        modifiers.push("open".to_string());
     }
 
     // 4. Context-aware x/X → cross for drum family
-    if (glyph == "x" || glyph == "X") && get_track_family(&track) == TrackFamily::Drum {
-        if !has_modifier(&modifiers, "cross") {
-            modifiers.push("cross".to_string());
-        }
+    if (glyph == "x" || glyph == "X")
+        && get_track_family(&track) == TrackFamily::Drum
+        && !has_modifier(&modifiers, "cross")
+    {
+        modifiers.push("cross".to_string());
     }
 
     // 5. Notehead selection

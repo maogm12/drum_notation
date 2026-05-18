@@ -334,7 +334,7 @@ fn decompose_rest_duration(duration: Fraction) -> Vec<Fraction> {
     result
 }
 
-fn sort_render_events(events: &mut Vec<drummark_layout::RenderEvent>) {
+fn sort_render_events(events: &mut [drummark_layout::RenderEvent]) {
     events.sort_by(|left, right| {
         let start = (left.start.numerator as u64 * right.start.denominator as u64)
             .cmp(&(right.start.numerator as u64 * left.start.denominator as u64));

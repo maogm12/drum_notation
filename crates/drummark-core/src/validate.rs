@@ -45,7 +45,7 @@ pub fn validate_grouping(
 
     for (i, &g) in grouping.iter().enumerate() {
         let boundary = g * divisions;
-        if boundary % beats != 0 {
+        if !boundary.is_multiple_of(beats) {
             return Some(format!(
                 "grouping segment {} value {} does not fall on integer slot boundary",
                 i + 1, g

@@ -1,4 +1,7 @@
 #![allow(dead_code)]
+#![allow(clippy::items_after_test_module)]
+#![allow(clippy::should_implement_trait)]
+#![allow(clippy::too_many_arguments)]
 
 use wasm_bindgen::prelude::*;
 use js_sys::{Array, Object};
@@ -356,386 +359,61 @@ fn set(obj: &js_sys::Object, key: &str, val: &JsValue) {
 }
 
 fn parse_layout_options(options: &JsValue) -> drummark_layout::LayoutOptions {
-    if options.is_object() {
-        let get_f64 = |key: &str| -> f64 {
-            js_sys::Reflect::get(options, &JsValue::from_str(key))
-                .ok()
-                .and_then(|v| v.as_f64())
-                .unwrap_or(0.0)
-        };
-        let get_optional_f64 = |key: &str| -> Option<f64> {
-            js_sys::Reflect::get(options, &JsValue::from_str(key))
-                .ok()
-                .and_then(|v| v.as_f64())
-        };
-        let width = get_f64("pageWidth");
-        let height = get_f64("pageHeight");
-        let top = get_f64("topMargin");
-        let bottom = get_f64("bottomMargin");
-        let left = get_f64("leftMargin");
-        let right = get_f64("rightMargin");
-        let scale = get_f64("staffScale");
-        let px_q = get_f64("pxPerQuarter");
-        let stem_len = get_f64("stemLenPt");
-        let sys_spacing = get_optional_f64("systemSpacing");
-        let header_height = get_optional_f64("headerHeight");
-        let header_staff_spacing = get_optional_f64("headerStaffSpacing");
-        let volta_spacing = get_optional_f64("voltaSpacing");
-        let hairpin_offset = get_optional_f64("hairpinOffsetY");
-        let dur_compression = get_optional_f64("durationSpacingCompression");
-        let measure_compression = get_optional_f64("measureWidthCompression");
-        let hide_v2_rests = js_sys::Reflect::get(options, &JsValue::from_str("hideVoice2Rests"))
+    let mut opts = drummark_layout::LayoutOptions::default();
+    if !options.is_object() {
+        return opts;
+    }
+
+    let get_optional_f64 = |key: &str| -> Option<f64> {
+        js_sys::Reflect::get(options, &JsValue::from_str(key))
+            .ok()
+            .and_then(|v| v.as_f64())
+    };
+    let get_optional_bool = |key: &str| -> Option<bool> {
+        js_sys::Reflect::get(options, &JsValue::from_str(key))
             .ok()
             .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-        if width > 0.0 && height > 0.0 {
-            drummark_layout::LayoutOptions {
-                page_width_pt: width as f32,
-                page_height_pt: height as f32,
-                top_margin_pt: top as f32,
-                bottom_margin_pt: bottom as f32,
-                left_margin_pt: left as f32,
-                right_margin_pt: right as f32,
-                staff_scale: if scale > 0.0 { scale as f32 } else { 0.75 },
-                px_per_quarter: if px_q > 0.0 { px_q as f32 } else { 80.0 },
-                stem_len_pt: if stem_len > 0.0 { stem_len as f32 } else { 31.0 },
-                system_spacing_pt: sys_spacing.unwrap_or(30.0) as f32,
-                header_height_pt: header_height.unwrap_or(50.0) as f32,
-                header_staff_spacing_pt: header_staff_spacing.unwrap_or(60.0) as f32,
-                volta_offset_y: volta_spacing.unwrap_or(0.0) as f32,
-                hairpin_offset_y: hairpin_offset.unwrap_or(0.0) as f32,
-                hide_voice2_rests: hide_v2_rests,
-                duration_spacing_compression: dur_compression.unwrap_or(0.6) as f32,
-                measure_width_compression: measure_compression.unwrap_or(0.75) as f32,
-                ..drummark_layout::LayoutOptions::default()
-            }
-        } else {
-            drummark_layout::LayoutOptions::default()
+    };
+    let assign_positive = |target: &mut f32, key: &str| {
+        if let Some(value) = get_optional_f64(key).filter(|value| *value > 0.0) {
+            *target = value as f32;
         }
-    } else {
-        drummark_layout::LayoutOptions::default()
+    };
+    let assign_any = |target: &mut f32, key: &str| {
+        if let Some(value) = get_optional_f64(key) {
+            *target = value as f32;
+        }
+    };
+
+    assign_positive(&mut opts.page_width_pt, "pageWidth");
+    assign_positive(&mut opts.page_height_pt, "pageHeight");
+    assign_any(&mut opts.top_margin_pt, "topMargin");
+    assign_any(&mut opts.bottom_margin_pt, "bottomMargin");
+    assign_any(&mut opts.left_margin_pt, "leftMargin");
+    assign_any(&mut opts.right_margin_pt, "rightMargin");
+    assign_positive(&mut opts.staff_scale, "staffScale");
+    assign_positive(&mut opts.px_per_quarter, "pxPerQuarter");
+    assign_positive(&mut opts.stem_len_pt, "stemLenPt");
+    assign_any(&mut opts.system_spacing_pt, "systemSpacing");
+    assign_any(&mut opts.header_height_pt, "headerHeight");
+    assign_any(&mut opts.header_staff_spacing_pt, "headerStaffSpacing");
+    assign_any(&mut opts.volta_offset_y, "voltaSpacing");
+    assign_any(&mut opts.hairpin_offset_y, "hairpinOffsetY");
+    assign_any(
+        &mut opts.duration_spacing_compression,
+        "durationSpacingCompression",
+    );
+    assign_any(
+        &mut opts.measure_width_compression,
+        "measureWidthCompression",
+    );
+    if let Some(value) = get_optional_bool("hideVoice2Rests") {
+        opts.hide_voice2_rests = value;
     }
+
+    opts
 }
 
 fn layout_scene_to_js(scene: &drummark_layout::LayoutScene) -> JsValue {
     drummark_layout::layout_scene_to_js(scene)
-}
-
-// ── Combined: Parse + Normalize + Layout → LayoutPlan ──────────
-
-#[wasm_bindgen]
-pub fn build_layout_plan(source: &str, options: JsValue) -> JsValue {
-    // 0. Parse layout options from JS
-    let mut show_debug_bbox = false;
-    let opts = if options.is_object() {
-        let get_f64 = |key: &str| -> f64 {
-            js_sys::Reflect::get(&options, &JsValue::from_str(key))
-                .ok().and_then(|v| v.as_f64()).unwrap_or(0.0)
-        };
-        let width = get_f64("pageWidth");
-        let height = get_f64("pageHeight");
-        let top = get_f64("topMargin");
-        let bottom = get_f64("bottomMargin");
-        let left = get_f64("leftMargin");
-        let right = get_f64("rightMargin");
-        let scale = get_f64("staffScale");
-        let px_q = get_f64("pxPerQuarter");
-        let header_height = get_f64("headerHeight");
-        let header_staff_spacing = get_f64("headerStaffSpacing");
-        let hairpin_offset = get_f64("hairpinOffsetY");
-        show_debug_bbox = get_f64("debug") > 0.0;
-        if width > 0.0 && height > 0.0 {
-            drummark_layout::LayoutOptions {
-                page_width_pt: width as f32,
-                page_height_pt: height as f32,
-                top_margin_pt: top as f32,
-                bottom_margin_pt: bottom as f32,
-                left_margin_pt: left as f32,
-                right_margin_pt: right as f32,
-                staff_scale: if scale > 0.0 { scale as f32 } else { 0.75 },
-                px_per_quarter: if px_q > 0.0 { px_q as f32 } else { 80.0 },
-                header_height_pt: if header_height > 0.0 { header_height as f32 } else { 50.0 },
-                header_staff_spacing_pt: header_staff_spacing as f32,
-                hairpin_offset_y: hairpin_offset as f32,
-                ..drummark_layout::LayoutOptions::default()
-            }
-        } else {
-            drummark_layout::LayoutOptions::default()
-        }
-    } else {
-        drummark_layout::LayoutOptions::default()
-    };
-    // 1. Parse
-    let parser = parser::Parser::new(source);
-    let doc = match parser.parse() {
-        Ok(doc) => doc,
-        Err(errors) => return to_js::errors_to_js(&errors),
-    };
-
-    // 2. Normalize
-    let score = normalize::normalize_document(&doc);
-
-    // 3. Convert to layout-engine NormalizedScore
-    let layout_score = render_score::derive_render_score(&score);
-
-    // 4. Build systems grouped by paragraph_index
-    let mut para_systems: Vec<Vec<&drummark_layout::NormalizedMeasure>> = Vec::new();
-    let mut current_para = -1i32;
-    for m in &layout_score.measures {
-        if m.paragraph_index as i32 != current_para {
-            para_systems.push(Vec::new());
-            current_para = m.paragraph_index as i32;
-        }
-        para_systems.last_mut().unwrap().push(m);
-    }
-
-    // 5. Serialize as pages → systems → drawing instructions
-    let sys_arr = Array::new();
-    let page_w = opts.page_width_pt as f64;
-    let page_h = opts.page_height_pt as f64;
-    let margin = opts.left_margin_pt as f64;
-    let staff_ss = 10.0_f64;
-    let center_x = page_w / 2.0;
-    let content_start = margin + 103.0; // clef + time sig + gap
-    // VexFlow-compatible Y offset: accounts for title area + stave internal margin  
-    let header_area_h = 130.0;
-    let mut sys_y = opts.top_margin_pt as f64 + header_area_h;
-
-    // ── Title / Subtitle / Composer / Tempo ────────────────────
-
-    if let Some(ref t) = layout_score.header.title {
-        append_text_bold(&sys_arr, center_x, 72.0, t, "Bravura", 24.0, "#333", "middle");
-    }
-    if let Some(ref t) = layout_score.header.subtitle {
-        append_text_anchor(&sys_arr, center_x, 96.0, t, "Bravura", 12.0, "#333", "middle");
-    }
-    if let Some(ref t) = layout_score.header.composer {
-        append_text_anchor(&sys_arr, page_w - margin, 72.0, t, "Bravura", 10.0, "#333", "end");
-    }
-    if layout_score.header.tempo > 0 {
-        let tempo_y = 160.0;
-        append_text(&sys_arr, margin + 32.0, tempo_y, "\u{E0A4}", "Bravura", 25.0, "#333");
-        append_text(&sys_arr, margin + 57.0, tempo_y, "=", "Bravura", 14.0, "#333");
-        append_text(&sys_arr, margin + 68.0, tempo_y, &layout_score.header.tempo.to_string(), "Bravura", 14.0, "#333");
-    }
-
-    let mut sys_idx = 0;
-    for measures in &para_systems {
-        let is_first_system = sys_idx == 0;
-        sys_idx += 1;
-        let sy = sys_y;
-        sys_y += 130.0; // staff height (40) + inter-system gap (90) = 130
-        let s_top = sy + staff_ss;
-        let s_bot = sy + staff_ss * 5.0;
-        let s_mid = sy + staff_ss * 3.0;
-
-        // Staff lines
-        for i in 0..5 {
-            let ly = sy + staff_ss * (1.0 + i as f64);
-            append_line(&sys_arr, margin, ly, page_w - margin, ly, "#333", 1.0);
-        }
-
-        // Percussion clef — dominant-baseline="central" centers on y
-        append_text(&sys_arr, margin + 18.0, s_mid, "\u{E069}", "Bravura", 30.0, "#333");
-
-        // Time signature — fills spaces 1-4 (full staff height)
-        if is_first_system {
-            let tsx = margin + 62.0;
-            let beats = layout_score.header.time_beats;
-            let unit = layout_score.header.time_beat_unit;
-            append_text(&sys_arr, tsx, sy + staff_ss * 2.0, &num_to_glyph(beats), "Bravura", 30.0, "#333");
-            append_text(&sys_arr, tsx, sy + staff_ss * 4.0, &num_to_glyph(unit), "Bravura", 30.0, "#333");
-        }
-
-        // Measures — equal width. No barline between clef/ts and first measure.
-        let available_w = (page_w - margin * 2.0 - 70.0).max(100.0);
-        let mw = available_w / measures.len().max(1) as f64;
-        let mut mx = content_start;
-
-        // Left barline (opening) — 1pt extra height to match VexFlow
-        append_rect(&sys_arr, margin, s_top, 1.0, s_bot - s_top + 1.0, "#333");
-
-        // Measure number for non-first systems
-        if !is_first_system {
-            append_text(&sys_arr, margin, sy - staff_ss, &format!("{}", measures[0].paragraph_index + 1), "Bravura", 11.0, "#333");
-        }
-
-        for (mi, m) in measures.iter().enumerate() {
-            // Barline between measures (rect)
-            if mi > 0 {
-                append_rect(&sys_arr, mx, s_top, 1.0, s_bot - s_top + 1.0, "#333");
-            }
-
-            // Notes — distribute evenly across measure width
-            let hit_count = m.events.iter().filter(|e| e.kind == drummark_layout::EventKind::Hit).count().max(1);
-            let note_spacing = (mw - 24.0) / hit_count as f64;
-            let mut note_idx = 0;
-            for ev in &m.events {
-                if ev.kind == drummark_layout::EventKind::Hit {
-                    let nx = mx + 12.0 + note_spacing * note_idx as f64;
-                    let track_ss = drummark_layout::staff_y_for_track(&ev.track);
-                    let ny = s_top + track_ss as f64 * staff_ss;
-                    let cp = 0xE0A4u32;
-                    let nh_x = nx - 7.0;
-                    // SMuFL noteheadBlack anchors in staff-space units (Bravura metadata)
-                    //   stemUpSE:  (1.18,  0.168) — stem-up connection at top-right
-                    //   stemDownNW:(0.0,  -0.168) — stem-down connection at bottom-left
-                    // Fallback to glyphBBoxes if anchor not available:
-                    //   bBoxNE: (1.18, 0.5), bBoxSW: (0.0, -0.5)
-                    let nh_font_size = 30.0;
-                    let smufl_ss = nh_font_size / 4.0; // 1 SMuFL ss in pt = font-size / 4
-                    let stem_up = !matches!(ev.track.as_str(), "BD" | "BD2" | "HF");
-                    // Anchor-based stem connection point (preferred over bbox edges)
-                    let (anchor_x, anchor_y) = if stem_up {
-                        (1.18, 0.168)  // stemUpSE
-                    } else {
-                        (0.0, -0.168)  // stemDownNW
-                    };
-                    // Connection point in our coordinates:
-                    //   x = origin + anchor_x * smufl_ss  (both use positive-x = rightward)
-                    //   y = origin - anchor_y * smufl_ss  (SMuFL y-up, SVG y-down: negate)
-                    let stem_cx = nh_x + anchor_x * smufl_ss;
-                    let stem_cy = ny - anchor_y * smufl_ss;
-                    // Stem length: 3.5 staff spaces (~one octave)
-                    let stem_len = staff_ss * 3.5;
-                    let stem_y1 = if stem_up { stem_cy - stem_len } else { stem_cy };
-                    let stem_y2 = if stem_up { stem_cy } else { stem_cy + stem_len };
-
-                    // Debug bounding box (glyphBBoxes-based, outline only)
-                    if show_debug_bbox {
-                        // bBoxSW: (0.0, -0.5), bBoxNE: (1.18, 0.5) from Bravura metadata
-                        let bb_x = nh_x + 0.0 * smufl_ss;
-                        let bb_w = (1.18 - 0.0) * smufl_ss;
-                        let bb_top = ny - 0.5 * smufl_ss;
-                        let bb_h = (0.5 - (-0.5)) * smufl_ss;
-                        append_rect_stroke(&sys_arr, bb_x, bb_top, bb_w, bb_h, "red", 1.0);
-                    }
-                    // Group notehead + stem
-                    append_group_start(&sys_arr);
-                    append_text(&sys_arr, nh_x, ny, &char::from_u32(cp).unwrap_or('?').to_string(), "Bravura", 30.0, "#333");
-                    append_line(&sys_arr, stem_cx, stem_y1, stem_cx, stem_y2, "#333", 1.5);
-                    append_group_end(&sys_arr);
-                    note_idx += 1;
-                }
-            }
-
-            mx += mw;
-        }
-
-        // Closing barline (single for non-last, double for last system)
-        let is_last = sys_idx as usize == para_systems.len();
-        let bar_h = s_bot - s_top + 1.0;
-        append_rect(&sys_arr, mx, s_top, 1.0, bar_h, "#333");
-        if is_last {
-            append_rect(&sys_arr, mx + 4.0, s_top, 3.0, bar_h, "#333");
-        }
-    }
-
-    let pages_arr = Array::new();
-    let p_obj = Object::new();
-    set(&p_obj, "width", &JsValue::from_f64(page_w));
-    set(&p_obj, "height", &JsValue::from_f64(page_h));
-    set(&p_obj, "systems", &sys_arr);
-    pages_arr.push(&p_obj);
-
-    let result = Object::new();
-    set(&result, "pages", &pages_arr);
-    result.into()
-}
-
-fn append_line(arr: &Array, x1: f64, y1: f64, x2: f64, y2: f64, stroke: &str, sw: f64) {
-    let obj = Object::new();
-    set(&obj, "tag", &JsValue::from_str("line"));
-    set(&obj, "x1", &JsValue::from_f64(x1));
-    set(&obj, "y1", &JsValue::from_f64(y1));
-    set(&obj, "x2", &JsValue::from_f64(x2));
-    set(&obj, "y2", &JsValue::from_f64(y2));
-    set(&obj, "stroke", &JsValue::from_str(stroke));
-    set(&obj, "strokeWidth", &JsValue::from_f64(sw));
-    arr.push(&obj);
-}
-
-fn append_rect(arr: &Array, x: f64, y: f64, w: f64, h: f64, fill: &str) {
-    let obj = Object::new();
-    set(&obj, "tag", &JsValue::from_str("rect"));
-    set(&obj, "x", &JsValue::from_f64(x));
-    set(&obj, "y", &JsValue::from_f64(y));
-    set(&obj, "width", &JsValue::from_f64(w));
-    set(&obj, "height", &JsValue::from_f64(h));
-    set(&obj, "fill", &JsValue::from_str(fill));
-    arr.push(&obj);
-}
-
-fn append_rect_stroke(arr: &Array, x: f64, y: f64, w: f64, h: f64, stroke: &str, sw: f64) {
-    let obj = Object::new();
-    set(&obj, "tag", &JsValue::from_str("rect"));
-    set(&obj, "x", &JsValue::from_f64(x));
-    set(&obj, "y", &JsValue::from_f64(y));
-    set(&obj, "width", &JsValue::from_f64(w));
-    set(&obj, "height", &JsValue::from_f64(h));
-    set(&obj, "stroke", &JsValue::from_str(stroke));
-    set(&obj, "strokeWidth", &JsValue::from_f64(sw));
-    set(&obj, "fill", &JsValue::from_str("none"));
-    arr.push(&obj);
-}
-
-fn append_group_start(arr: &Array) {
-    let obj = Object::new();
-    set(&obj, "tag", &JsValue::from_str("g_open"));
-    arr.push(&obj);
-}
-
-fn append_group_end(arr: &Array) {
-    let obj = Object::new();
-    set(&obj, "tag", &JsValue::from_str("g_close"));
-    arr.push(&obj);
-}
-
-fn append_text(arr: &Array, x: f64, y: f64, text: &str, font: &str, size: f64, fill: &str) {
-    let obj = Object::new();
-    set(&obj, "tag", &JsValue::from_str("text"));
-    set(&obj, "x", &JsValue::from_f64(x));
-    set(&obj, "y", &JsValue::from_f64(y));
-    set(&obj, "text", &JsValue::from_str(text));
-    set(&obj, "fontFamily", &JsValue::from_str(font));
-    set(&obj, "fontSize", &JsValue::from_f64(size));
-    set(&obj, "fill", &JsValue::from_str(fill));
-    arr.push(&obj);
-}
-
-fn append_text_anchor(arr: &Array, x: f64, y: f64, text: &str, font: &str, size: f64, fill: &str, anchor: &str) {
-    let obj = Object::new();
-    set(&obj, "tag", &JsValue::from_str("text"));
-    set(&obj, "x", &JsValue::from_f64(x));
-    set(&obj, "y", &JsValue::from_f64(y));
-    set(&obj, "text", &JsValue::from_str(text));
-    set(&obj, "fontFamily", &JsValue::from_str(font));
-    set(&obj, "fontSize", &JsValue::from_f64(size));
-    set(&obj, "fill", &JsValue::from_str(fill));
-    set(&obj, "textAnchor", &JsValue::from_str(anchor));
-    arr.push(&obj);
-}
-
-fn append_text_bold(arr: &Array, x: f64, y: f64, text: &str, font: &str, size: f64, fill: &str, anchor: &str) {
-    let obj = Object::new();
-    set(&obj, "tag", &JsValue::from_str("text"));
-    set(&obj, "x", &JsValue::from_f64(x));
-    set(&obj, "y", &JsValue::from_f64(y));
-    set(&obj, "text", &JsValue::from_str(text));
-    set(&obj, "fontFamily", &JsValue::from_str(font));
-    set(&obj, "fontSize", &JsValue::from_f64(size));
-    set(&obj, "fill", &JsValue::from_str(fill));
-    set(&obj, "textAnchor", &JsValue::from_str(anchor));
-    set(&obj, "fontWeight", &JsValue::from_str("bold"));
-    arr.push(&obj);
-}
-
-fn num_to_glyph(n: u32) -> String {
-    match n {
-        0 => "\u{E080}".to_string(), 1 => "\u{E081}".to_string(), 2 => "\u{E082}".to_string(),
-        3 => "\u{E083}".to_string(), 4 => "\u{E084}".to_string(), 5 => "\u{E085}".to_string(),
-        6 => "\u{E086}".to_string(), 7 => "\u{E087}".to_string(), 8 => "\u{E088}".to_string(),
-        9 => "\u{E089}".to_string(),
-        _ => n.to_string(),
-    }
 }

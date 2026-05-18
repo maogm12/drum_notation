@@ -152,7 +152,7 @@ pub fn token_to_events(
             let count = *count;
             let span = *span;
             let effective_count = if count == 0 { items.len() as u32 } else { count };
-            let effective_span = if effective_count == span { span } else { span };
+            let effective_span = span;
             // Only mark as tuplet if there's actual compression/expansion
             let group_tuplet = if effective_count != span && effective_count > effective_span
             {
@@ -232,15 +232,12 @@ fn braced_total_weight(items: &[TokenGlyph]) -> Fraction {
 }
 
 fn apply_modifiers(token: &mut TokenGlyph, mods: &[String]) {
-    match token {
-        TokenGlyph::Basic { modifiers, .. } => {
-            for m in mods {
-                if !modifiers.contains(m) {
-                    modifiers.push(m.clone());
-                }
+    if let TokenGlyph::Basic { modifiers, .. } = token {
+        for m in mods {
+            if !modifiers.contains(m) {
+                modifiers.push(m.clone());
             }
         }
-        _ => {}
     }
 }
 

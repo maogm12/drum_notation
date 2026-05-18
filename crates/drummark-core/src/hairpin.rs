@@ -32,6 +32,12 @@ impl HairpinState {
     }
 }
 
+impl Default for HairpinState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Process events in a single measure for a single track, collecting hairpins.
 pub fn collect_track_hairpins(
     events: &[(Fraction, Option<HairpinKind>, Option<()>)], // (start, open_kind, close_signal)

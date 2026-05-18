@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use js_sys::{Array, Object};
 use wasm_bindgen::prelude::*;
 
@@ -1847,7 +1849,7 @@ mod tests {
 
     #[test]
     fn test_volta_segment_type_does_not_end_on_repeat_end_when_next_measure_matches() {
-        let mut source_measures = vec![
+        let mut source_measures = [
             regular_measure(0, 0, 1),
             regular_measure(1, 0, 1),
             regular_measure(2, 0, 1),
@@ -2125,8 +2127,10 @@ mod tests {
             regular_measure(1, 0, 1),
             regular_measure(2, 0, 1),
         ]);
-        let mut opts = LayoutOptions::default();
-        opts.page_width_pt = 260.0;
+        let opts = LayoutOptions {
+            page_width_pt: 260.0,
+            ..LayoutOptions::default()
+        };
 
         let scene = build_layout_scene(&score, &opts);
         assert_eq!(scene.pages[0].systems.len(), 1);
@@ -2139,11 +2143,13 @@ mod tests {
     #[test]
     fn test_each_paragraph_becomes_its_own_system() {
         let score = simple_layout_score(vec![regular_measure(0, 0, 1), regular_measure(1, 1, 1)]);
-        let mut opts = LayoutOptions::default();
-        opts.page_width_pt = 240.0;
-        opts.left_margin_pt = 20.0;
-        opts.right_margin_pt = 20.0;
-        opts.px_per_quarter = 10.0;
+        let opts = LayoutOptions {
+            page_width_pt: 240.0,
+            left_margin_pt: 20.0,
+            right_margin_pt: 20.0,
+            px_per_quarter: 10.0,
+            ..LayoutOptions::default()
+        };
 
         let scene = build_layout_scene(&score, &opts);
         assert_eq!(
@@ -3177,7 +3183,7 @@ pub fn place_notes(
             slots_per_beat(measure),
             beat_width_for(measure, &ev.start),
         );
-        let y = staff_y_for_track(&ev.track) + if ev.voice == 2 { 0.0 } else { 0.0 };
+        let y = staff_y_for_track(&ev.track);
         let metrics = if ev.kind == EventKind::Rest {
             rest_glyph(ev.duration.denominator)
         } else {
@@ -3403,7 +3409,7 @@ pub fn build_systems(score: &NormalizedScore, opts: &LayoutOptions) -> Vec<Syste
 // ── Helpers ──────────────────────────────────────────────────────
 
 fn to_slots(f: &Fraction, note_value: u32) -> u32 {
-    (f.numerator * note_value as u32) / f.denominator.max(1)
+    (f.numerator * note_value) / f.denominator.max(1)
 }
 
 fn slots_per_beat(_measure: &NormalizedMeasure) -> u32 {
@@ -4601,7 +4607,7 @@ fn push_system_volta_composites(
             };
 
             let mut end = index;
-            while end + 1 <= block_end
+            while end < block_end
                 && display_measure_for_scene(measures, &system_measures[end + 1])
                     .and_then(|measure| measure.measure.volta_indices.as_ref())
                     == Some(label)
@@ -4869,11 +4875,11 @@ fn volta_fragment_kind(show_left: bool, show_right: bool) -> SpanFragmentKind {
     }
 }
 
-fn measure_fragments_for_range<'a>(
-    page_measures: &'a [SceneMeasure],
+fn measure_fragments_for_range(
+    page_measures: &[SceneMeasure],
     start_measure: u32,
     end_measure: u32,
-) -> Vec<Vec<&'a SceneMeasure>> {
+) -> Vec<Vec<&SceneMeasure>> {
     let mut matches: Vec<&SceneMeasure> = page_measures
         .iter()
         .filter(|measure| {
@@ -5432,11 +5438,7 @@ fn render_hit_cluster(
                 .unwrap_or(fallback_anchor);
                 let stem_attach_x = attach_note.note_x + stem_anchor.x_ss * smufl_ss;
                 let stem_attach_y = attach_note.note_y - stem_anchor.y_ss * smufl_ss;
-                let stem_x = if stem_up {
-                    stem_attach_x
-                } else {
-                    stem_attach_x
-                };
+                let stem_x = stem_attach_x;
                 let stem_y1 = if stem_up {
                     stem_attach_y - stem_len_pt
                 } else {
@@ -7567,15 +7569,6 @@ pub fn layout_scene_to_js(scene: &LayoutScene) -> JsValue {
     result.into()
 }
 
-// ── LayoutPlan + WASM Export (Compatibility) ────────────────────
-
-#[wasm_bindgen]
-pub fn layout_plan(_score: JsValue, _options_json: JsValue) -> JsValue {
-    let obj = Object::new();
-    js_sys::Reflect::set(&obj, &JsValue::from_str("systems"), &Array::new()).unwrap();
-    obj.into()
-}
-
 // ── LayoutPlan Tests ─────────────────────────────────────────────
 
 #[test]
@@ -7944,8 +7937,10 @@ fn test_adjacent_voltas_share_y_and_positive_offset_moves_up() {
     assert_eq!(default_ys.len(), 2);
     assert!((default_ys[0] - default_ys[1]).abs() < 0.01);
 
-    let mut spaced_opts = LayoutOptions::default();
-    spaced_opts.volta_offset_y = 10.0;
+    let spaced_opts = LayoutOptions {
+        volta_offset_y: 10.0,
+        ..LayoutOptions::default()
+    };
     let spaced_scene = build_layout_scene(&score, &spaced_opts);
     let spaced_ys = line_ys(&spaced_scene);
     assert_eq!(spaced_ys.len(), 2);

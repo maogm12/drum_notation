@@ -466,7 +466,7 @@ pub fn normalize_document(doc: &Document) -> NormalizedScore {
 
                 // Expand tokens to events
                 let mut position = Fraction::zero();
-                for (_t_idx, token) in tokens.iter().enumerate() {
+                for token in tokens.iter() {
                     let token_start = position.multiply(duration_per_quarter);
                     // Validate modifier legality
                     if let TokenGlyph::Basic { value, modifiers, .. } = token {
@@ -510,7 +510,7 @@ pub fn normalize_document(doc: &Document) -> NormalizedScore {
                     (pos.multiply(duration_per_quarter), *kind, *sig)
                 }).collect();
                 let state = hairpin_states.entry(use_track.to_string())
-                    .or_insert_with(HairpinState::new);
+                    .or_default();
                 let track_hairpins = collect_track_hairpins(&hairpin_scan_time, global_index as usize, state);
                 measure_hairpins.extend(track_hairpins);
             }
@@ -635,7 +635,7 @@ fn derive_repeat_spans(measures: &[NormalizedMeasure], errors: &mut Vec<String>)
         if end {
             if let Some(start_measure) = open_start {
                 repeat_spans.push(RepeatSpan {
-                    start_measure: start_measure,
+                    start_measure,
                     end_measure: measure.global_index,
                     times: 2,
                 });

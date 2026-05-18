@@ -888,3 +888,11 @@ Nav markers (`@segno`, `@fine`, `@to-coda`, etc.) were converted to `TokenGlyph:
 - The generated WASM package under `src/wasm/pkg` is ignored by git, so local preview and CLI checks can continue to use stale layout code unless `npm run wasm:build` has been run after changes in `crates/drummark-layout`.
 
 - A minimal SVG verification for ordinary rests is `npm run drummark -- /tmp/rest-test.drum --format svg` followed by checking for `data-role="rest"` and SMuFL rest codepoints such as `U+E4E6` for eighth rests and `U+E4E4` for half rests.
+
+## 2026-05-17 Addendum: Rust Layout Scene Is the Active WASM Path
+
+- The active front-end Rust renderer imports `build_layout_scene` from the core WASM package and expects the platform-neutral scene contract (`version`, `metricsVersion`, `pages`, `systems`, `measures`, `items`, `composites`). The older `build_layout_plan` hand-drawn path in `drummark-core` and the empty `layout_plan` compatibility export in `drummark-layout` are obsolete and should not be revived without a new contract.
+
+- Rust layout option parsing should start from `LayoutOptions::default()` and only override fields that are explicitly supplied by JS. Otherwise partial option objects can accidentally zero out page margins or spacing while still passing the page-size validity check.
+
+- The current layout scene builder still emits a single page. Adding real page breaking changes the scene pagination contract and should be handled as a designed layout feature rather than a small cleanup.

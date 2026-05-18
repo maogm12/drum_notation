@@ -338,15 +338,16 @@ mod tests {
     fn test_multi_rest_not_in_lexer() {
         // MultiRest is scanned manually in the parser (via try_scan_multi_rest).
         // The lexer does NOT recognize --2-- as a single token.
-        // It tokenizes as individual `-` tokens (Rests).
-        // But the parser's try_scan_multi_rest intercepts the pattern first.
-        let tokens = tokenize_ok("--2--");
-        // Without parser interception: individual dashes + integer + dashes
-        // But peek_n's try_scan_multi_rest already intercepts, so none of these
-        // reach the lexer. The test below verifies the parser handles it.
-        // For lexer-only test: it would be Rest, Rest, Integer(2), Rest, Rest (if no interception)
-        // But since the parser tests pass (test_multi_rest_rejects_one still works),
-        // the multi_rest scanning in the parser works correctly.
+        assert_eq!(
+            tokenize_ok("--2--"),
+            vec![
+                Token::Rest,
+                Token::Rest,
+                Token::Integer(2),
+                Token::Rest,
+                Token::Rest
+            ]
+        );
     }
 
     #[test]
