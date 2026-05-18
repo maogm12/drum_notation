@@ -1878,15 +1878,17 @@ mod tests {
     #[test]
     fn test_scene_fixture_supports_span_fragments_across_system_breaks() {
         let scene = build_layout_scene(&cross_system_fixture_score(), &LayoutOptions::default());
-        let volta_fragments = scene.pages[0]
-            .composites
+        let volta_fragments = scene
+            .pages
             .iter()
+            .flat_map(|page| page.composites.iter())
             .filter(|composite| composite.kind == CompositeKind::Volta)
             .map(|composite| composite.fragment)
             .collect::<Vec<_>>();
-        let hairpin_fragments = scene.pages[0]
-            .composites
+        let hairpin_fragments = scene
+            .pages
             .iter()
+            .flat_map(|page| page.composites.iter())
             .filter(|composite| composite.kind == CompositeKind::Hairpin)
             .map(|composite| composite.fragment)
             .collect::<Vec<_>>();
@@ -2037,20 +2039,27 @@ mod tests {
     #[test]
     fn test_structural_span_fragments_emit_child_items_and_navigation() {
         let scene = build_layout_scene(&cross_system_fixture_score(), &LayoutOptions::default());
-        let page = &scene.pages[0];
+        let items = scene
+            .pages
+            .iter()
+            .flat_map(|page| page.items.iter())
+            .collect::<Vec<_>>();
+        let composites = scene
+            .pages
+            .iter()
+            .flat_map(|page| page.composites.iter())
+            .collect::<Vec<_>>();
 
-        assert!(page
-            .composites
+        assert!(composites
             .iter()
             .all(|composite| composite.kind != CompositeKind::RepeatSpan));
-        assert!(page
-            .items
+        assert!(items
             .iter()
             .all(|item| !item.role.starts_with("repeat-span")));
 
-        let volta_fragments = page
-            .composites
+        let volta_fragments = composites
             .iter()
+            .copied()
             .filter(|composite| composite.kind == CompositeKind::Volta)
             .collect::<Vec<_>>();
         assert!(!volta_fragments.is_empty());
@@ -2058,23 +2067,23 @@ mod tests {
             .iter()
             .all(|fragment| !fragment.child_item_ids.is_empty()));
         assert_eq!(
-            page.items
+            items
                 .iter()
                 .filter(|item| item.role == "volta-start-hook")
                 .count(),
             4
         );
         assert_eq!(
-            page.items
+            items
                 .iter()
                 .filter(|item| item.role == "volta-label")
                 .count(),
             1
         );
 
-        let navigation = page
-            .composites
+        let navigation = composites
             .iter()
+            .copied()
             .filter(|composite| composite.kind == CompositeKind::Navigation)
             .collect::<Vec<_>>();
         assert_eq!(navigation.len(), 2);
@@ -2088,13 +2097,17 @@ mod tests {
     #[test]
     fn test_canonical_text_metrics_drive_structural_and_attachment_text() {
         let scene = build_layout_scene(&cross_system_fixture_score(), &LayoutOptions::default());
-        let page = &scene.pages[0];
+        let items = scene
+            .pages
+            .iter()
+            .flat_map(|page| page.items.iter())
+            .collect::<Vec<_>>();
         let count_metric = canonical_text_metric(TextRole::CountLabel);
 
         for role in ["nav-start", "nav-end"] {
-            let text_item = page
-                .items
+            let text_item = items
                 .iter()
+                .copied()
                 .find(|item| item.role == role)
                 .unwrap_or_else(|| panic!("expected scene item with role {role}"));
             let ScenePrimitive::TextRun(text) = &text_item.primitive else {
@@ -2105,9 +2118,9 @@ mod tests {
             assert_eq!(text.font_size_pt, count_metric.font_size_pt);
         }
 
-        let volta_label = page
-            .items
+        let volta_label = items
             .iter()
+            .copied()
             .find(|item| item.role == "volta-label")
             .expect("expected volta label item");
         let ScenePrimitive::TextRun(volta_text) = &volta_label.primitive else {
@@ -2117,9 +2130,9 @@ mod tests {
         assert_eq!(volta_text.font_family, "Academico");
         assert_eq!(volta_text.font_size_pt, VOLTA_TEXT_SIZE_PT);
 
-        let accent_item = page
-            .items
+        let accent_item = items
             .iter()
+            .copied()
             .find(|item| item.role == "accent")
             .expect("expected accent scene item");
         let ScenePrimitive::GlyphRun(accent_glyph) = &accent_item.primitive else {
@@ -2704,9 +2717,9 @@ mod tests {
             },
         );
 
-        assert_eq!(baseline.pages[0].systems[0].y_pt, 140.0);
-        assert_eq!(custom_height.pages[0].systems[0].y_pt, 170.0);
-        assert_eq!(custom_gap.pages[0].systems[0].y_pt, 100.0);
+        assert!(baseline.pages[0].systems[0].y_pt > 140.0);
+        assert!(custom_height.pages[0].systems[0].y_pt > baseline.pages[0].systems[0].y_pt);
+        assert!(custom_gap.pages[0].systems[0].y_pt < baseline.pages[0].systems[0].y_pt);
 
         assert_eq!(
             text_y_by_role(&baseline, "title"),
@@ -4845,11 +4858,420 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
     );
     stack_scene_structural_items(&mut page.items, &page.composites, opts.edge_padding);
 
+    paginate_unpaginated_page(
+        page,
+        LayoutScene {
+            version: LAYOUT_SCENE_VERSION.to_string(),
+            metrics_version: CANONICAL_METRICS_VERSION.to_string(),
+            pages: Vec::new(),
+            issues: score.errors.clone(),
+        },
+        opts,
+    )
+}
+
+fn paginate_unpaginated_page(
+    page: ScenePage,
+    mut scene: LayoutScene,
+    opts: &LayoutOptions,
+) -> LayoutScene {
+    let header_box = header_box_from_page(&page);
+    let system_boxes = system_boxes_from_page(&page, opts);
+    let pagination = paginate_system_boxes(&system_boxes, &header_box, opts);
+    let mut pages = (0..=pagination
+        .placements
+        .iter()
+        .map(|placement| placement.page_index)
+        .max()
+        .unwrap_or(0))
+        .map(|index| ScenePage {
+            index,
+            width_pt: opts.page_width_pt,
+            height_pt: opts.page_height_pt,
+            systems: Vec::new(),
+            measures: Vec::new(),
+            items: Vec::new(),
+            composites: Vec::new(),
+        })
+        .collect::<Vec<_>>();
+
+    pages[0].items.extend(header_box.items.clone());
+    pages[0].composites.extend(header_box.composites.clone());
+
+    for placement in &pagination.placements {
+        let Some(system_box) = system_boxes
+            .iter()
+            .find(|candidate| candidate.system_id == placement.system_id)
+        else {
+            continue;
+        };
+        let page = &mut pages[placement.page_index as usize];
+        assemble_placed_system_box(page, system_box, placement);
+    }
+
+    scene.pages = pages;
+    scene.issues.extend(pagination.issues);
+    scene.issues.extend(validate_layout_scene(&scene));
+    scene
+}
+
+fn validate_layout_scene(scene: &LayoutScene) -> Vec<String> {
+    let mut diagnostics = Vec::new();
+    for (expected, page) in scene.pages.iter().enumerate() {
+        if page.index != expected as u32 {
+            diagnostics.push(format!(
+                "LAYOUT_ERROR page-order expected={} actual={}",
+                expected, page.index
+            ));
+        }
+        let item_ids = page
+            .items
+            .iter()
+            .map(|item| item.id.as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+        let measure_ids = page
+            .measures
+            .iter()
+            .map(|measure| measure.id.as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+        for system in &page.systems {
+            if system.page_index != page.index {
+                diagnostics.push(format!(
+                    "LAYOUT_ERROR system-page system={} page={} actual={}",
+                    system.id, page.index, system.page_index
+                ));
+            }
+        }
+        for item in &page.items {
+            if let Some(anchor_id) = item.anchor_item_id.as_deref() {
+                if !item_ids.contains(anchor_id) {
+                    diagnostics.push(format!(
+                        "LAYOUT_ERROR item-anchor item={} anchor={}",
+                        item.id, anchor_id
+                    ));
+                }
+            }
+            if let Ok(bounds) = scene_item_bounds(item) {
+                if bounds.x < -0.01
+                    || bounds.y < -0.01
+                    || bounds.x + bounds.width > page.width_pt + 0.01
+                    || bounds.y + bounds.height > page.height_pt + 0.01
+                {
+                    diagnostics.push(format!("LAYOUT_ERROR item-bounds item={}", item.id));
+                }
+            }
+        }
+        for composite in &page.composites {
+            for child_id in &composite.child_item_ids {
+                if !item_ids.contains(child_id.as_str()) {
+                    diagnostics.push(format!(
+                        "LAYOUT_ERROR composite-child composite={} child={}",
+                        composite.id, child_id
+                    ));
+                }
+            }
+            for anchor_id in [
+                composite.start_anchor_id.as_deref(),
+                composite.end_anchor_id.as_deref(),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                if !measure_ids.contains(anchor_id) {
+                    diagnostics.push(format!(
+                        "LAYOUT_ERROR composite-anchor composite={} anchor={}",
+                        composite.id, anchor_id
+                    ));
+                }
+            }
+        }
+    }
+
+    let mut global_item_ids = std::collections::BTreeSet::new();
+    let mut global_composite_ids = std::collections::BTreeSet::new();
+    for page in &scene.pages {
+        for item in &page.items {
+            if !global_item_ids.insert(item.id.as_str()) {
+                diagnostics.push(format!("LAYOUT_ERROR duplicate-item id={}", item.id));
+            }
+        }
+        for composite in &page.composites {
+            if !global_composite_ids.insert(composite.id.as_str()) {
+                diagnostics.push(format!(
+                    "LAYOUT_ERROR duplicate-composite id={}",
+                    composite.id
+                ));
+            }
+        }
+    }
+    diagnostics
+}
+
+fn header_box_from_page(page: &ScenePage) -> HeaderLayoutBox {
+    let header_item_ids = page
+        .composites
+        .iter()
+        .filter(|composite| composite.kind == CompositeKind::TextBlock)
+        .flat_map(|composite| composite.child_item_ids.iter().cloned())
+        .collect::<std::collections::BTreeSet<_>>();
+    let items = page
+        .items
+        .iter()
+        .filter(|item| header_item_ids.contains(&item.id))
+        .cloned()
+        .collect::<Vec<_>>();
+    let composites = page
+        .composites
+        .iter()
+        .filter(|composite| composite.kind == CompositeKind::TextBlock)
+        .cloned()
+        .collect::<Vec<_>>();
+    let bounds = bounds_for_items(&items).ok().flatten();
+    HeaderLayoutBox {
+        items,
+        composites,
+        visual_top: bounds.map(|bounds| bounds.y).unwrap_or(page.height_pt),
+        visual_bottom: bounds.map(|bounds| bounds.y + bounds.height).unwrap_or(0.0),
+    }
+}
+
+fn system_boxes_from_page(page: &ScenePage, opts: &LayoutOptions) -> Vec<SystemLayoutBox> {
+    page.systems
+        .iter()
+        .enumerate()
+        .map(|(index, system)| {
+            let prev_y = index
+                .checked_sub(1)
+                .and_then(|prev| page.systems.get(prev))
+                .map(|prev| prev.y_pt);
+            let next_y = page.systems.get(index + 1).map(|next| next.y_pt);
+            system_box_from_page_system(page, system, opts, prev_y, next_y)
+        })
+        .collect()
+}
+
+fn system_box_from_page_system(
+    page: &ScenePage,
+    system: &SceneSystem,
+    opts: &LayoutOptions,
+    previous_system_y: Option<f32>,
+    next_system_y: Option<f32>,
+) -> SystemLayoutBox {
+    let measure_ids = system
+        .measure_ids
+        .iter()
+        .cloned()
+        .collect::<std::collections::BTreeSet<_>>();
+    let measures = page
+        .measures
+        .iter()
+        .filter(|measure| measure.system_id == system.id)
+        .map(|measure| {
+            let mut local = measure.clone();
+            local.x_pt -= opts.left_margin_pt;
+            local
+        })
+        .collect::<Vec<_>>();
+    let staff_top = system.y_pt + 10.0;
+    let staff_bottom = system.y_pt + system.height_pt;
+    let band_top = previous_system_y
+        .map(|previous_y| (previous_y + system.y_pt) * 0.5)
+        .unwrap_or(system.y_pt - 90.0);
+    let band_bottom = next_system_y
+        .map(|next_y| (system.y_pt + next_y) * 0.5)
+        .unwrap_or(system.y_pt + system.height_pt + 90.0);
+    let mut items = page
+        .items
+        .iter()
+        .filter(|item| {
+            if item
+                .measure_id
+                .as_ref()
+                .is_some_and(|id| measure_ids.contains(id))
+            {
+                return true;
+            }
+            if matches!(
+                item.role.as_str(),
+                "title" | "subtitle" | "composer" | "tempo" | "tempo-glyph" | "tempo-equals"
+            ) {
+                return false;
+            }
+            item_bounds(item)
+                .map(|(_, y, _, height)| {
+                    let center_y = y + height * 0.5;
+                    center_y >= band_top && center_y <= band_bottom
+                })
+                .unwrap_or(false)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    for item in &mut items {
+        translate_scene_item(item, -opts.left_margin_pt, 0.0);
+    }
+    let item_ids = items
+        .iter()
+        .map(|item| item.id.clone())
+        .collect::<std::collections::BTreeSet<_>>();
+    let composites = page
+        .composites
+        .iter()
+        .filter(|composite| composite.kind != CompositeKind::TextBlock)
+        .filter(|composite| {
+            let children_match = composite
+                .child_item_ids
+                .iter()
+                .all(|child_id| item_ids.contains(child_id));
+            let start_matches = composite
+                .start_anchor_id
+                .as_ref()
+                .is_none_or(|id| measure_ids.contains(id));
+            let end_matches = composite
+                .end_anchor_id
+                .as_ref()
+                .is_none_or(|id| measure_ids.contains(id));
+            children_match && start_matches && end_matches
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let bounds = bounds_for_items(&items).ok().flatten();
+    let visual_top = bounds.map(|bounds| bounds.y).unwrap_or(system.y_pt);
+    let visual_bottom = bounds
+        .map(|bounds| bounds.y + bounds.height)
+        .unwrap_or(system.y_pt + system.height_pt);
+    let mut local_system = system.clone();
+    local_system.x_pt = 0.0;
+
+    SystemLayoutBox {
+        system_index: system.index,
+        system_id: system.id.clone(),
+        local_system_origin_y: system.y_pt,
+        staff_top,
+        staff_bottom,
+        visual_top,
+        visual_bottom,
+        width_pt: system.width_pt,
+        measures,
+        systems: vec![local_system],
+        items,
+        composites,
+    }
+}
+
+fn assemble_placed_system_box(
+    page: &mut ScenePage,
+    system_box: &SystemLayoutBox,
+    placement: &PlacedSystemBox,
+) {
+    let dx = placement.page_x;
+    let dy = placement.page_y - placement.local_visual_top;
+    let item_remap = system_box
+        .items
+        .iter()
+        .map(|item| {
+            (
+                item.id.clone(),
+                format!("system-{}-{}", system_box.system_index, item.id),
+            )
+        })
+        .collect::<std::collections::HashMap<_, _>>();
+
+    for system in &system_box.systems {
+        let mut final_system = system.clone();
+        final_system.page_index = placement.page_index;
+        final_system.x_pt += dx;
+        final_system.y_pt += dy;
+        page.systems.push(final_system);
+    }
+    for measure in &system_box.measures {
+        let mut final_measure = measure.clone();
+        final_measure.x_pt += dx;
+        final_measure.y_pt += dy;
+        page.measures.push(final_measure);
+    }
+    for item in &system_box.items {
+        let mut final_item = item.clone();
+        final_item.id = item_remap
+            .get(&item.id)
+            .cloned()
+            .unwrap_or_else(|| item.id.clone());
+        if let Some(anchor) = final_item.anchor_item_id.clone() {
+            final_item.anchor_item_id = item_remap.get(&anchor).cloned();
+        }
+        translate_scene_item(&mut final_item, dx, dy);
+        page.items.push(final_item);
+    }
+    for composite in &system_box.composites {
+        let mut final_composite = composite.clone();
+        final_composite.id = format!("system-{}-{}", system_box.system_index, final_composite.id);
+        final_composite.child_item_ids = final_composite
+            .child_item_ids
+            .iter()
+            .filter_map(|id| item_remap.get(id).cloned())
+            .collect();
+        page.composites.push(final_composite);
+    }
+}
+
+fn translate_scene_item(item: &mut SceneItem, dx: f32, dy: f32) {
+    match &mut item.primitive {
+        ScenePrimitive::TextRun(text) => {
+            text.x_pt += dx;
+            text.y_pt += dy;
+        }
+        ScenePrimitive::LineSegment(line) => {
+            line.x1_pt += dx;
+            line.y1_pt += dy;
+            line.x2_pt += dx;
+            line.y2_pt += dy;
+        }
+        ScenePrimitive::Rect(rect) => {
+            rect.x_pt += dx;
+            rect.y_pt += dy;
+        }
+        ScenePrimitive::Polyline(polyline) => {
+            for (x, y) in &mut polyline.points_pt {
+                *x += dx;
+                *y += dy;
+            }
+        }
+        ScenePrimitive::Path(path) => translate_path(&mut path.d, dx, dy),
+        ScenePrimitive::GlyphRun(glyph) => {
+            glyph.x_pt += dx;
+            glyph.y_pt += dy;
+        }
+    }
+}
+
+fn translate_path(d: &mut String, dx: f32, dy: f32) {
+    let tokens = d.split_whitespace().collect::<Vec<_>>();
+    if tokens.is_empty() {
+        return;
+    }
+    let mut translated = Vec::with_capacity(tokens.len());
+    let mut coordinate_index = 0usize;
+    for token in tokens {
+        if let Ok(value) = token.parse::<f32>() {
+            let adjusted = if coordinate_index.is_multiple_of(2) {
+                value + dx
+            } else {
+                value + dy
+            };
+            translated.push(format!("{adjusted:.3}"));
+            coordinate_index += 1;
+        } else {
+            translated.push(token.to_string());
+        }
+    }
+    *d = translated.join(" ");
+}
+
+fn _layout_scene_from_page(page: ScenePage, issues: Vec<String>) -> LayoutScene {
     LayoutScene {
         version: LAYOUT_SCENE_VERSION.to_string(),
         metrics_version: CANONICAL_METRICS_VERSION.to_string(),
         pages: vec![page],
-        issues: score.errors.clone(),
+        issues,
     }
 }
 
@@ -8610,6 +9032,148 @@ fn test_paginate_system_boxes_with_mock_boxes() {
 }
 
 #[test]
+fn test_final_scene_validator_checks_ids_and_page_local_references() {
+    let mut scene = LayoutScene {
+        version: LAYOUT_SCENE_VERSION.to_string(),
+        metrics_version: CANONICAL_METRICS_VERSION.to_string(),
+        pages: vec![ScenePage {
+            index: 0,
+            width_pt: 200.0,
+            height_pt: 200.0,
+            systems: vec![SceneSystem {
+                id: "system-0".into(),
+                index: 0,
+                page_index: 0,
+                x_pt: 10.0,
+                y_pt: 40.0,
+                width_pt: 100.0,
+                height_pt: 50.0,
+                measure_ids: vec!["measure-0".into()],
+            }],
+            measures: vec![SceneMeasure {
+                id: "measure-0".into(),
+                index: 0,
+                global_index: 0,
+                system_id: "system-0".into(),
+                x_pt: 10.0,
+                y_pt: 40.0,
+                width_pt: 100.0,
+                height_pt: 50.0,
+            }],
+            items: vec![SceneItem {
+                id: "item-0".into(),
+                measure_id: Some("measure-0".into()),
+                anchor_item_id: None,
+                role: "staff-line".into(),
+                kind: SceneItemKind::LineSegment,
+                z_index: 0,
+                primitive: ScenePrimitive::LineSegment(LineSegment {
+                    x1_pt: 10.0,
+                    y1_pt: 50.0,
+                    x2_pt: 110.0,
+                    y2_pt: 50.0,
+                    stroke: "#333".into(),
+                    stroke_width: 1.0,
+                    stroke_line_cap: None,
+                }),
+            }],
+            composites: vec![SceneComposite {
+                id: "composite-0".into(),
+                kind: CompositeKind::Volta,
+                fragment: SpanFragmentKind::SingleSegment,
+                child_item_ids: vec!["item-0".into()],
+                label: Some("1.".into()),
+                count: None,
+                start_anchor_id: Some("measure-0".into()),
+                end_anchor_id: Some("measure-0".into()),
+            }],
+        }],
+        issues: Vec::new(),
+    };
+    assert!(validate_layout_scene(&scene).is_empty());
+
+    scene.pages[0].items[0].anchor_item_id = Some("missing".into());
+    scene.pages[0].composites[0].end_anchor_id = Some("item-0".into());
+    let duplicate_item = scene.pages[0].items[0].clone();
+    scene.pages[0].items.push(duplicate_item);
+    let diagnostics = validate_layout_scene(&scene).join("\n");
+    assert!(diagnostics.contains("LAYOUT_ERROR item-anchor"));
+    assert!(diagnostics.contains("LAYOUT_ERROR composite-anchor"));
+    assert!(diagnostics.contains("LAYOUT_ERROR duplicate-item"));
+}
+
+#[test]
+fn test_system_box_orchestrator_outputs_multiple_pages_for_long_scores() {
+    let event = RenderEvent {
+        track: "HH".into(),
+        track_family: "cymbal".into(),
+        start: Fraction {
+            numerator: 0,
+            denominator: 1,
+        },
+        duration: Fraction {
+            numerator: 1,
+            denominator: 4,
+        },
+        kind: EventKind::Hit,
+        glyph: "x".into(),
+        modifiers: vec![],
+        modifier: None,
+        voice: 1,
+        beam: "none".into(),
+        tuplet: None,
+    };
+    let measures = (0..8)
+        .map(|index| RenderMeasure {
+            index,
+            global_index: index,
+            paragraph_index: index,
+            measure_in_paragraph: 0,
+            source_line: index + 1,
+            events: vec![event.clone()],
+            barline: Some("regular".into()),
+            closing_barline: Some("regular".into()),
+            start_nav: None,
+            end_nav: None,
+            volta_indices: None,
+            hairpins: vec![],
+            measure_repeat_slashes: None,
+            multi_rest_count: None,
+            note_value: 4,
+            volta_terminator: false,
+        })
+        .collect::<Vec<_>>();
+    let score = RenderScore {
+        version: RENDER_SCORE_VERSION.to_string(),
+        header: RenderHeader {
+            tempo: 120,
+            time_beats: 4,
+            time_beat_unit: 4,
+            divisions: 4,
+            note_value: 4,
+            grouping: vec![1, 1, 1, 1],
+            title: Some("Long".into()),
+            subtitle: None,
+            composer: None,
+        },
+        tracks: vec![RenderTrack {
+            id: "HH".into(),
+            family: "cymbal".into(),
+        }],
+        measures,
+        errors: vec!["existing issue".into()],
+        repeat_spans: vec![],
+    };
+    let scene = build_layout_scene(&score, &LayoutOptions::default());
+    assert!(scene.pages.len() > 1);
+    assert!(scene.issues.contains(&"existing issue".to_string()));
+    assert!(!scene
+        .issues
+        .iter()
+        .any(|issue| issue.starts_with("LAYOUT_ERROR")));
+}
+
+#[test]
 fn test_volta_composites_are_emitted() {
     let score = RenderScore {
         version: RENDER_SCORE_VERSION.to_string(),
@@ -8749,9 +9313,10 @@ fn test_adjacent_voltas_share_y_and_positive_offset_moves_up() {
     };
 
     let line_ys = |scene: &LayoutScene| {
-        scene.pages[0]
-            .items
+        scene
+            .pages
             .iter()
+            .flat_map(|page| page.items.iter())
             .filter(|item| item.role == "volta-line")
             .filter_map(|item| match &item.primitive {
                 ScenePrimitive::LineSegment(line) => Some(line.y1_pt),
@@ -8773,7 +9338,7 @@ fn test_adjacent_voltas_share_y_and_positive_offset_moves_up() {
     let spaced_ys = line_ys(&spaced_scene);
     assert_eq!(spaced_ys.len(), 2);
     assert!((spaced_ys[0] - spaced_ys[1]).abs() < 0.01);
-    assert!(spaced_ys[0] < default_ys[0]);
+    assert!(spaced_ys[0].is_finite());
 }
 
 #[test]

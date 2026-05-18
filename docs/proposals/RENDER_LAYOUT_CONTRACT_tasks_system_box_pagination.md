@@ -259,7 +259,7 @@ Changes in v0.2:
 - **Dependencies**: Task 1
 
 ### Task 6: System-Local Box Renderer
-- [ ] **Status**: Pending
+- [x] **Status**: Done
 - **Scope**: `crates/drummark-layout/src/lib.rs`
 - **Input/Output Contract**: Input is one planned system plus layout options and available width; output is a `SystemLayoutBox` with local systems/measures/items/composites and actual `visual_top` / `visual_bottom`.
 - **Commits**:
@@ -290,7 +290,7 @@ Changes in v0.2:
 - **Dependencies**: Task 1
 
 ### Task 8: Page Scene Assembly and ID Remapping
-- [ ] **Status**: Pending
+- [x] **Status**: Done
 - **Scope**: `crates/drummark-layout/src/lib.rs`
 - **Input/Output Contract**: Input is `HeaderLayoutBox`, `PlacedSystemBox` values, and local system boxes; output is final `LayoutScene` pages with page-space coordinates, globally unique ids, and page-local references.
 - **Commits**:
@@ -307,7 +307,7 @@ Changes in v0.2:
 - **Dependencies**: Task 1, Task 4, Task 7
 
 ### Task 9: Final Scene Validator
-- [ ] **Status**: Pending
+- [x] **Status**: Done
 - **Scope**: `crates/drummark-layout/src/lib.rs`
 - **Input/Output Contract**: Input is a final `LayoutScene`; output is validation success or diagnostic strings for page/order/id/reference/bounds violations.
 - **Commits**:
@@ -325,7 +325,7 @@ Changes in v0.2:
 - **Dependencies**: Task 8
 
 ### Task 10: Layout Scene Orchestrator
-- [ ] **Status**: Pending
+- [x] **Status**: Done
 - **Scope**: `crates/drummark-layout/src/lib.rs`, `crates/drummark-core`, CLI/adapter verification fixtures
 - **Input/Output Contract**: Input is a `RenderScore` plus `LayoutOptions`; output is the final page-aware `LayoutScene` built by calling independent modules in order.
 - **Commits**:
