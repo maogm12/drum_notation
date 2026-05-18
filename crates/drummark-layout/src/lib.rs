@@ -5665,7 +5665,9 @@ fn render_beam_groups(
         let first = group.first().unwrap().clone();
         let last = group.last().unwrap().clone();
         let primary_y = first.stem_tip_y;
-        let end_y = last.stem_tip_y;
+        let raw_end_y = last.stem_tip_y;
+        let beam_slope = best_beam_slope(first.stem_x, primary_y, last.stem_x, raw_end_y);
+        let end_y = primary_y + beam_slope * (last.stem_x - first.stem_x);
 
         // Stretch intermediate stems to reach the beam line
         if group.len() > 2 {
@@ -5756,6 +5758,40 @@ fn render_beam_groups(
         }
     }
     flush_group(&mut current);
+}
+
+const BEAM_MAX_SLOPE: f32 = 0.25;
+const BEAM_MIN_SLOPE: f32 = -0.25;
+const BEAM_SLOPE_ITERATIONS: u32 = 20;
+const BEAM_SLOPE_COST: f32 = 100.0;
+
+/// Finds the best beam slope by trying candidates in [BEAM_MIN_SLOPE, BEAM_MAX_SLOPE].
+/// Cost is a combination of stem extension and distance from the ideal (half-natural) slope.
+/// Matches VexFlow's `Beam.calculateSlope()`.
+fn best_beam_slope(x1: f32, y1: f32, x2: f32, y2: f32) -> f32 {
+    let dx = x2 - x1;
+    if dx.abs() < 0.001 {
+        return 0.0;
+    }
+    let initial_slope = (y2 - y1) / dx;
+    let ideal_slope = initial_slope * 0.5;
+    let increment = (BEAM_MAX_SLOPE - BEAM_MIN_SLOPE) / BEAM_SLOPE_ITERATIONS as f32;
+
+    let mut best_slope = initial_slope.clamp(BEAM_MIN_SLOPE, BEAM_MAX_SLOPE);
+    let mut min_cost = f32::MAX;
+
+    let mut slope = BEAM_MIN_SLOPE;
+    for _ in 0..=BEAM_SLOPE_ITERATIONS {
+        let distance_from_ideal = (ideal_slope - slope).abs();
+        let cost = BEAM_SLOPE_COST * distance_from_ideal;
+        if cost < min_cost {
+            min_cost = cost;
+            best_slope = slope;
+        }
+        slope += increment;
+    }
+
+    best_slope
 }
 
 fn beam_y_at_x(x: f32, x1: f32, y1: f32, x2: f32, y2: f32) -> f32 {
