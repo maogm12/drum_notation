@@ -128,6 +128,23 @@ export function renderSceneToSvg(scene: Scene, options?: RenderOptions): string 
     const reason = scene.issues?.[0] || "No layout data";
     throw new Error(reason);
   }
+  if (scene.pages.length > 1 && typeof console !== "undefined") {
+    console.warn("renderSceneToSvg received a multi-page scene; rendering page 0 only. Use renderScenePagesToSvgs for full output.");
+  }
+  return renderScenePageToSvg(page, options);
+}
+
+export function renderScenePagesToSvgs(scene: Scene, options?: RenderOptions): string[] {
+  if (!scene.pages?.length) {
+    const reason = scene.issues?.[0] || "No layout data";
+    throw new Error(reason);
+  }
+  return [...scene.pages]
+    .sort((a, b) => a.index - b.index)
+    .map((page) => renderScenePageToSvg(page, options));
+}
+
+function renderScenePageToSvg(page: ScenePage, options?: RenderOptions): string {
   const ss = options?.staffScale ?? 0.75;
   const width = page.widthPt || 612;
   const height = page.heightPt || 792;
@@ -231,6 +248,10 @@ export function renderSceneToSvg(scene: Scene, options?: RenderOptions): string 
 
 export function renderSourceToSvg(source: string, options?: RenderOptions): string {
   return renderSceneToSvg(buildLayoutSceneFromSource(source, options), options);
+}
+
+export function renderSourcePagesToSvgs(source: string, options?: RenderOptions): string[] {
+  return renderScenePagesToSvgs(buildLayoutSceneFromSource(source, options), options);
 }
 
 export function renderScoreToSvg(_score: unknown, options?: RenderOptions): string {

@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { buildLayoutSceneFromSource, renderSceneToSvg, renderSourceToSvg } from "./svgRenderer";
+import { describe, expect, it, vi } from "vitest";
+import { buildLayoutSceneFromSource, renderScenePagesToSvgs, renderSceneToSvg, renderSourcePagesToSvgs, renderSourceToSvg } from "./svgRenderer";
 
 const SRC = `title Smoke
 tempo 120
@@ -91,6 +91,70 @@ describe("SVG scene adapter", () => {
     expect(svg).toContain('data-anchor-item-id="item-2"');
   });
 
+  it("renders every scene page through the page-aware adapter", () => {
+    const scene = {
+      version: "1",
+      metricsVersion: "test",
+      pages: [
+        {
+          index: 0,
+          widthPt: 100,
+          heightPt: 80,
+          measures: [],
+          items: [
+            {
+              id: "page-0-item",
+              role: "page-zero",
+              kind: "textRun",
+              zIndex: 0,
+              primitive: { xPt: 10, yPt: 20, text: "Page Zero", fontFamily: "Bravura", fontSizePt: 12, fill: "#333" },
+            },
+          ],
+          composites: [],
+        },
+        {
+          index: 1,
+          widthPt: 100,
+          heightPt: 80,
+          measures: [
+            { id: "measure-2", globalIndex: 2, systemId: "system-1", xPt: 10, yPt: 40, widthPt: 30, heightPt: 20 },
+            { id: "measure-3", globalIndex: 3, systemId: "system-1", xPt: 40, yPt: 40, widthPt: 30, heightPt: 20 },
+          ],
+          items: [
+            {
+              id: "page-1-item",
+              role: "page-one",
+              kind: "textRun",
+              zIndex: 0,
+              primitive: { xPt: 10, yPt: 20, text: "Page One", fontFamily: "Bravura", fontSizePt: 12, fill: "#333" },
+            },
+          ],
+          composites: [
+            {
+              id: "page-1-repeat",
+              kind: "repeatSpan",
+              fragment: "singleSegment",
+              count: 2,
+              startAnchorId: "measure-2",
+              endAnchorId: "measure-3",
+            },
+          ],
+        },
+      ],
+    } as any;
+
+    const svgs = renderScenePagesToSvgs(scene, { staffScale: 1 });
+    expect(svgs).toHaveLength(2);
+    expect(svgs[0]).toContain("Page Zero");
+    expect(svgs[1]).toContain("Page One");
+    expect(svgs[1]).toContain('data-role="repeat-span-line"');
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(renderSceneToSvg(scene, { staffScale: 1 })).toContain("Page Zero");
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("renderSceneToSvg received a multi-page scene"));
+    warnSpy.mockRestore();
+  });
+
   it("builds scene from source and renders svg", () => {
     const scene = buildLayoutSceneFromSource(SRC, { pageWidth: 612, staffScale: 0.75 });
     expect(scene.pages.length).toBeGreaterThan(0);
@@ -103,6 +167,10 @@ describe("SVG scene adapter", () => {
     expect(svg).toContain("<svg");
     expect(svg).toContain("Smoke");
     expect(svg).toContain('data-role="notehead"');
+
+    const pages = renderSourcePagesToSvgs(SRC, { pageWidth: 612, staffScale: 0.75 });
+    expect(pages).toHaveLength(scene.pages.length);
+    expect(pages[0]).toContain('data-role="notehead"');
   });
 
   it("passes hairpin vertical offset into the layout engine", () => {

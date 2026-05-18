@@ -204,7 +204,7 @@ Changes in v0.2:
 - **Dependencies**: None
 
 ### Task 2: Page-Aware Adapter Surface
-- [ ] **Status**: Pending
+- [x] **Status**: Done
 - **Scope**: `src/renderer/svgRenderer.ts`, full-score SVG/PDF/export caller path, TypeScript tests
 - **Input/Output Contract**: Input is a `Scene` with one or more ordered pages; output is one SVG string per page for full-score callers, while the legacy single-SVG function remains first-page-compatible.
 - **Commits**:
