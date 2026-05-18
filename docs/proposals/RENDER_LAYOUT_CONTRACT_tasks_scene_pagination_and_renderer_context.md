@@ -281,3 +281,150 @@ Tasks v0.2 resolves the Review Round 1 blockers.
 Task Independence Rule check: the revised sequence has clear input/output contracts and test boundaries. Task 4 can be tested from hand-crafted extents, Task 6 can be tested from hand-crafted page-local measure lists and logical spans, and Task 7 is correctly positioned as the final orchestrator. Dependencies now describe data flow rather than hidden implementation coupling.
 
 STATUS: APPROVED
+
+### Author Response After User Review
+
+The user rejected the preflight-estimation approach as unreliable. Accepted. Tasks v0.3 below supersede Tasks v0.2 and align with proposal Addendum v0.6: bounded real-layout pagination loop.
+
+## Tasks v0.3: Bounded Real-Layout Pagination Loop
+
+### Task 1: Page-Aware Adapter Surface and Full-Score Caller
+- [ ] **Status**: Pending
+- **Scope**: `src/renderer/svgRenderer.ts`, full-score SVG/PDF/export caller path, TypeScript tests
+- **Input/Output Contract**: Input is a `Scene` with one or more ordered pages; output is one SVG string per page for full-score callers, while the legacy single-SVG function remains first-page-compatible.
+- **Commits**:
+  - `feat(renderer): add page-aware scene svg rendering`
+  - `test(renderer): cover multi-page scene adapter output`
+- **Acceptance Criteria**:
+  - `renderScenePagesToSvgs(scene, options)` returns one SVG per `ScenePage`.
+  - Existing `renderSceneToSvg(scene, options)` remains first-page-only and emits a development warning for multi-page scenes.
+  - A TypeScript test proves page 1+ items appear in page-aware adapter output.
+  - At least one full-score caller/export path is migrated to or tested against `renderScenePagesToSvgs`.
+- **Dependencies**: None
+
+### Task 2: Renderer Context and Primitive Specs
+- [ ] **Status**: Pending
+- **Scope**: `crates/drummark-layout/src/lib.rs`
+- **Input/Output Contract**: Input is the current scene emission state and geometry values; output is unchanged scene data built through context/spec structs instead of long positional helper argument lists.
+- **Commits**:
+  - `refactor(layout): introduce scene emit contexts`
+  - `refactor(layout): replace primitive helper argument lists with specs`
+- **Acceptance Criteria**:
+  - `cargo clippy --workspace --all-targets -- -D warnings` passes without a crate-level `too_many_arguments` allow.
+  - Existing layout tests and snapshots pass.
+  - Mutation is owned by `SceneEmitSink`; immutable page/system/measure geometry lives in context/spec structs.
+- **Dependencies**: None
+
+### Task 3: Initial Page Assignment Module
+- [ ] **Status**: Pending
+- **Scope**: `crates/drummark-layout/src/lib.rs`
+- **Input/Output Contract**: Input is ordered `PlannedSystem` values plus page/options geometry; output is ordered page assignments preserving score order before real-layout repair.
+- **Commits**:
+  - `feat(layout): create initial page assignments`
+  - `test(layout): verify initial page assignment invariants`
+- **Acceptance Criteria**:
+  - Assignment preserves global system order.
+  - Page indices are contiguous and increasing from 0.
+  - First system on page 0 honors title/header spacing; first system on later pages starts at top margin.
+  - Unit tests use hand-crafted planned systems and do not require scene emission.
+- **Dependencies**: None
+
+### Task 4: Page Assignment Repair Loop
+- [ ] **Status**: Pending
+- **Scope**: `crates/drummark-layout/src/lib.rs`
+- **Input/Output Contract**: Input is a page assignment plus a function that emits/measures actual page bounds; output is a repaired page assignment, overflow records, and optional guard-reached record.
+- **Commits**:
+  - `feat(layout): repair page assignments from real bounds`
+  - `test(layout): cover bounded pagination repair loop`
+- **Acceptance Criteria**:
+  - Repair scans pages in order after each full rebuild/measure.
+  - Single-system overflow pages are recorded and skipped while later multi-system overflow pages remain repairable.
+  - First overflowing multi-system page is repaired by moving its last system to the beginning of the next page assignment.
+  - The loop rebuilds/measures from the latest assignment after every repair.
+  - A multi-move fixture converges within `planned_system_count + 1` iterations.
+  - A single-system overflow fixture emits non-fatal overflow data and does not loop forever.
+  - A guard-reached test hook emits a non-fatal issue from an internally consistent latest assignment.
+- **Dependencies**: Task 3
+
+### Task 5: Page-Local Non-Span Scene Emission
+- [ ] **Status**: Pending
+- **Scope**: `crates/drummark-layout/src/lib.rs`
+- **Input/Output Contract**: Input is a page assignment and `RenderScore`; output is a `LayoutScene` with page-local systems/measures/items and non-span composites. Cross-page hairpin/volta composites are excluded until Task 6.
+- **Commits**:
+  - `feat(layout): emit non-span layout scene pages`
+  - `test(layout): verify multi-page scene shell invariants`
+- **Acceptance Criteria**:
+  - Long-score fixture produces `scene.pages.len() > 1` before span emission is required.
+  - `ScenePage.index` values match array order.
+  - `SceneSystem.page_index` matches containing page.
+  - `SceneSystem.index` remains global.
+  - All `SceneItem.id` values are globally unique.
+  - Non-span `SceneComposite.id` values emitted in this task are globally unique.
+  - Existing score issues are preserved in `LayoutScene.issues`.
+- **Dependencies**: Task 2, Task 3
+
+### Task 6: Page-Local Span Fragment Module
+- [ ] **Status**: Pending
+- **Scope**: `crates/drummark-layout/src/lib.rs`
+- **Input/Output Contract**: Input is page-local scene measures plus logical volta/hairpin spans; output is page-local span composites whose child and anchor references resolve within the containing page.
+- **Commits**:
+  - `feat(layout): fragment spans across pages`
+  - `test(layout): cover cross-page volta and hairpin fragments`
+- **Acceptance Criteria**:
+  - Fragment unit is one logical span intersected with one visible system on one page.
+  - Hand-crafted page-local measure lists and logical spans test fragment kinds without requiring full scene emission.
+  - Cross-page hairpin fixture emits correct `start` / `continuation` / `end` semantics.
+  - Cross-page volta fixture emits correct continuation fragments without repeating labels except at logical starts.
+  - Every span composite child and anchor reference resolves within its containing page.
+  - All span `SceneComposite.id` values are globally unique.
+- **Dependencies**: Task 5
+
+### Task 7: Layout Scene Orchestrator and Real-Bounds Verification
+- [ ] **Status**: Pending
+- **Scope**: `crates/drummark-layout/src/lib.rs`, `crates/drummark-core`, CLI/adapter verification fixtures
+- **Input/Output Contract**: Input is a `RenderScore` plus `LayoutOptions`; output is the final page-aware `LayoutScene` created by repeatedly emitting real scene geometry and repairing assignment until stable or guarded.
+- **Commits**:
+  - `feat(layout): orchestrate bounded page-aware layout`
+  - `test(layout): verify real-bounds pagination end to end`
+- **Acceptance Criteria**:
+  - Orchestrator order is: plan systems, create initial assignment, emit full scene from assignment, measure actual bounds, repair assignment, rebuild from scratch, repeat until stable or guarded.
+  - No implementation path moves already-emitted systems/items/composites between pages.
+  - Overflow and guard records from Task 4 are converted into `LayoutScene.issues` while preserving existing issues.
+  - Structural-overflow fixture is repaired by moving the last system to the next page.
+  - Cross-page hairpin and volta fragments remain page-local after at least one repair iteration.
+  - All item/composite ids remain globally unique after rebuilds.
+  - `cargo test --workspace` passes.
+  - `cargo clippy --workspace --all-targets -- -D warnings` passes.
+  - `npm run drummark -- <multi-page-fixture> --format svg` or equivalent SVG verification confirms page-aware output is reachable from the public pipeline.
+- **Dependencies**: Tasks 1-6
+
+### Task 8: Contract Consolidation
+- [ ] **Status**: Pending
+- **Scope**: `docs/proposals/RENDER_LAYOUT_CONTRACT_proposal_scene_pagination_and_renderer_context.md`, `docs/RENDER_LAYOUT_CONTRACT.md`, `TASKS.md`
+- **Input/Output Contract**: Input is the approved proposal ledger and completed implementation; output is append-only contract documentation and completed task status.
+- **Commits**:
+  - `docs(layout): consolidate scene pagination contract`
+- **Acceptance Criteria**:
+  - Proposal file gets appended `### Consolidated Changes` synthesizing v0.6 as controlling design.
+  - `docs/RENDER_LAYOUT_CONTRACT.md` gets a clean append-only addendum.
+  - This tasks file marks all implementation tasks done.
+  - `TASKS.md` Rust cleanup TODO entries for renderer context and pagination are marked done.
+- **Dependencies**: Tasks 1-7
+
+### Review Round 3
+
+Tasks v0.3 align with proposal Addendum v0.6 and resolve the user rejection of the deterministic preflight model. The task sequence now targets the bounded real-layout pagination loop: initial assignment, real scene emission/measurement, repair from actual bounds, full rebuild from the latest assignment, and guarded termination.
+
+1. Adapter/full-score caller coverage remains explicit. Task 1 requires `renderScenePagesToSvgs(scene, options)`, preserves the first-page compatibility behavior with a warning, verifies page 1+ adapter output, and requires at least one full-score caller/export path to migrate to or be tested against the page-aware API. That covers the proposal's truncation-prevention requirement.
+
+2. The repair loop is independently testable and matches v0.6. Task 4 takes a page assignment plus an emit/measure function, which lets it be tested without depending on the full scene emitter. Its acceptance criteria cover ordered scans after rebuild/measure, skipping single-system overflow pages while continuing to later repairable pages, moving the last system from the first overflowing multi-system page, rebuilding/measuring from the latest assignment after every repair, multi-move convergence, unavoidable overflow data, and guard-reached output from an internally consistent latest assignment.
+
+3. Non-span emission, span fragmentation, and orchestration are separated cleanly. Task 5 owns page-local systems/measures/items and non-span composites only. Task 6 owns page-local hairpin/volta span fragments with hand-crafted page-local measure/span tests. Task 7 is correctly the first task that composes the full bounded loop and verifies that cross-page spans remain page-local after at least one repair iteration.
+
+4. The mandatory rebuild rule is covered at the right level. Task 4 requires rebuild/measure after every repair through its injected measurement boundary, and Task 7 explicitly forbids moving already-emitted systems/items/composites between pages. That preserves the proposal's page-local anchor, child reference, id regeneration, and span-fragment invariants.
+
+5. Consolidation is present and scoped. Task 8 requires appending consolidated v0.6 changes to the proposal, appending a clean contract addendum, marking this tasks file done, and updating the Rust cleanup TODOs in `TASKS.md`.
+
+Task Independence Rule check: the plan now uses data-flow boundaries rather than hidden coupling. Task 3 can be tested from hand-crafted planned systems; Task 4 can be tested with mock emit/measure functions; Task 5 can emit page shells/non-span composites from assignments; Task 6 can fragment spans from page-local measure inputs; Task 7 is the orchestrator after the independent modules exist. No task depends on downstream implementation details to prove its own contract.
+
+STATUS: APPROVED

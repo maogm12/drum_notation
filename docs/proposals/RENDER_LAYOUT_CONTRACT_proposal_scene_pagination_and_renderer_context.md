@@ -504,3 +504,148 @@ The physically final `### Author Response Round 4` resolves the Round 4 chronolo
 No chronology blocker remains. Since Round 4 already found the structural stack extent contract implementable and testable, there is no remaining blocker within this review scope.
 
 STATUS: APPROVED
+
+### Author Response After User Review
+
+The user rejected the deterministic preflight model as too unreliable. Accepted. This response supersedes v0.4 for implementation and consolidation.
+
+## Addendum v0.5: Bounded Real-Layout Pagination Loop
+
+### Controlling Algorithm
+
+The controlling pagination design is now a bounded real-layout loop. The engine should make pagination decisions from actual emitted and stacked item bounds, not from conservative structural extent estimates.
+
+Algorithm:
+
+1. Build planned systems from measures.
+2. Create an initial page assignment using staff geometry and existing vertical advance.
+3. Emit the full `LayoutScene` from that assignment, including page-local span fragments and structural stacking.
+4. Measure actual visible item bounds per page after stacking.
+5. Find the first non-overflow page whose visible bounds exceed `page_height_pt - bottom_margin_pt`.
+6. If that page has more than one system, move the last system on that page to the beginning of the next page assignment.
+7. Rebuild the scene from scratch from the updated page assignment. Do not mutate emitted scene geometry in place.
+8. Repeat until all non-overflow pages fit, or until the iteration guard is reached, or until only single-system overflow pages remain.
+
+### Iteration Guard
+
+The maximum iteration count is `planned_system_count + 1`.
+
+This bound is sufficient because each successful repair moves at least one system across a page boundary. If the guard is reached before convergence, the engine emits the best scene from the latest assignment and appends a non-fatal layout issue that includes the guard count and the first remaining overflowing page/system.
+
+### Overflow Semantics
+
+A page containing exactly one system may overflow if that system cannot fit within the page content area after real emission and stacking. This is an unavoidable overflow.
+
+Unavoidable overflow warnings are appended to `LayoutScene.issues` and must include:
+
+- page index
+- system id or global system index
+- visible bottom or visual height
+- available bottom or available height
+
+Adapters still render overflow scenes.
+
+### Page Movement Rule
+
+The repair operation always moves the last system from the first overflowing multi-system page to the next page. This rule is intentionally simple and deterministic.
+
+The scene is rebuilt from scratch after every move, so span fragments, anchors, composite ids, item ids, stacking, and page-local references are recalculated from the current page assignment.
+
+### Preserved Contract Rules
+
+The following v0.2/v0.3 contract rules remain in force:
+
+- `LayoutScene.pages` is stored in strictly increasing contiguous `ScenePage.index` order, starting at 0.
+- `SceneSystem.index` remains global across the score.
+- `SceneSystem.page_index` equals its containing page index.
+- Every page-local composite references only items/measures visible on the same page.
+- The fragment unit is one logical span intersected with one visible system on one page.
+- `renderScenePagesToSvgs(scene, options)` is the full-score adapter API.
+- `renderSceneToSvg(scene, options)` remains first-page-only and warns on multi-page scenes.
+
+### Acceptance Criteria
+
+- A fixture where a stacked structural element pushes a page beyond the bottom bound is repaired by moving the last system to the next page.
+- A fixture requiring multiple moves converges within `planned_system_count + 1` iterations.
+- A single-system overflow fixture emits a non-fatal issue and does not loop forever.
+- A forced non-convergence test path, if exposed through a test hook, emits a guard-reached issue.
+- Cross-page hairpin and volta fragments remain page-local after a repair iteration.
+- All item/composite ids remain globally unique after rebuilds.
+
+### Review Round 6
+
+#### 1. The loop must distinguish "unavoidable single-system overflow" from "stop scanning"
+
+The v0.5 loop is implementable in broad shape: it rebuilds from a page assignment after each repair, so span fragments, anchors, composites, and ids can remain page-local and globally unique by construction. The "move last system from first overflowing multi-system page" rule is also deterministic.
+
+However, the current stop/search language is ambiguous in a way that can leave a later repairable page unrepaired. Step 5 says to find "the first non-overflow page whose visible bounds exceed" the bottom bound, while the termination rule says to stop when "only single-system overflow pages remain." A single-system overflow page is still a page whose visible bounds exceed the bottom bound. The proposal must say whether the scanner:
+
+- records single-system overflow pages as unavoidable and continues searching later pages for a multi-system overflow, or
+- stops at the first single-system overflow page.
+
+Only the first behavior is correct. Otherwise a score with page 0 containing one too-tall system and page 1 containing two systems that overflow together would terminate early and preserve a repairable page 1 overflow.
+
+Action required: append a precise scan rule. For example: after each scene rebuild, scan pages in index order; collect overflowing single-system pages as unavoidable candidates, but skip them for repair; repair the first overflowing page with more than one system; terminate only when no overflowing multi-system page exists. At termination, append unavoidable overflow issues for every overflowing single-system page.
+
+#### 2. The iteration-bound proof needs the monotonic state invariant, not just the guard
+
+The guard prevents an actual infinite loop, so this is not an unbounded execution design. But the proposal claims `planned_system_count + 1` is sufficient because each repair moves at least one system across a page boundary. That sentence alone is not a proof: in many pagination algorithms, the same system can move across multiple boundaries, so "one system crossed a boundary" does not imply a bound of one move per system.
+
+For this specific movement rule, the stronger invariant appears to be true: moving the last system of page `p` to the beginning of page `p + 1` preserves score order, leaves page `p` non-empty, and makes the moved system non-last on its destination page unless the destination was empty. Therefore the same system should not be selected again by the "move last system" rule. That gives a defensible `O(system_count)` move bound.
+
+Action required: state this invariant explicitly, including the empty-destination case, or weaken the claim to say the guard is a defensive cap rather than a guaranteed convergence bound. Also specify that the guard is checked only after a scene has been rebuilt and measured from the latest assignment, so the emitted fallback scene is internally consistent.
+
+#### 3. Page-local span and composite invariants are preserved if rebuild is the only mutation path
+
+The v0.5 text correctly requires rebuilding the scene from scratch after every assignment change. That is the key property that preserves the page-local invariant for span fragments, composite children, anchors, and measure references. The proposal should not allow an optimization that moves already-emitted items between pages, because that would reopen the exact class of cross-page reference bugs this contract is trying to close.
+
+No further action is required if the implementation treats "rebuild from scratch" as mandatory rather than advisory.
+
+STATUS: CHANGES_REQUESTED
+
+### Author Response Round 6
+
+Accepted. v0.5 needs a precise repair scan rule and a clearer iteration bound. The bounded real-layout loop remains the controlling design; v0.6 below clarifies its termination behavior.
+
+## Addendum v0.6: Repair Scan and Termination Rules
+
+### Overflow Scan Rule
+
+After each full scene rebuild and bounds measurement, scan pages in ascending page index order.
+
+For each overflowing page:
+
+- If the page has exactly one system, record it as an unavoidable overflow candidate and continue scanning later pages.
+- If the page has more than one system, repair that page by moving its last system to the beginning of the next page assignment, then rebuild the entire scene from scratch.
+
+The loop terminates only when no overflowing multi-system page exists. At termination, append unavoidable overflow issues for every recorded single-system overflowing page from the final rebuilt scene.
+
+This means an unavoidable overflow on an early page must not prevent repair of a later multi-system overflow page.
+
+### Monotonic Movement Invariant
+
+The repair operation preserves score order and never empties the source page because it only moves the last system from a page with more than one system.
+
+The moved system is inserted at the beginning of the next page assignment. Under the same `move last system` rule, that moved system is not selected again from its destination page unless later repairs from previous pages change the assignment and a subsequent full rebuild produces a new overflow state. The `planned_system_count + 1` guard is therefore a defensive cap, not the sole correctness mechanism.
+
+The guard is checked after a scene has been rebuilt and measured from the latest page assignment. If the guard is reached, the emitted fallback scene is internally consistent with its latest assignment, and the engine appends a non-fatal guard-reached issue.
+
+### Mandatory Rebuild Rule
+
+After any page-assignment change, the implementation must rebuild the full scene from scratch. Moving already-emitted systems, measures, items, or composites between pages is forbidden.
+
+This preserves page-local span/composite invariants because fragments, anchors, child ids, item ids, and composite ids are regenerated from the current page assignment.
+
+### Review Round 7
+
+The physically final `### Author Response Round 6` and `## Addendum v0.6` resolve the Round 6 concerns within this review scope.
+
+The overflow scan rule now explicitly skips unavoidable single-system overflow pages for repair, continues scanning later pages, repairs the first overflowing multi-system page, and terminates only when no overflowing multi-system page remains. That closes the early-termination bug where an unavoidable early overflow could hide a later repairable overflow. The final-issue rule also ties unavoidable overflow reporting to the final rebuilt scene, which is the correct source of truth after any repairs.
+
+The iteration guard semantics are now acceptable. v0.6 no longer relies on `planned_system_count + 1` as a complete proof of convergence; it frames the guard as a defensive cap and specifies that guard handling occurs after rebuilding and measuring the latest assignment, so the fallback scene remains internally consistent.
+
+The mandatory rebuild rule is also explicit enough for implementation: any page-assignment change requires a full scene rebuild, and moving already-emitted systems, measures, items, or composites between pages is forbidden. That preserves the page-local span and composite invariants identified in Round 6.
+
+No further changes are required for v0.6.
+
+STATUS: APPROVED
