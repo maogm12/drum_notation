@@ -189,7 +189,7 @@ Changes in v0.2:
 ## Tasks v0.2: System Box Pagination
 
 ### Task 1: Shared Layout Box Contracts
-- [ ] **Status**: Pending
+- [x] **Status**: Done
 - **Scope**: `crates/drummark-layout/src/lib.rs`
 - **Input/Output Contract**: Input is no runtime score data; output is typed internal contracts for `SystemLayoutBox`, `HeaderLayoutBox`, `PlacedSystemBox`, and stable overflow issue formatting.
 - **Commits**:

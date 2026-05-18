@@ -457,6 +457,58 @@ pub struct SceneComposite {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
+struct SystemLayoutBox {
+    system_index: u32,
+    system_id: String,
+    local_system_origin_y: f32,
+    staff_top: f32,
+    staff_bottom: f32,
+    visual_top: f32,
+    visual_bottom: f32,
+    width_pt: f32,
+    measures: Vec<SceneMeasure>,
+    systems: Vec<SceneSystem>,
+    items: Vec<SceneItem>,
+    composites: Vec<SceneComposite>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
+struct HeaderLayoutBox {
+    items: Vec<SceneItem>,
+    composites: Vec<SceneComposite>,
+    visual_top: f32,
+    visual_bottom: f32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
+struct PlacedSystemBox {
+    system_index: u32,
+    system_id: String,
+    page_index: u32,
+    page_x: f32,
+    page_y: f32,
+    local_visual_top: f32,
+    local_system_origin_y: f32,
+    width_pt: f32,
+    measure_ids: Vec<String>,
+}
+
+#[allow(dead_code)]
+fn layout_overflow_warning(
+    page_index: u32,
+    system_id: &str,
+    visual_height: f32,
+    available_height: f32,
+) -> String {
+    format!(
+        "LAYOUT_WARNING overflow page={page_index} system={system_id} visualHeight={visual_height:.2} availableHeight={available_height:.2}"
+    )
+}
+
+#[derive(Debug, Clone, PartialEq)]
 struct WireLayoutScene {
     version: String,
     metrics_version: String,
@@ -7788,6 +7840,74 @@ fn test_contract_scene_smoke() {
         .composites
         .iter()
         .any(|c| c.kind == CompositeKind::TextBlock && c.label.as_deref() == Some("tempo")));
+}
+
+#[test]
+fn test_system_box_pagination_contracts_and_overflow_warning_schema() {
+    let system_box = SystemLayoutBox {
+        system_index: 2,
+        system_id: "system-2".into(),
+        local_system_origin_y: 12.0,
+        staff_top: 22.0,
+        staff_bottom: 62.0,
+        visual_top: -8.0,
+        visual_bottom: 80.0,
+        width_pt: 500.0,
+        measures: vec![SceneMeasure {
+            id: "measure-7".into(),
+            index: 7,
+            global_index: 7,
+            system_id: "system-2".into(),
+            x_pt: 0.0,
+            y_pt: 12.0,
+            width_pt: 100.0,
+            height_pt: 50.0,
+        }],
+        systems: vec![SceneSystem {
+            id: "system-2".into(),
+            index: 2,
+            page_index: 0,
+            x_pt: 0.0,
+            y_pt: 12.0,
+            width_pt: 500.0,
+            height_pt: 50.0,
+            measure_ids: vec!["measure-7".into()],
+        }],
+        items: Vec::new(),
+        composites: Vec::new(),
+    };
+    assert_eq!(system_box.visual_bottom - system_box.visual_top, 88.0);
+    assert_eq!(system_box.local_system_origin_y, 12.0);
+
+    let header_box = HeaderLayoutBox {
+        items: Vec::new(),
+        composites: Vec::new(),
+        visual_top: 10.0,
+        visual_bottom: 92.0,
+    };
+    assert_eq!(header_box.visual_bottom, 92.0);
+
+    let placed = PlacedSystemBox {
+        system_index: system_box.system_index,
+        system_id: system_box.system_id.clone(),
+        page_index: 1,
+        page_x: 50.0,
+        page_y: 120.0,
+        local_visual_top: system_box.visual_top,
+        local_system_origin_y: system_box.local_system_origin_y,
+        width_pt: system_box.width_pt,
+        measure_ids: system_box.systems[0].measure_ids.clone(),
+    };
+    assert_eq!(placed.page_x, 50.0);
+    assert_eq!(placed.measure_ids, ["measure-7"]);
+
+    let mut issues = vec!["Line 1: existing parser issue".to_string()];
+    issues.push(layout_overflow_warning(1, &placed.system_id, 900.0, 700.0));
+    assert_eq!(issues[0], "Line 1: existing parser issue");
+    assert_eq!(
+        issues[1],
+        "LAYOUT_WARNING overflow page=1 system=system-2 visualHeight=900.00 availableHeight=700.00"
+    );
 }
 
 #[test]
