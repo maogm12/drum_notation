@@ -246,7 +246,7 @@ Changes in v0.2:
 - **Dependencies**: Task 3
 
 ### Task 5: Renderer Context and Primitive Specs
-- [ ] **Status**: Pending
+- [x] **Status**: Done
 - **Scope**: `crates/drummark-layout/src/lib.rs`
 - **Input/Output Contract**: Input is the current scene emission state and geometry values; output is unchanged scene data built through context/spec structs instead of long positional helper argument lists.
 - **Commits**:
@@ -344,7 +344,7 @@ Changes in v0.2:
 - **Dependencies**: Tasks 2-9
 
 ### Task 11: Contract Consolidation
-- [ ] **Status**: Pending
+- [x] **Status**: Done
 - **Scope**: `docs/proposals/RENDER_LAYOUT_CONTRACT_proposal_system_box_pagination.md`, `docs/RENDER_LAYOUT_CONTRACT.md`, `TASKS.md`
 - **Input/Output Contract**: Input is the approved proposal ledger and completed implementation; output is append-only contract documentation and completed task status.
 - **Commits**:

@@ -3754,19 +3754,22 @@ fn gcd_u32(mut a: u32, mut b: u32) -> u32 {
     a
 }
 
-#[allow(clippy::too_many_arguments)]
-fn measure_geometry(
-    header: &RenderHeader,
-    measure: &RenderMeasure,
+struct MeasureGeometryInput {
     measure_x: f32,
     measure_width: f32,
     left_pad: f32,
     right_pad: f32,
-    mapper: &SlotMapper,
     duration_compression: f32,
+}
+
+fn measure_geometry(
+    header: &RenderHeader,
+    measure: &RenderMeasure,
+    mapper: &SlotMapper,
+    input: &MeasureGeometryInput,
 ) -> MeasureGeometry {
-    let inner_left_pt = measure_x + left_pad;
-    let inner_width_pt = (measure_width - left_pad - right_pad).max(1.0);
+    let inner_left_pt = input.measure_x + input.left_pad;
+    let inner_width_pt = (input.measure_width - input.left_pad - input.right_pad).max(1.0);
     let slots_per_beat_unit = (header.divisions / header.time_beats.max(1)).max(1);
     let grouping = normalized_grouping(header);
     let mut groups = Vec::new();
@@ -3805,7 +3808,8 @@ fn measure_geometry(
         } else {
             group_starts.len().max(1)
         };
-        let content_weight = 1.0 + duration_compression * (segment_count as f32).max(1.0).log2();
+        let content_weight =
+            1.0 + input.duration_compression * (segment_count as f32).max(1.0).log2();
         let weighted_width = base_quarters * mapper.px_per_quarter * content_weight;
         weighted_width_sum += weighted_width;
 
@@ -3843,7 +3847,7 @@ fn measure_geometry(
                 .iter()
                 .map(|&d| {
                     let ratio = d / min_dur;
-                    1.0 + duration_compression * (ratio + 1.0).log2()
+                    1.0 + input.duration_compression * (ratio + 1.0).log2()
                 })
                 .collect();
 
@@ -4147,6 +4151,7 @@ fn render_header_layout_box(header: &RenderHeader, opts: &LayoutOptions) -> Head
     let mut item_counter = 0usize;
     let mut items = Vec::new();
     let mut composites = Vec::new();
+    let mut sink = SceneEmitSink::new(&mut items, &mut item_counter);
 
     let title_metric = canonical_text_metric(TextRole::Title);
     let subtitle_metric = canonical_text_metric(TextRole::Subtitle);
@@ -4158,21 +4163,19 @@ fn render_header_layout_box(header: &RenderHeader, opts: &LayoutOptions) -> Head
     let tempo_y = header_bottom_y + opts.header_staff_spacing_pt + opts.tempo_offset_y;
 
     if let Some(ref text) = header.title {
-        let title_id = push_text_item(
-            &mut items,
-            &mut item_counter,
-            None,
-            "title",
-            center_x,
-            title_y,
-            TextRole::Title,
-            text.clone(),
-            title_metric.font_family,
-            title_metric.font_size_pt,
-            "#333",
-            Some("middle"),
-            Some("bold"),
-        );
+        let title_id = sink.push_text_item(TextItemSpec {
+            measure_id: None,
+            role: "title",
+            x: center_x,
+            y: title_y,
+            text_role: TextRole::Title,
+            text: text.clone(),
+            font_family: title_metric.font_family,
+            font_size_pt: title_metric.font_size_pt,
+            fill: "#333",
+            text_anchor: Some("middle"),
+            font_weight: Some("bold"),
+        });
         composites.push(SceneComposite {
             id: "text-block-title".to_string(),
             kind: CompositeKind::TextBlock,
@@ -4185,21 +4188,19 @@ fn render_header_layout_box(header: &RenderHeader, opts: &LayoutOptions) -> Head
         });
     }
     if let Some(ref text) = header.subtitle {
-        let subtitle_id = push_text_item(
-            &mut items,
-            &mut item_counter,
-            None,
-            "subtitle",
-            center_x,
-            subtitle_y,
-            TextRole::Subtitle,
-            text.clone(),
-            subtitle_metric.font_family,
-            subtitle_metric.font_size_pt,
-            "#333",
-            Some("middle"),
-            None,
-        );
+        let subtitle_id = sink.push_text_item(TextItemSpec {
+            measure_id: None,
+            role: "subtitle",
+            x: center_x,
+            y: subtitle_y,
+            text_role: TextRole::Subtitle,
+            text: text.clone(),
+            font_family: subtitle_metric.font_family,
+            font_size_pt: subtitle_metric.font_size_pt,
+            fill: "#333",
+            text_anchor: Some("middle"),
+            font_weight: None,
+        });
         composites.push(SceneComposite {
             id: "text-block-subtitle".to_string(),
             kind: CompositeKind::TextBlock,
@@ -4212,21 +4213,19 @@ fn render_header_layout_box(header: &RenderHeader, opts: &LayoutOptions) -> Head
         });
     }
     if let Some(ref text) = header.composer {
-        let composer_id = push_text_item(
-            &mut items,
-            &mut item_counter,
-            None,
-            "composer",
-            page_w - margin,
-            composer_y,
-            TextRole::Composer,
-            text.clone(),
-            composer_metric.font_family,
-            composer_metric.font_size_pt,
-            "#333",
-            Some("end"),
-            None,
-        );
+        let composer_id = sink.push_text_item(TextItemSpec {
+            measure_id: None,
+            role: "composer",
+            x: page_w - margin,
+            y: composer_y,
+            text_role: TextRole::Composer,
+            text: text.clone(),
+            font_family: composer_metric.font_family,
+            font_size_pt: composer_metric.font_size_pt,
+            fill: "#333",
+            text_anchor: Some("end"),
+            font_weight: None,
+        });
         composites.push(SceneComposite {
             id: "text-block-composer".to_string(),
             kind: CompositeKind::TextBlock,
@@ -4245,51 +4244,45 @@ fn render_header_layout_box(header: &RenderHeader, opts: &LayoutOptions) -> Head
         let tempo_equals_x = tempo_glyph_x + tempo_glyph_width + 8.0;
         let tempo_value_text = header.tempo.to_string();
         let tempo_value_x = tempo_equals_x + canonical_text_width(TextRole::Tempo, "=") + 6.0;
-        let tempo_glyph_id = push_text_item(
-            &mut items,
-            &mut item_counter,
-            None,
-            "tempo-glyph",
-            tempo_glyph_x,
-            tempo_y,
-            TextRole::Tempo,
-            "\u{ECA5}".to_string(),
-            "Bravura",
-            25.0,
-            "#333",
-            None,
-            None,
-        );
-        let tempo_equals_id = push_text_item(
-            &mut items,
-            &mut item_counter,
-            None,
-            "tempo-equals",
-            tempo_equals_x,
-            tempo_y,
-            TextRole::Tempo,
-            "=".to_string(),
-            tempo_metric.font_family,
-            tempo_metric.font_size_pt,
-            "#333",
-            None,
-            None,
-        );
-        let tempo_value_id = push_text_item(
-            &mut items,
-            &mut item_counter,
-            None,
-            "tempo",
-            tempo_value_x,
-            tempo_y,
-            TextRole::Tempo,
-            tempo_value_text,
-            tempo_metric.font_family,
-            tempo_metric.font_size_pt,
-            "#333",
-            None,
-            None,
-        );
+        let tempo_glyph_id = sink.push_text_item(TextItemSpec {
+            measure_id: None,
+            role: "tempo-glyph",
+            x: tempo_glyph_x,
+            y: tempo_y,
+            text_role: TextRole::Tempo,
+            text: "\u{ECA5}".to_string(),
+            font_family: "Bravura",
+            font_size_pt: 25.0,
+            fill: "#333",
+            text_anchor: None,
+            font_weight: None,
+        });
+        let tempo_equals_id = sink.push_text_item(TextItemSpec {
+            measure_id: None,
+            role: "tempo-equals",
+            x: tempo_equals_x,
+            y: tempo_y,
+            text_role: TextRole::Tempo,
+            text: "=".to_string(),
+            font_family: tempo_metric.font_family,
+            font_size_pt: tempo_metric.font_size_pt,
+            fill: "#333",
+            text_anchor: None,
+            font_weight: None,
+        });
+        let tempo_value_id = sink.push_text_item(TextItemSpec {
+            measure_id: None,
+            role: "tempo",
+            x: tempo_value_x,
+            y: tempo_y,
+            text_role: TextRole::Tempo,
+            text: tempo_value_text,
+            font_family: tempo_metric.font_family,
+            font_size_pt: tempo_metric.font_size_pt,
+            fill: "#333",
+            text_anchor: None,
+            font_weight: None,
+        });
         composites.push(SceneComposite {
             id: "text-block-tempo".to_string(),
             kind: CompositeKind::TextBlock,
@@ -4343,6 +4336,7 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
         items: Vec::new(),
         composites: Vec::new(),
     };
+    let mut sink = SceneEmitSink::new(&mut page.items, &mut item_counter);
 
     let title_metric = canonical_text_metric(TextRole::Title);
     let subtitle_metric = canonical_text_metric(TextRole::Subtitle);
@@ -4354,21 +4348,19 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
     let tempo_y = header_bottom_y + opts.header_staff_spacing_pt + opts.tempo_offset_y;
 
     if let Some(ref text) = score.header.title {
-        let title_id = push_text_item(
-            &mut page.items,
-            &mut item_counter,
-            None,
-            "title",
-            center_x,
-            title_y,
-            TextRole::Title,
-            text.clone(),
-            title_metric.font_family,
-            title_metric.font_size_pt,
-            "#333",
-            Some("middle"),
-            Some("bold"),
-        );
+        let title_id = sink.push_text_item(TextItemSpec {
+            measure_id: None,
+            role: "title",
+            x: center_x,
+            y: title_y,
+            text_role: TextRole::Title,
+            text: text.clone(),
+            font_family: title_metric.font_family,
+            font_size_pt: title_metric.font_size_pt,
+            fill: "#333",
+            text_anchor: Some("middle"),
+            font_weight: Some("bold"),
+        });
         page.composites.push(SceneComposite {
             id: "text-block-title".to_string(),
             kind: CompositeKind::TextBlock,
@@ -4381,21 +4373,19 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
         });
     }
     if let Some(ref text) = score.header.subtitle {
-        let subtitle_id = push_text_item(
-            &mut page.items,
-            &mut item_counter,
-            None,
-            "subtitle",
-            center_x,
-            subtitle_y,
-            TextRole::Subtitle,
-            text.clone(),
-            subtitle_metric.font_family,
-            subtitle_metric.font_size_pt,
-            "#333",
-            Some("middle"),
-            None,
-        );
+        let subtitle_id = sink.push_text_item(TextItemSpec {
+            measure_id: None,
+            role: "subtitle",
+            x: center_x,
+            y: subtitle_y,
+            text_role: TextRole::Subtitle,
+            text: text.clone(),
+            font_family: subtitle_metric.font_family,
+            font_size_pt: subtitle_metric.font_size_pt,
+            fill: "#333",
+            text_anchor: Some("middle"),
+            font_weight: None,
+        });
         page.composites.push(SceneComposite {
             id: "text-block-subtitle".to_string(),
             kind: CompositeKind::TextBlock,
@@ -4408,21 +4398,19 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
         });
     }
     if let Some(ref text) = score.header.composer {
-        let composer_id = push_text_item(
-            &mut page.items,
-            &mut item_counter,
-            None,
-            "composer",
-            page_w - margin,
-            composer_y,
-            TextRole::Composer,
-            text.clone(),
-            composer_metric.font_family,
-            composer_metric.font_size_pt,
-            "#333",
-            Some("end"),
-            None,
-        );
+        let composer_id = sink.push_text_item(TextItemSpec {
+            measure_id: None,
+            role: "composer",
+            x: page_w - margin,
+            y: composer_y,
+            text_role: TextRole::Composer,
+            text: text.clone(),
+            font_family: composer_metric.font_family,
+            font_size_pt: composer_metric.font_size_pt,
+            fill: "#333",
+            text_anchor: Some("end"),
+            font_weight: None,
+        });
         page.composites.push(SceneComposite {
             id: "text-block-composer".to_string(),
             kind: CompositeKind::TextBlock,
@@ -4441,51 +4429,45 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
         let tempo_equals_x = tempo_glyph_x + tempo_glyph_width + 8.0;
         let tempo_value_text = score.header.tempo.to_string();
         let tempo_value_x = tempo_equals_x + canonical_text_width(TextRole::Tempo, "=") + 6.0;
-        let tempo_glyph_id = push_text_item(
-            &mut page.items,
-            &mut item_counter,
-            None,
-            "tempo-glyph",
-            tempo_glyph_x,
-            tempo_y,
-            TextRole::Tempo,
-            "\u{ECA5}".to_string(),
-            "Bravura",
-            25.0,
-            "#333",
-            None,
-            None,
-        );
-        let tempo_equals_id = push_text_item(
-            &mut page.items,
-            &mut item_counter,
-            None,
-            "tempo-equals",
-            tempo_equals_x,
-            tempo_y,
-            TextRole::Tempo,
-            "=".to_string(),
-            tempo_metric.font_family,
-            tempo_metric.font_size_pt,
-            "#333",
-            None,
-            None,
-        );
-        let tempo_value_id = push_text_item(
-            &mut page.items,
-            &mut item_counter,
-            None,
-            "tempo",
-            tempo_value_x,
-            tempo_y,
-            TextRole::Tempo,
-            tempo_value_text,
-            tempo_metric.font_family,
-            tempo_metric.font_size_pt,
-            "#333",
-            None,
-            None,
-        );
+        let tempo_glyph_id = sink.push_text_item(TextItemSpec {
+            measure_id: None,
+            role: "tempo-glyph",
+            x: tempo_glyph_x,
+            y: tempo_y,
+            text_role: TextRole::Tempo,
+            text: "\u{ECA5}".to_string(),
+            font_family: "Bravura",
+            font_size_pt: 25.0,
+            fill: "#333",
+            text_anchor: None,
+            font_weight: None,
+        });
+        let tempo_equals_id = sink.push_text_item(TextItemSpec {
+            measure_id: None,
+            role: "tempo-equals",
+            x: tempo_equals_x,
+            y: tempo_y,
+            text_role: TextRole::Tempo,
+            text: "=".to_string(),
+            font_family: tempo_metric.font_family,
+            font_size_pt: tempo_metric.font_size_pt,
+            fill: "#333",
+            text_anchor: None,
+            font_weight: None,
+        });
+        let tempo_value_id = sink.push_text_item(TextItemSpec {
+            measure_id: None,
+            role: "tempo",
+            x: tempo_value_x,
+            y: tempo_y,
+            text_role: TextRole::Tempo,
+            text: tempo_value_text,
+            font_family: tempo_metric.font_family,
+            font_size_pt: tempo_metric.font_size_pt,
+            fill: "#333",
+            text_anchor: None,
+            font_weight: None,
+        });
         page.composites.push(SceneComposite {
             id: "text-block-tempo".to_string(),
             kind: CompositeKind::TextBlock,
@@ -4512,87 +4494,77 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
 
         for i in 0..5 {
             let ly = sy + staff_ss * (1.0 + i as f32);
-            push_line_item(
-                &mut page.items,
-                &mut item_counter,
-                None,
-                "staff-line",
-                system_left,
-                ly,
-                system_right,
-                ly,
-                "#333",
-                1.0,
-                None,
-            );
+            sink.push_line_item(LineItemSpec {
+                measure_id: None,
+                role: "staff-line",
+                x1: system_left,
+                y1: ly,
+                x2: system_right,
+                y2: ly,
+                stroke: "#333",
+                stroke_width: 1.0,
+                stroke_line_cap: None,
+            });
         }
         let clef_metric = canonical_text_metric(TextRole::PercussionClef);
-        push_text_item(
-            &mut page.items,
-            &mut item_counter,
-            None,
-            "percussion-clef",
-            margin + 5.0,
-            s_mid,
-            TextRole::PercussionClef,
-            "\u{E069}".to_string(),
-            "Bravura",
-            clef_metric.font_size_pt,
-            "#333",
-            None,
-            None,
-        );
+        sink.push_text_item(TextItemSpec {
+            measure_id: None,
+            role: "percussion-clef",
+            x: margin + 5.0,
+            y: s_mid,
+            text_role: TextRole::PercussionClef,
+            text: "\u{E069}".to_string(),
+            font_family: "Bravura",
+            font_size_pt: clef_metric.font_size_pt,
+            fill: "#333",
+            text_anchor: None,
+            font_weight: None,
+        });
         if is_first_system {
             let tsx = margin + 35.0;
             let time_sig_metric = canonical_text_metric(TextRole::TimeSignatureDigit);
-            push_text_item(
-                &mut page.items,
-                &mut item_counter,
-                None,
-                "time-signature-digit",
-                tsx,
-                sy + staff_ss * 2.0,
-                TextRole::TimeSignatureDigit,
-                num_to_glyph(score.header.time_beats),
-                time_sig_metric.font_family,
-                time_sig_metric.font_size_pt,
-                "#333",
-                None,
-                None,
-            );
-            push_text_item(
-                &mut page.items,
-                &mut item_counter,
-                None,
-                "time-signature-digit",
-                tsx,
-                sy + staff_ss * 4.0,
-                TextRole::TimeSignatureDigit,
-                num_to_glyph(score.header.time_beat_unit),
-                time_sig_metric.font_family,
-                time_sig_metric.font_size_pt,
-                "#333",
-                None,
-                None,
-            );
+            sink.push_text_item(TextItemSpec {
+                measure_id: None,
+                role: "time-signature-digit",
+                x: tsx,
+                y: sy + staff_ss * 2.0,
+                text_role: TextRole::TimeSignatureDigit,
+                text: num_to_glyph(score.header.time_beats),
+                font_family: time_sig_metric.font_family,
+                font_size_pt: time_sig_metric.font_size_pt,
+                fill: "#333",
+                text_anchor: None,
+                font_weight: None,
+            });
+            sink.push_text_item(TextItemSpec {
+                measure_id: None,
+                role: "time-signature-digit",
+                x: tsx,
+                y: sy + staff_ss * 4.0,
+                text_role: TextRole::TimeSignatureDigit,
+                text: num_to_glyph(score.header.time_beat_unit),
+                font_family: time_sig_metric.font_family,
+                font_size_pt: time_sig_metric.font_size_pt,
+                fill: "#333",
+                text_anchor: None,
+                font_weight: None,
+            });
         }
         let measure_number_metric = canonical_text_metric(TextRole::MeasureNumber);
         if !is_first_system {
-            push_text_item(
-                &mut page.items,
-                &mut item_counter,
-                None,
-                "measure-number",
-                margin,
-                sy,
-                TextRole::MeasureNumber,
-                format!("{}", system.measures[0].measure.global_index + 1),
-                measure_number_metric.font_family,
-                measure_number_metric.font_size_pt,
-                "#333",
-                None,
-                None,
-            );
+            sink.push_text_item(TextItemSpec {
+                measure_id: None,
+                role: "measure-number",
+                x: margin,
+                y: sy,
+                text_role: TextRole::MeasureNumber,
+                text: format!("{}", system.measures[0].measure.global_index + 1),
+                font_family: measure_number_metric.font_family,
+                font_size_pt: measure_number_metric.font_size_pt,
+                fill: "#333",
+                text_anchor: None,
+                font_weight: None,
+            });
         }
 
         for (mi, (measure, mw)) in system.measures.iter().zip(system.widths.iter()).enumerate() {
@@ -4601,18 +4573,10 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
 
             let left_pad = measure_left_pad(mi, is_first_system, measure.barline.as_deref());
             if mi == 0 {
-                render_system_opening_barline(
-                    &mut page.items,
-                    &mut item_counter,
-                    Some(&measure_id),
-                    mx,
-                    s_top,
-                    s_bot,
-                );
+                render_system_opening_barline(&mut sink, Some(&measure_id), mx, s_top, s_bot);
                 if is_start_repeat_barline(measure.barline.as_deref()) {
                     render_start_repeat_barline(
-                        &mut page.items,
-                        &mut item_counter,
+                        &mut sink,
                         Some(&measure_id),
                         first_measure_start_repeat_x(mx, is_first_system),
                         s_top,
@@ -4621,8 +4585,7 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
                 }
             } else {
                 render_left_barline(
-                    &mut page.items,
-                    &mut item_counter,
+                    &mut sink,
                     Some(&measure_id),
                     mx,
                     s_top,
@@ -4650,45 +4613,39 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
                 let bar_thickness = staff_ss * 0.5;
                 let serif_height = staff_ss * 2.0;
                 let serif_thickness = 2.0;
-                let bar_id = push_line_item(
-                    &mut page.items,
-                    &mut item_counter,
-                    Some(&measure_id),
-                    "multi-rest-bar",
-                    bar_left,
-                    center_y,
-                    bar_right,
-                    center_y,
-                    "#333",
-                    bar_thickness,
-                    Some("butt"),
-                );
-                let left_serif_id = push_line_item(
-                    &mut page.items,
-                    &mut item_counter,
-                    Some(&measure_id),
-                    "multi-rest-serif",
-                    bar_left,
-                    center_y - serif_height * 0.5,
-                    bar_left,
-                    center_y + serif_height * 0.5,
-                    "#333",
-                    serif_thickness,
-                    Some("butt"),
-                );
-                let right_serif_id = push_line_item(
-                    &mut page.items,
-                    &mut item_counter,
-                    Some(&measure_id),
-                    "multi-rest-serif",
-                    bar_right,
-                    center_y - serif_height * 0.5,
-                    bar_right,
-                    center_y + serif_height * 0.5,
-                    "#333",
-                    serif_thickness,
-                    Some("butt"),
-                );
+                let bar_id = sink.push_line_item(LineItemSpec {
+                    measure_id: Some(&measure_id),
+                    role: "multi-rest-bar",
+                    x1: bar_left,
+                    y1: center_y,
+                    x2: bar_right,
+                    y2: center_y,
+                    stroke: "#333",
+                    stroke_width: bar_thickness,
+                    stroke_line_cap: Some("butt"),
+                });
+                let left_serif_id = sink.push_line_item(LineItemSpec {
+                    measure_id: Some(&measure_id),
+                    role: "multi-rest-serif",
+                    x1: bar_left,
+                    y1: center_y - serif_height * 0.5,
+                    x2: bar_left,
+                    y2: center_y + serif_height * 0.5,
+                    stroke: "#333",
+                    stroke_width: serif_thickness,
+                    stroke_line_cap: Some("butt"),
+                });
+                let right_serif_id = sink.push_line_item(LineItemSpec {
+                    measure_id: Some(&measure_id),
+                    role: "multi-rest-serif",
+                    x1: bar_right,
+                    y1: center_y - serif_height * 0.5,
+                    x2: bar_right,
+                    y2: center_y + serif_height * 0.5,
+                    stroke: "#333",
+                    stroke_width: serif_thickness,
+                    stroke_line_cap: Some("butt"),
+                });
                 let count_glyph: String = count
                     .to_string()
                     .chars()
@@ -4696,21 +4653,19 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
                     .collect();
                 let time_sig_metric = canonical_text_metric(TextRole::TimeSignatureDigit);
                 let count_y = s_top - staff_ss * 0.5 - time_sig_metric.font_size_pt * 0.5;
-                let count_id = push_text_item(
-                    &mut page.items,
-                    &mut item_counter,
-                    Some(&measure_id),
-                    "multi-rest-count",
-                    mx + *mw * 0.5,
-                    count_y,
-                    TextRole::TimeSignatureDigit,
-                    count_glyph,
-                    time_sig_metric.font_family,
-                    time_sig_metric.font_size_pt,
-                    "#333",
-                    Some("middle"),
-                    None,
-                );
+                let count_id = sink.push_text_item(TextItemSpec {
+                    measure_id: Some(&measure_id),
+                    role: "multi-rest-count",
+                    x: mx + *mw * 0.5,
+                    y: count_y,
+                    text_role: TextRole::TimeSignatureDigit,
+                    text: count_glyph,
+                    font_family: time_sig_metric.font_family,
+                    font_size_pt: time_sig_metric.font_size_pt,
+                    fill: "#333",
+                    text_anchor: Some("middle"),
+                    font_weight: None,
+                });
                 page.composites.push(SceneComposite {
                     id: format!("multi-rest-{}", measure.global_index),
                     kind: CompositeKind::MultiRest,
@@ -4726,18 +4681,16 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
                     MeasureRepeatDisplayPart::Single => {
                         let repeat_metric =
                             canonical_glyph_metric(GlyphRole::MeasureRepeatMark1Bar);
-                        let repeat_id = push_glyph_item(
-                            &mut page.items,
-                            &mut item_counter,
-                            Some(&measure_id),
-                            "measure-repeat",
-                            mx + *mw * 0.5 - repeat_metric.bbox_center_x_pt(30.0),
-                            s_mid + repeat_metric.bbox_center_y_pt(30.0),
-                            GlyphRole::MeasureRepeatMark1Bar,
-                            "Bravura",
-                            30.0,
-                            "#333",
-                        );
+                        let repeat_id = sink.push_glyph_item(GlyphItemSpec {
+                            measure_id: Some(&measure_id),
+                            role: "measure-repeat",
+                            x: mx + *mw * 0.5 - repeat_metric.bbox_center_x_pt(30.0),
+                            y: s_mid + repeat_metric.bbox_center_y_pt(30.0),
+                            glyph_role: GlyphRole::MeasureRepeatMark1Bar,
+                            font_family: "Bravura",
+                            font_size_pt: 30.0,
+                            fill: "#333",
+                        });
                         page.composites.push(SceneComposite {
                             id: format!("measure-repeat-{}", measure.global_index),
                             kind: CompositeKind::MeasureRepeat,
@@ -4754,18 +4707,16 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
                         let span_center_x = mx + (*mw + next_width) * 0.5;
                         let repeat_metric =
                             canonical_glyph_metric(GlyphRole::MeasureRepeatMark2Bars);
-                        let repeat_id = push_glyph_item(
-                            &mut page.items,
-                            &mut item_counter,
-                            Some(&measure_id),
-                            "measure-repeat",
-                            span_center_x - repeat_metric.bbox_center_x_pt(30.0),
-                            s_mid + repeat_metric.bbox_center_y_pt(30.0),
-                            GlyphRole::MeasureRepeatMark2Bars,
-                            "Bravura",
-                            30.0,
-                            "#333",
-                        );
+                        let repeat_id = sink.push_glyph_item(GlyphItemSpec {
+                            measure_id: Some(&measure_id),
+                            role: "measure-repeat",
+                            x: span_center_x - repeat_metric.bbox_center_x_pt(30.0),
+                            y: s_mid + repeat_metric.bbox_center_y_pt(30.0),
+                            glyph_role: GlyphRole::MeasureRepeatMark2Bars,
+                            font_family: "Bravura",
+                            font_size_pt: 30.0,
+                            fill: "#333",
+                        });
                         let end_anchor_id = format!("measure-{}", measure.global_index + 1);
                         page.composites.push(SceneComposite {
                             id: format!("measure-repeat-{}", measure.global_index),
@@ -4782,48 +4733,52 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
                 }
             } else {
                 render_measure_events(
-                    &mut page.items,
-                    &mut item_counter,
-                    &measure_id,
-                    &score.header,
-                    measure.measure,
-                    mx,
-                    *mw,
-                    left_pad,
-                    MEASURE_RIGHT_PAD_PT,
-                    s_top,
-                    s_bot,
-                    &mapper,
-                    opts.stem_len_pt,
-                    opts.hide_voice2_rests,
-                    opts.duration_spacing_compression,
+                    &mut sink,
+                    RenderMeasureEventsInput {
+                        measure_id: &measure_id,
+                        header: &score.header,
+                        measure: measure.measure,
+                        geometry: MeasureGeometryInput {
+                            measure_x: mx,
+                            measure_width: *mw,
+                            left_pad,
+                            right_pad: MEASURE_RIGHT_PAD_PT,
+                            duration_compression: opts.duration_spacing_compression,
+                        },
+                        staff_top: s_top,
+                        staff_bottom: s_bot,
+                        mapper: &mapper,
+                        stem_len_pt: opts.stem_len_pt,
+                        hide_voice2_rests: opts.hide_voice2_rests,
+                    },
                 );
             }
 
             render_nav_markers(
-                &mut page.items,
+                &mut sink,
                 &mut page.composites,
-                &mut item_counter,
-                &measure_id,
-                measure,
-                mx,
-                *mw,
-                sy,
-                s_top,
-                s_bot,
+                NavMarkerSpec {
+                    measure_id: &measure_id,
+                    measure,
+                    x: mx,
+                    width: *mw,
+                    system_y: sy,
+                    top: s_top,
+                },
             );
             render_right_barline(
-                &mut page.items,
-                &mut item_counter,
-                Some(&measure_id),
-                mx + *mw,
-                s_top,
-                s_bot,
-                measure
-                    .closing_barline
-                    .as_deref()
-                    .or(measure.barline.as_deref()),
-                mi + 1 == system.measures.len() && is_last,
+                &mut sink,
+                RightBarlineSpec {
+                    measure_id: Some(&measure_id),
+                    x: mx + *mw,
+                    top: s_top,
+                    bottom: s_bot,
+                    barline: measure
+                        .closing_barline
+                        .as_deref()
+                        .or(measure.barline.as_deref()),
+                    is_last_measure_of_score: mi + 1 == system.measures.len() && is_last,
+                },
             );
             mx += *mw;
         }
@@ -4841,21 +4796,20 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
     }
 
     push_volta_composites(
-        &mut page.items,
+        &mut sink,
         &mut page.composites,
-        &mut item_counter,
         &page.measures,
         &expanded.measures,
         opts,
     );
     render_hairpin_fragments(
-        &mut page.items,
+        &mut sink,
         &mut page.composites,
-        &mut item_counter,
         &page.measures,
         &expanded.measures,
         opts.hairpin_offset_y,
     );
+    let _ = sink;
     stack_scene_structural_items(&mut page.items, &page.composites, opts.edge_padding);
 
     paginate_unpaginated_page(
@@ -4917,6 +4871,7 @@ fn paginate_unpaginated_page(
 
 fn validate_layout_scene(scene: &LayoutScene) -> Vec<String> {
     let mut diagnostics = Vec::new();
+    let overflow_systems = overflow_systems_by_page(scene);
     for (expected, page) in scene.pages.iter().enumerate() {
         if page.index != expected as u32 {
             diagnostics.push(format!(
@@ -4957,7 +4912,12 @@ fn validate_layout_scene(scene: &LayoutScene) -> Vec<String> {
                     || bounds.x + bounds.width > page.width_pt + 0.01
                     || bounds.y + bounds.height > page.height_pt + 0.01
                 {
-                    diagnostics.push(format!("LAYOUT_ERROR item-bounds item={}", item.id));
+                    let overflow_item = item_system_id(page, item)
+                        .map(|system_id| overflow_systems.contains(&(page.index, system_id)))
+                        .unwrap_or(false);
+                    if !overflow_item {
+                        diagnostics.push(format!("LAYOUT_ERROR item-bounds item={}", item.id));
+                    }
                 }
             }
         }
@@ -5005,6 +4965,45 @@ fn validate_layout_scene(scene: &LayoutScene) -> Vec<String> {
         }
     }
     diagnostics
+}
+
+fn overflow_systems_by_page(scene: &LayoutScene) -> std::collections::BTreeSet<(u32, String)> {
+    scene
+        .issues
+        .iter()
+        .filter_map(|issue| {
+            let mut page_index = None;
+            let mut system_id = None;
+            if !issue.starts_with("LAYOUT_WARNING overflow ") {
+                return None;
+            }
+            for token in issue.split_whitespace() {
+                if let Some(value) = token.strip_prefix("page=") {
+                    page_index = value.parse::<u32>().ok();
+                } else if let Some(value) = token.strip_prefix("system=") {
+                    system_id = Some(value.to_string());
+                }
+            }
+            Some((page_index?, system_id?))
+        })
+        .collect()
+}
+
+fn item_system_id(page: &ScenePage, item: &SceneItem) -> Option<String> {
+    if let Some(measure_id) = item.measure_id.as_deref() {
+        if let Some(measure) = page
+            .measures
+            .iter()
+            .find(|measure| measure.id == measure_id)
+        {
+            return Some(measure.system_id.clone());
+        }
+    }
+
+    page.systems
+        .iter()
+        .find(|system| item.id.starts_with(&format!("{}-", system.id)))
+        .map(|system| system.id.clone())
 }
 
 fn header_box_from_page(page: &ScenePage) -> HeaderLayoutBox {
@@ -5276,9 +5275,8 @@ fn _layout_scene_from_page(page: ScenePage, issues: Vec<String>) -> LayoutScene 
 }
 
 fn push_volta_composites(
-    items: &mut Vec<SceneItem>,
+    sink: &mut SceneEmitSink<'_>,
     composites: &mut Vec<SceneComposite>,
-    counter: &mut usize,
     page_measures: &[SceneMeasure],
     measures: &[DisplayMeasure<'_>],
     opts: &LayoutOptions,
@@ -5294,9 +5292,8 @@ fn push_volta_composites(
         }
 
         push_system_volta_composites(
-            items,
+            sink,
             composites,
-            counter,
             &page_measures[system_start..=system_end],
             measures,
             opts,
@@ -5308,9 +5305,8 @@ fn push_volta_composites(
 }
 
 fn push_system_volta_composites(
-    items: &mut Vec<SceneItem>,
+    sink: &mut SceneEmitSink<'_>,
     composites: &mut Vec<SceneComposite>,
-    counter: &mut usize,
     system_measures: &[SceneMeasure],
     measures: &[DisplayMeasure<'_>],
     opts: &LayoutOptions,
@@ -5343,7 +5339,7 @@ fn push_system_volta_composites(
         );
         let block_x2 = system_measures[block_end].x_pt + system_measures[block_end].width_pt;
         let occupied_top = top_skyline_sample(
-            items,
+            sink.items,
             &system_measures[block_start..=block_end],
             block_x1,
             block_x2,
@@ -5387,19 +5383,20 @@ fn push_system_volta_composites(
             let show_right = matches!(end_type, VoltaSegmentType::End | VoltaSegmentType::BeginEnd);
             let fragment = volta_fragment_kind(show_label, show_right);
             push_volta_segment(
-                items,
+                sink,
                 composites,
-                counter,
-                &system_measures[index..=end],
-                measures,
-                label,
-                line_y,
-                show_left_hook,
-                show_label,
-                show_right,
-                fragment,
-                index == 0,
-                is_first_system,
+                VoltaSegmentSpec {
+                    segment_measures: &system_measures[index..=end],
+                    measures,
+                    label,
+                    line_y,
+                    show_left_hook,
+                    show_label,
+                    show_right,
+                    fragment,
+                    starts_at_system_left: index == 0,
+                    is_first_system,
+                },
             );
 
             index = end + 1;
@@ -5409,14 +5406,10 @@ fn push_system_volta_composites(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn push_volta_segment(
-    items: &mut Vec<SceneItem>,
-    composites: &mut Vec<SceneComposite>,
-    counter: &mut usize,
-    segment_measures: &[SceneMeasure],
-    measures: &[DisplayMeasure<'_>],
-    label: &[u32],
+struct VoltaSegmentSpec<'a> {
+    segment_measures: &'a [SceneMeasure],
+    measures: &'a [DisplayMeasure<'a>],
+    label: &'a [u32],
     line_y: f32,
     show_left_hook: bool,
     show_label: bool,
@@ -5424,89 +5417,92 @@ fn push_volta_segment(
     fragment: SpanFragmentKind,
     starts_at_system_left: bool,
     is_first_system: bool,
+}
+
+fn push_volta_segment(
+    sink: &mut SceneEmitSink<'_>,
+    composites: &mut Vec<SceneComposite>,
+    spec: VoltaSegmentSpec<'_>,
 ) {
-    if segment_measures.is_empty() {
+    if spec.segment_measures.is_empty() {
         return;
     }
-    let first = segment_measures.first().unwrap();
-    let last = segment_measures.last().unwrap();
+    let first = spec.segment_measures.first().unwrap();
+    let last = spec.segment_measures.last().unwrap();
     let label_text = format!(
         "{}.",
-        label
+        spec.label
             .iter()
             .map(|value| value.to_string())
             .collect::<Vec<_>>()
             .join(",")
     );
-    let first_display = display_measure_for_scene(measures, first);
-    let x1 = volta_segment_left_x(first, first_display, starts_at_system_left, is_first_system);
+    let first_display = display_measure_for_scene(spec.measures, first);
+    let x1 = volta_segment_left_x(
+        first,
+        first_display,
+        spec.starts_at_system_left,
+        spec.is_first_system,
+    );
     let x2 = last.x_pt + last.width_pt;
 
     let mut child_item_ids = Vec::new();
-    child_item_ids.push(push_line_item(
-        items,
-        counter,
-        Some(&first.id),
-        "volta-line",
+    child_item_ids.push(sink.push_line_item(LineItemSpec {
+        measure_id: Some(&first.id),
+        role: "volta-line",
         x1,
-        line_y,
+        y1: spec.line_y,
         x2,
-        line_y,
-        "#333",
-        1.0,
-        None,
-    ));
-    if show_left_hook {
-        child_item_ids.push(push_line_item(
-            items,
-            counter,
-            Some(&first.id),
-            "volta-start-hook",
+        y2: spec.line_y,
+        stroke: "#333",
+        stroke_width: 1.0,
+        stroke_line_cap: None,
+    }));
+    if spec.show_left_hook {
+        child_item_ids.push(sink.push_line_item(LineItemSpec {
+            measure_id: Some(&first.id),
+            role: "volta-start-hook",
             x1,
-            line_y,
-            x1,
-            line_y + VOLTA_LINE_HEIGHT_PT,
-            "#333",
-            1.0,
-            None,
-        ));
+            y1: spec.line_y,
+            x2: x1,
+            y2: spec.line_y + VOLTA_LINE_HEIGHT_PT,
+            stroke: "#333",
+            stroke_width: 1.0,
+            stroke_line_cap: None,
+        }));
     }
-    if show_label {
-        child_item_ids.push(push_text_item(
-            items,
-            counter,
-            Some(&first.id),
-            "volta-label",
-            x1 + 5.0,
-            line_y + VOLTA_TEXT_SIZE_PT + 2.0,
-            TextRole::CountLabel,
-            label_text.clone(),
-            "Academico",
-            VOLTA_TEXT_SIZE_PT,
-            "#333",
-            None,
-            None,
-        ));
+    if spec.show_label {
+        child_item_ids.push(sink.push_text_item(TextItemSpec {
+            measure_id: Some(&first.id),
+            role: "volta-label",
+            x: x1 + 5.0,
+            y: spec.line_y + VOLTA_TEXT_SIZE_PT + 2.0,
+            text_role: TextRole::CountLabel,
+            text: label_text.clone(),
+            font_family: "Academico",
+            font_size_pt: VOLTA_TEXT_SIZE_PT,
+            fill: "#333",
+            text_anchor: None,
+            font_weight: None,
+        }));
     }
-    if show_right {
-        child_item_ids.push(push_line_item(
-            items,
-            counter,
-            Some(&last.id),
-            "volta-end-hook",
+    if spec.show_right {
+        child_item_ids.push(sink.push_line_item(LineItemSpec {
+            measure_id: Some(&last.id),
+            role: "volta-end-hook",
+            x1: x2,
+            y1: spec.line_y,
             x2,
-            line_y,
-            x2,
-            line_y + VOLTA_LINE_HEIGHT_PT,
-            "#333",
-            1.0,
-            None,
-        ));
+            y2: spec.line_y + VOLTA_LINE_HEIGHT_PT,
+            stroke: "#333",
+            stroke_width: 1.0,
+            stroke_line_cap: None,
+        }));
     }
     composites.push(SceneComposite {
         id: format!("volta-{}-{}", first.id, last.id),
         kind: CompositeKind::Volta,
-        fragment,
+        fragment: spec.fragment,
         child_item_ids,
         label: Some(label_text),
         count: None,
@@ -5693,149 +5689,33 @@ fn span_fragment_kind(index: usize, total: usize) -> SpanFragmentKind {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn push_line_item(
-    items: &mut Vec<SceneItem>,
-    counter: &mut usize,
-    measure_id: Option<&str>,
-    role: &str,
-    x1: f32,
-    y1: f32,
-    x2: f32,
-    y2: f32,
-    stroke: &str,
-    stroke_width: f32,
-    stroke_line_cap: Option<&str>,
-) -> String {
-    let id = format!("item-{counter}");
-    items.push(SceneItem {
-        id: id.clone(),
-        measure_id: measure_id.map(ToString::to_string),
-        anchor_item_id: None,
-        role: role.to_string(),
-        kind: SceneItemKind::LineSegment,
-        z_index: 0,
-        primitive: ScenePrimitive::LineSegment(LineSegment {
-            x1_pt: x1,
-            y1_pt: y1,
-            x2_pt: x2,
-            y2_pt: y2,
-            stroke: stroke.to_string(),
-            stroke_width,
-            stroke_line_cap: stroke_line_cap.map(ToString::to_string),
-        }),
-    });
-    *counter += 1;
-    id
-}
-
-#[allow(clippy::too_many_arguments)]
-fn push_path_item(
-    items: &mut Vec<SceneItem>,
-    counter: &mut usize,
-    measure_id: Option<&str>,
-    role: &str,
-    d: String,
-    fill: &str,
-    stroke: Option<&str>,
-    stroke_width: Option<f32>,
-) -> String {
-    let id = format!("item-{counter}");
-    items.push(SceneItem {
-        id: id.clone(),
-        measure_id: measure_id.map(ToString::to_string),
-        anchor_item_id: None,
-        role: role.to_string(),
-        kind: SceneItemKind::Path,
-        z_index: 0,
-        primitive: ScenePrimitive::Path(PathShape {
-            d,
-            fill: fill.to_string(),
-            stroke: stroke.map(ToString::to_string),
-            stroke_width,
-        }),
-    });
-    *counter += 1;
-    id
-}
-
-#[allow(clippy::too_many_arguments)]
-fn push_glyph_item(
-    items: &mut Vec<SceneItem>,
-    counter: &mut usize,
-    measure_id: Option<&str>,
-    role: &str,
-    x: f32,
-    y: f32,
-    glyph_role: GlyphRole,
-    font_family: &str,
-    font_size_pt: f32,
-    fill: &str,
-) -> String {
-    let id = format!("item-{counter}");
-    let metric = canonical_glyph_metric(glyph_role);
-    items.push(SceneItem {
-        id: id.clone(),
-        measure_id: measure_id.map(ToString::to_string),
-        anchor_item_id: None,
-        role: role.to_string(),
-        kind: SceneItemKind::GlyphRun,
-        z_index: 0,
-        primitive: ScenePrimitive::GlyphRun(GlyphRun {
-            x_pt: x,
-            y_pt: y,
-            glyph_role,
-            glyph_count: 1,
-            smufl_codepoint: Some(metric.smufl_codepoint),
-            font_family: font_family.to_string(),
-            font_size_pt,
-            fill: fill.to_string(),
-        }),
-    });
-    *counter += 1;
-    id
-}
-
-#[allow(clippy::too_many_arguments)]
-fn render_measure_events(
-    items: &mut Vec<SceneItem>,
-    counter: &mut usize,
-    measure_id: &str,
-    header: &RenderHeader,
-    measure: &RenderMeasure,
-    measure_x: f32,
-    measure_width: f32,
-    left_pad: f32,
-    right_pad: f32,
+struct RenderMeasureEventsInput<'a> {
+    measure_id: &'a str,
+    header: &'a RenderHeader,
+    measure: &'a RenderMeasure,
+    geometry: MeasureGeometryInput,
     staff_top: f32,
     staff_bottom: f32,
-    mapper: &SlotMapper,
+    mapper: &'a SlotMapper,
     stem_len_pt: f32,
     hide_voice2_rests: bool,
-    duration_compression: f32,
-) {
+}
+
+fn render_measure_events(sink: &mut SceneEmitSink<'_>, input: RenderMeasureEventsInput<'_>) {
     let mut beam_anchors: Vec<BeamAnchor> = Vec::new();
-    let geometry = measure_geometry(
-        header,
-        measure,
-        measure_x,
-        measure_width,
-        left_pad,
-        right_pad,
-        mapper,
-        duration_compression,
-    );
-    let mut slot_events = measure
+    let geometry = measure_geometry(input.header, input.measure, input.mapper, &input.geometry);
+    let mut slot_events = input
+        .measure
         .events
         .iter()
         .map(|event| SlotEvent {
             slot: fraction_to_measure_slot(
                 event.start,
-                header.time_beats,
-                header.time_beat_unit,
-                header.divisions,
+                input.header.time_beats,
+                input.header.time_beat_unit,
+                input.header.divisions,
             ),
-            event_x: geometry.x_for_fraction(header, event.start),
+            event_x: geometry.x_for_fraction(input.header, event.start),
             event,
         })
         .collect::<Vec<_>>();
@@ -5863,50 +5743,50 @@ fn render_measure_events(
         }
         let slot_group = &slot_events[slot_start..index];
         let beam_groups_by_voice = beam_groups_for_slot(
-            header,
+            input.header,
             slot,
             slot_group,
             &mut beam_states_by_voice,
             &mut next_beam_group,
         );
         render_slot_group(
-            items,
-            counter,
-            measure_id,
-            slot_group,
-            &beam_groups_by_voice,
-            event_x,
-            staff_top,
-            &mut beam_anchors,
-            stem_len_pt,
-            hide_voice2_rests,
+            sink,
+            RenderSlotGroupInput {
+                measure_id: input.measure_id,
+                slot_group,
+                beam_groups_by_voice: &beam_groups_by_voice,
+                event_x,
+                staff_top: input.staff_top,
+                beam_anchors: &mut beam_anchors,
+                stem_len_pt: input.stem_len_pt,
+                hide_voice2_rests: input.hide_voice2_rests,
+            },
         );
     }
 
     render_beam_groups(
-        items,
-        counter,
-        measure_id,
+        sink,
+        input.measure_id,
         beam_anchors,
-        measure_width,
-        staff_bottom,
+        input.geometry.measure_width,
+        input.staff_bottom,
     );
 }
 
-#[allow(clippy::too_many_arguments)]
-fn render_slot_group(
-    items: &mut Vec<SceneItem>,
-    counter: &mut usize,
-    measure_id: &str,
-    slot_group: &[SlotEvent<'_>],
-    beam_groups_by_voice: &std::collections::BTreeMap<u8, u32>,
+struct RenderSlotGroupInput<'a, 'b> {
+    measure_id: &'a str,
+    slot_group: &'a [SlotEvent<'a>],
+    beam_groups_by_voice: &'a std::collections::BTreeMap<u8, u32>,
     event_x: f32,
     staff_top: f32,
-    beam_anchors: &mut Vec<BeamAnchor>,
+    beam_anchors: &'b mut Vec<BeamAnchor>,
     stem_len_pt: f32,
     hide_voice2_rests: bool,
-) {
-    let hit_voice_count = slot_group
+}
+
+fn render_slot_group(sink: &mut SceneEmitSink<'_>, input: RenderSlotGroupInput<'_, '_>) {
+    let hit_voice_count = input
+        .slot_group
         .iter()
         .filter(|slot_event| matches!(slot_event.event.kind, EventKind::Hit))
         .map(|slot_event| slot_event.event.voice)
@@ -5916,12 +5796,14 @@ fn render_slot_group(
     let mut note_anchors_by_voice: std::collections::BTreeMap<u8, Vec<NotePlacement>> =
         std::collections::BTreeMap::new();
 
-    for voice in slot_group
+    for voice in input
+        .slot_group
         .iter()
         .map(|slot_event| slot_event.event.voice)
         .collect::<std::collections::BTreeSet<_>>()
     {
-        let voice_hits = slot_group
+        let voice_hits = input
+            .slot_group
             .iter()
             .filter(|slot_event| {
                 slot_event.event.voice == voice && matches!(slot_event.event.kind, EventKind::Hit)
@@ -5938,46 +5820,45 @@ fn render_slot_group(
                 0.0
             };
             let placements = render_hit_cluster(
-                items,
-                counter,
-                measure_id,
-                event_x,
-                voice_shift,
-                staff_top,
-                &voice_hits,
-                beam_groups_by_voice.get(&voice).copied(),
-                beam_anchors,
-                stem_len_pt,
+                sink,
+                RenderHitClusterInput {
+                    measure_id: input.measure_id,
+                    event_x: input.event_x,
+                    voice_shift,
+                    staff_top: input.staff_top,
+                    voice_hits: &voice_hits,
+                    beam_group: input.beam_groups_by_voice.get(&voice).copied(),
+                    beam_anchors: input.beam_anchors,
+                    stem_len_pt: input.stem_len_pt,
+                },
             );
             note_anchors_by_voice.insert(voice, placements);
         }
 
-        for rest in slot_group.iter().filter(|slot_event| {
+        for rest in input.slot_group.iter().filter(|slot_event| {
             slot_event.event.voice == voice && matches!(slot_event.event.kind, EventKind::Rest)
         }) {
-            if hide_voice2_rests && rest.event.voice == 2 {
+            if input.hide_voice2_rests && rest.event.voice == 2 {
                 continue;
             }
             let rest_metric = rest_glyph_for_fraction(rest.event.duration);
             let rest_role = rest_metric.role;
             let rest_font_size = BASE_FONT_SIZE_PT;
             let rest_y = if rest.event.voice == 2 {
-                staff_top + 30.0
+                input.staff_top + 30.0
             } else {
-                staff_top + 20.0
+                input.staff_top + 20.0
             };
-            push_glyph_item(
-                items,
-                counter,
-                Some(measure_id),
-                "rest",
-                event_x,
-                rest_y,
-                rest_role,
-                "Bravura",
-                rest_font_size,
-                "#333",
-            );
+            sink.push_glyph_item(GlyphItemSpec {
+                measure_id: Some(input.measure_id),
+                role: "rest",
+                x: input.event_x,
+                y: rest_y,
+                glyph_role: rest_role,
+                font_family: "Bravura",
+                font_size_pt: rest_font_size,
+                fill: "#333",
+            });
         }
     }
 
@@ -5994,31 +5875,30 @@ fn render_slot_group(
         });
 
     let sticking_metric = canonical_text_metric(TextRole::Sticking);
-    for sticking in slot_group
+    for sticking in input
+        .slot_group
         .iter()
         .filter(|slot_event| matches!(slot_event.event.kind, EventKind::Sticking))
     {
-        push_text_item(
-            items,
-            counter,
-            Some(measure_id),
-            "sticking",
-            event_x,
-            staff_top - sticking_metric.descent_pt,
-            TextRole::Sticking,
-            sticking.event.glyph.clone(),
-            sticking_metric.font_family,
-            sticking_metric.font_size_pt,
-            "#333",
-            Some("middle"),
-            Some("bold"),
-        );
-        if let Some(item) = items.last_mut() {
+        sink.push_text_item(TextItemSpec {
+            measure_id: Some(input.measure_id),
+            role: "sticking",
+            x: input.event_x,
+            y: input.staff_top - sticking_metric.descent_pt,
+            text_role: TextRole::Sticking,
+            text: sticking.event.glyph.clone(),
+            font_family: sticking_metric.font_family,
+            font_size_pt: sticking_metric.font_size_pt,
+            fill: "#333",
+            text_anchor: Some("middle"),
+            font_weight: Some("bold"),
+        });
+        if let Some(item) = sink.last_item_mut() {
             item.anchor_item_id = default_anchor.clone();
         }
         if let Some(anchor_y) = default_anchor_y {
             if let Some(ScenePrimitive::TextRun(text)) =
-                items.last_mut().map(|item| &mut item.primitive)
+                sink.last_item_mut().map(|item| &mut item.primitive)
             {
                 text.y_pt = anchor_y - sticking_metric.line_height_pt - 4.0;
             }
@@ -6073,26 +5953,30 @@ fn beam_groups_for_slot(
     result
 }
 
-#[allow(clippy::too_many_arguments)]
-fn render_hit_cluster(
-    items: &mut Vec<SceneItem>,
-    counter: &mut usize,
-    measure_id: &str,
+struct RenderHitClusterInput<'a, 'b> {
+    measure_id: &'a str,
     event_x: f32,
     voice_shift: f32,
     staff_top: f32,
-    voice_hits: &[&SlotEvent<'_>],
+    voice_hits: &'a [&'a SlotEvent<'a>],
     beam_group: Option<u32>,
-    beam_anchors: &mut Vec<BeamAnchor>,
+    beam_anchors: &'b mut Vec<BeamAnchor>,
     stem_len_pt: f32,
+}
+
+fn render_hit_cluster(
+    sink: &mut SceneEmitSink<'_>,
+    input: RenderHitClusterInput<'_, '_>,
 ) -> Vec<NotePlacement> {
     let note_font_size = 30.0_f32;
-    let stem_up = voice_hits
+    let stem_up = input
+        .voice_hits
         .first()
         .map(|slot_event| slot_event.event.voice != 2)
         .unwrap_or(true);
-    let base_note_x = event_x - 7.0 + voice_shift;
-    let mut placements = voice_hits
+    let base_note_x = input.event_x - 7.0 + input.voice_shift;
+    let mut placements = input
+        .voice_hits
         .iter()
         .map(|slot_event| {
             let track_ss = staff_y_for_track(&slot_event.event.track);
@@ -6112,33 +5996,29 @@ fn render_hit_cluster(
         let note_glyph = char::from_u32(glyph_metric.smufl_codepoint)
             .unwrap_or('?')
             .to_string();
-        let actual_note_y = staff_top + *note_y_offset;
-        let note_id = push_text_item(
-            items,
-            counter,
-            Some(measure_id),
-            "notehead",
-            base_note_x,
-            actual_note_y,
-            TextRole::Tempo,
-            note_glyph,
-            "Bravura",
-            note_font_size,
-            "#333",
-            None,
-            None,
-        );
+        let actual_note_y = input.staff_top + *note_y_offset;
+        let note_id = sink.push_text_item(TextItemSpec {
+            measure_id: Some(input.measure_id),
+            role: "notehead",
+            x: base_note_x,
+            y: actual_note_y,
+            text_role: TextRole::Tempo,
+            text: note_glyph,
+            font_family: "Bravura",
+            font_size_pt: note_font_size,
+            fill: "#333",
+            text_anchor: None,
+            font_weight: None,
+        });
         let ledger_half_overhang_pt = 3.0_f32;
         for ledger_y_offset in ledger_line_offsets_for_staff_position(*note_y_offset / 10.0) {
-            let ledger_y = staff_top + ledger_y_offset * 10.0;
-            push_line_item(
-                items,
-                counter,
-                Some(measure_id),
-                "ledger-line",
-                base_note_x - ledger_half_overhang_pt,
-                ledger_y,
-                base_note_x
+            let ledger_y = input.staff_top + ledger_y_offset * 10.0;
+            sink.push_line_item(LineItemSpec {
+                measure_id: Some(input.measure_id),
+                role: "ledger-line",
+                x1: base_note_x - ledger_half_overhang_pt,
+                y1: ledger_y,
+                x2: base_note_x
                     + canonical_glyph_metric(glyph_role_for_codepoint(
                         glyph_metric.smufl_codepoint,
                     ))
@@ -6146,12 +6026,12 @@ fn render_hit_cluster(
                         * note_font_size
                         / 4.0
                     + ledger_half_overhang_pt,
-                ledger_y,
-                "#333",
-                1.25,
-                None,
-            );
-            if let Some(item) = items.last_mut() {
+                y2: ledger_y,
+                stroke: "#333",
+                stroke_width: 1.25,
+                stroke_line_cap: None,
+            });
+            if let Some(item) = sink.last_item_mut() {
                 item.anchor_item_id = Some(note_id.clone());
             }
         }
@@ -6174,7 +6054,7 @@ fn render_hit_cluster(
     }
 
     let mut accent_reference_y = None;
-    if let Some(first_hit) = voice_hits.first() {
+    if let Some(first_hit) = input.voice_hits.first() {
         let needs_stem =
             first_hit.event.duration.denominator >= 4 || first_hit.event.tuplet.is_some();
         if needs_stem {
@@ -6214,30 +6094,28 @@ fn render_hit_cluster(
                 let stem_attach_y = attach_note.note_y - stem_anchor.y_ss * smufl_ss;
                 let stem_x = stem_attach_x;
                 let stem_y1 = if stem_up {
-                    stem_attach_y - stem_len_pt
+                    stem_attach_y - input.stem_len_pt
                 } else {
                     stem_attach_y
                 };
                 let stem_y2 = if stem_up {
                     stem_attach_y
                 } else {
-                    stem_attach_y + stem_len_pt
+                    stem_attach_y + input.stem_len_pt
                 };
                 accent_reference_y = Some(if stem_up { stem_y1 } else { stem_y2 });
-                let stem_id = push_line_item(
-                    items,
-                    counter,
-                    Some(measure_id),
-                    "stem",
-                    stem_x,
-                    stem_y1,
-                    stem_x,
-                    stem_y2,
-                    "#333",
-                    1.5,
-                    None,
-                );
-                if let Some(item) = items.last_mut() {
+                let stem_id = sink.push_line_item(LineItemSpec {
+                    measure_id: Some(input.measure_id),
+                    role: "stem",
+                    x1: stem_x,
+                    y1: stem_y1,
+                    x2: stem_x,
+                    y2: stem_y2,
+                    stroke: "#333",
+                    stroke_width: 1.5,
+                    stroke_line_cap: None,
+                });
+                if let Some(item) = sink.last_item_mut() {
                     item.anchor_item_id = Some(attach_note.note_id.clone());
                 }
                 let beam_level = if first_hit.event.duration.denominator >= 32 {
@@ -6249,9 +6127,9 @@ fn render_hit_cluster(
                 } else {
                     0
                 };
-                if let Some(group) = beam_group.filter(|_| beam_level > 0) {
-                    beam_anchors.push(BeamAnchor {
-                        x: event_x,
+                if let Some(group) = input.beam_group.filter(|_| beam_level > 0) {
+                    input.beam_anchors.push(BeamAnchor {
+                        x: input.event_x,
                         stem_x,
                         stem_tip_y: if stem_up { stem_y1 } else { stem_y2 },
                         voice: first_hit.event.voice,
@@ -6279,9 +6157,8 @@ fn render_hit_cluster(
             + 18.0
     };
     render_accent_glyphs(
-        items,
-        counter,
-        measure_id,
+        sink,
+        input.measure_id,
         &note_placements,
         stem_up,
         accent_reference_y.unwrap_or(fallback_accent_y),
@@ -6291,8 +6168,7 @@ fn render_hit_cluster(
 }
 
 fn render_accent_glyphs(
-    items: &mut Vec<SceneItem>,
-    counter: &mut usize,
+    sink: &mut SceneEmitSink<'_>,
     measure_id: &str,
     note_placements: &[NotePlacement],
     stem_up: bool,
@@ -6316,19 +6192,17 @@ fn render_accent_glyphs(
         .iter()
         .filter(|placement| placement.has_accent)
     {
-        push_glyph_item(
-            items,
-            counter,
-            Some(measure_id),
-            "accent",
-            placement.note_center_x - accent_width * 0.5,
-            accent_y,
-            accent_role,
-            "Bravura",
-            accent_font_size,
-            "#333",
-        );
-        if let Some(item) = items.last_mut() {
+        sink.push_glyph_item(GlyphItemSpec {
+            measure_id: Some(measure_id),
+            role: "accent",
+            x: placement.note_center_x - accent_width * 0.5,
+            y: accent_y,
+            glyph_role: accent_role,
+            font_family: "Bravura",
+            font_size_pt: accent_font_size,
+            fill: "#333",
+        });
+        if let Some(item) = sink.last_item_mut() {
             item.anchor_item_id = Some(placement.note_id.clone());
         }
     }
@@ -6378,8 +6252,7 @@ fn adjust_stem_tip(items: &mut [SceneItem], stem_id: &str, target_y: f32, stem_u
 }
 
 fn render_beam_groups(
-    items: &mut Vec<SceneItem>,
-    counter: &mut usize,
+    sink: &mut SceneEmitSink<'_>,
     measure_id: &str,
     mut anchors: Vec<BeamAnchor>,
     _measure_width: f32,
@@ -6418,19 +6291,17 @@ fn render_beam_groups(
                     });
             let flag_x = anchor.stem_x - flag_anchor.x_ss * smufl_ss;
             let flag_y = anchor.stem_tip_y + flag_anchor.y_ss * smufl_ss;
-            let flag_id = push_glyph_item(
-                items,
-                counter,
-                Some(measure_id),
-                "flag",
-                flag_x,
-                flag_y,
-                flag_role,
-                "Bravura",
-                BASE_FONT_SIZE_PT,
-                "#333",
-            );
-            if let Some(item) = items.last_mut() {
+            let flag_id = sink.push_glyph_item(GlyphItemSpec {
+                measure_id: Some(measure_id),
+                role: "flag",
+                x: flag_x,
+                y: flag_y,
+                glyph_role: flag_role,
+                font_family: "Bravura",
+                font_size_pt: BASE_FONT_SIZE_PT,
+                fill: "#333",
+            });
+            if let Some(item) = sink.last_item_mut() {
                 item.anchor_item_id = Some(anchor.stem_item_id.clone());
                 debug_assert_eq!(item.id, flag_id);
             }
@@ -6458,21 +6329,19 @@ fn render_beam_groups(
                     0.5
                 };
                 let target_tip_y = primary_y + dy * t;
-                adjust_stem_tip(items, &anchor.stem_item_id, target_tip_y, anchor.up);
+                adjust_stem_tip(sink.items, &anchor.stem_item_id, target_tip_y, anchor.up);
             }
         }
 
-        let beam_id = push_path_item(
-            items,
-            counter,
-            Some(measure_id),
-            "beam",
-            beam_path_d(first.stem_x, primary_y, last.stem_x, end_y, first.up, 4.0),
-            "#333",
-            None,
-            None,
-        );
-        if let Some(item) = items.last_mut() {
+        let beam_id = sink.push_path_item(PathItemSpec {
+            measure_id: Some(measure_id),
+            role: "beam",
+            d: beam_path_d(first.stem_x, primary_y, last.stem_x, end_y, first.up, 4.0),
+            fill: "#333",
+            stroke: None,
+            stroke_width: None,
+        });
+        if let Some(item) = sink.last_item_mut() {
             item.anchor_item_id = Some(first.stem_item_id.clone());
             debug_assert_eq!(item.id, beam_id);
         }
@@ -6490,12 +6359,10 @@ fn render_beam_groups(
                 let segment_end_y =
                     beam_y_at_x(segment.end_x, first.stem_x, primary_y, last.stem_x, end_y)
                         + level_offset;
-                let secondary_id = push_path_item(
-                    items,
-                    counter,
-                    Some(measure_id),
-                    "beam-secondary",
-                    beam_path_d(
+                let secondary_id = sink.push_path_item(PathItemSpec {
+                    measure_id: Some(measure_id),
+                    role: "beam-secondary",
+                    d: beam_path_d(
                         segment.start_x,
                         start_y,
                         segment.end_x,
@@ -6503,11 +6370,11 @@ fn render_beam_groups(
                         first.up,
                         4.0,
                     ),
-                    "#333",
-                    None,
-                    None,
-                );
-                if let Some(item) = items.last_mut() {
+                    fill: "#333",
+                    stroke: None,
+                    stroke_width: None,
+                });
+                if let Some(item) = sink.last_item_mut() {
                     item.anchor_item_id = Some(first.stem_item_id.clone());
                     debug_assert_eq!(item.id, secondary_id);
                 }
@@ -6636,8 +6503,7 @@ fn beam_path_d(x1: f32, y1: f32, x2: f32, y2: f32, up: bool, thickness: f32) -> 
 }
 
 fn render_left_barline(
-    items: &mut Vec<SceneItem>,
-    counter: &mut usize,
+    sink: &mut SceneEmitSink<'_>,
     measure_id: Option<&str>,
     x: f32,
     top: f32,
@@ -6646,224 +6512,202 @@ fn render_left_barline(
 ) {
     match barline {
         Some("repeat-start") | Some("repeat-both") => {
-            render_start_repeat_barline(items, counter, measure_id, x, top, bottom)
+            render_start_repeat_barline(sink, measure_id, x, top, bottom)
         }
         _ => {}
     }
 }
 
 fn render_system_opening_barline(
-    items: &mut Vec<SceneItem>,
-    counter: &mut usize,
+    sink: &mut SceneEmitSink<'_>,
     measure_id: Option<&str>,
     x: f32,
     top: f32,
     bottom: f32,
 ) {
-    push_rect_item(
-        items,
-        counter,
+    sink.push_rect_item(RectItemSpec {
         measure_id,
-        "opening-barline",
+        role: "opening-barline",
         x,
-        top,
-        1.0,
-        bottom - top + 1.0,
-        "#333",
-        None,
-        None,
-    );
+        y: top,
+        width: 1.0,
+        height: bottom - top + 1.0,
+        fill: "#333",
+        stroke: None,
+        stroke_width: None,
+    });
 }
 
 fn render_start_repeat_barline(
-    items: &mut Vec<SceneItem>,
-    counter: &mut usize,
+    sink: &mut SceneEmitSink<'_>,
     measure_id: Option<&str>,
     x: f32,
     top: f32,
     bottom: f32,
 ) {
-    push_glyph_item(
-        items,
-        counter,
+    sink.push_glyph_item(GlyphItemSpec {
         measure_id,
-        "repeat-start",
+        role: "repeat-start",
         x,
-        start_repeat_vertical_origin(top, bottom),
-        GlyphRole::RepeatLeft,
-        "Bravura",
-        REPEAT_BARLINE_FONT_SIZE_PT,
-        "#333",
-    );
+        y: start_repeat_vertical_origin(top, bottom),
+        glyph_role: GlyphRole::RepeatLeft,
+        font_family: "Bravura",
+        font_size_pt: REPEAT_BARLINE_FONT_SIZE_PT,
+        fill: "#333",
+    });
 }
 
-#[allow(clippy::too_many_arguments)]
-fn render_right_barline(
-    items: &mut Vec<SceneItem>,
-    counter: &mut usize,
-    measure_id: Option<&str>,
+struct RightBarlineSpec<'a> {
+    measure_id: Option<&'a str>,
     x: f32,
     top: f32,
     bottom: f32,
-    barline: Option<&str>,
+    barline: Option<&'a str>,
     is_last_measure_of_score: bool,
-) {
-    let h = bottom - top + 1.0;
-    match barline {
+}
+
+fn render_right_barline(sink: &mut SceneEmitSink<'_>, spec: RightBarlineSpec<'_>) {
+    let h = spec.bottom - spec.top + 1.0;
+    match spec.barline {
         Some("repeat-end") | Some("repeat-both") => {
-            let y = start_repeat_vertical_origin(top, bottom);
-            push_glyph_item(
-                items,
-                counter,
-                measure_id,
-                "repeat-end",
-                x - repeat_barline_rendered_width(GlyphRole::RepeatRight),
+            let y = start_repeat_vertical_origin(spec.top, spec.bottom);
+            sink.push_glyph_item(GlyphItemSpec {
+                measure_id: spec.measure_id,
+                role: "repeat-end",
+                x: spec.x - repeat_barline_rendered_width(GlyphRole::RepeatRight),
                 y,
-                GlyphRole::RepeatRight,
-                "Bravura",
-                REPEAT_BARLINE_FONT_SIZE_PT,
-                "#333",
-            );
+                glyph_role: GlyphRole::RepeatRight,
+                font_family: "Bravura",
+                font_size_pt: REPEAT_BARLINE_FONT_SIZE_PT,
+                fill: "#333",
+            });
         }
         Some("double") => {
-            push_rect_item(
-                items,
-                counter,
-                measure_id,
-                "double-barline-left",
-                x - 4.0,
-                top,
-                1.0,
-                h,
-                "#333",
-                None,
-                None,
-            );
-            push_rect_item(
-                items,
-                counter,
-                measure_id,
-                "double-barline-right",
-                x - 1.0,
-                top,
-                1.0,
-                h,
-                "#333",
-                None,
-                None,
-            );
+            sink.push_rect_item(RectItemSpec {
+                measure_id: spec.measure_id,
+                role: "double-barline-left",
+                x: spec.x - 4.0,
+                y: spec.top,
+                width: 1.0,
+                height: h,
+                fill: "#333",
+                stroke: None,
+                stroke_width: None,
+            });
+            sink.push_rect_item(RectItemSpec {
+                measure_id: spec.measure_id,
+                role: "double-barline-right",
+                x: spec.x - 1.0,
+                y: spec.top,
+                width: 1.0,
+                height: h,
+                fill: "#333",
+                stroke: None,
+                stroke_width: None,
+            });
         }
         Some("final") => {
-            push_rect_item(
-                items,
-                counter,
-                measure_id,
-                "final-barline-thin",
-                x - 4.0,
-                top,
-                1.0,
-                h,
-                "#333",
-                None,
-                None,
-            );
-            push_rect_item(
-                items,
-                counter,
-                measure_id,
-                "final-barline-thick",
-                x - 3.0,
-                top,
-                3.0,
-                h,
-                "#333",
-                None,
-                None,
-            );
+            sink.push_rect_item(RectItemSpec {
+                measure_id: spec.measure_id,
+                role: "final-barline-thin",
+                x: spec.x - 4.0,
+                y: spec.top,
+                width: 1.0,
+                height: h,
+                fill: "#333",
+                stroke: None,
+                stroke_width: None,
+            });
+            sink.push_rect_item(RectItemSpec {
+                measure_id: spec.measure_id,
+                role: "final-barline-thick",
+                x: spec.x - 3.0,
+                y: spec.top,
+                width: 3.0,
+                height: h,
+                fill: "#333",
+                stroke: None,
+                stroke_width: None,
+            });
         }
         _ => {
-            push_rect_item(
-                items,
-                counter,
-                measure_id,
-                if is_last_measure_of_score {
+            sink.push_rect_item(RectItemSpec {
+                measure_id: spec.measure_id,
+                role: if spec.is_last_measure_of_score {
                     "closing-barline"
                 } else {
                     "barline"
                 },
-                x - 1.0,
-                top,
-                1.0,
-                h,
-                "#333",
-                None,
-                None,
-            );
-            if is_last_measure_of_score {
-                push_rect_item(
-                    items,
-                    counter,
-                    measure_id,
-                    "final-barline",
-                    x - 3.0,
-                    top,
-                    3.0,
-                    h,
-                    "#333",
-                    None,
-                    None,
-                );
+                x: spec.x - 1.0,
+                y: spec.top,
+                width: 1.0,
+                height: h,
+                fill: "#333",
+                stroke: None,
+                stroke_width: None,
+            });
+            if spec.is_last_measure_of_score {
+                sink.push_rect_item(RectItemSpec {
+                    measure_id: spec.measure_id,
+                    role: "final-barline",
+                    x: spec.x - 3.0,
+                    y: spec.top,
+                    width: 3.0,
+                    height: h,
+                    fill: "#333",
+                    stroke: None,
+                    stroke_width: None,
+                });
             }
         }
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn render_nav_markers(
-    items: &mut Vec<SceneItem>,
-    composites: &mut Vec<SceneComposite>,
-    counter: &mut usize,
-    measure_id: &str,
-    measure: &DisplayMeasure<'_>,
+struct NavMarkerSpec<'a> {
+    measure_id: &'a str,
+    measure: &'a DisplayMeasure<'a>,
     x: f32,
     width: f32,
     system_y: f32,
     top: f32,
-    _bottom: f32,
+}
+
+fn render_nav_markers(
+    sink: &mut SceneEmitSink<'_>,
+    composites: &mut Vec<SceneComposite>,
+    spec: NavMarkerSpec<'_>,
 ) {
     let count_metric = canonical_text_metric(TextRole::CountLabel);
-    if let Some(ref start_nav) = measure.start_nav {
+    if let Some(ref start_nav) = spec.measure.start_nav {
         let label = match start_nav {
             NavMarker::Segno => "@segno",
             NavMarker::Coda => "@coda",
         };
-        let nav_id = push_text_item(
-            items,
-            counter,
-            Some(measure_id),
-            "nav-start",
-            x + 4.0,
-            system_y - count_metric.descent_pt,
-            TextRole::CountLabel,
-            label.to_string(),
-            count_metric.font_family,
-            count_metric.font_size_pt,
-            "#333",
-            None,
-            Some("bold"),
-        );
+        let nav_id = sink.push_text_item(TextItemSpec {
+            measure_id: Some(spec.measure_id),
+            role: "nav-start",
+            x: spec.x + 4.0,
+            y: spec.system_y - count_metric.descent_pt,
+            text_role: TextRole::CountLabel,
+            text: label.to_string(),
+            font_family: count_metric.font_family,
+            font_size_pt: count_metric.font_size_pt,
+            fill: "#333",
+            text_anchor: None,
+            font_weight: Some("bold"),
+        });
         composites.push(SceneComposite {
-            id: format!("navigation-start-{}", measure.global_index),
+            id: format!("navigation-start-{}", spec.measure.global_index),
             kind: CompositeKind::Navigation,
             fragment: SpanFragmentKind::SingleSegment,
             child_item_ids: vec![nav_id],
             label: Some(label.to_string()),
             count: None,
-            start_anchor_id: Some(measure_id.to_string()),
-            end_anchor_id: Some(measure_id.to_string()),
+            start_anchor_id: Some(spec.measure_id.to_string()),
+            end_anchor_id: Some(spec.measure_id.to_string()),
         });
     }
-    if let Some(ref end_nav) = measure.end_nav {
+    if let Some(ref end_nav) = spec.measure.end_nav {
         let label = match end_nav {
             NavJump::Fine => "@fine",
             NavJump::DC => "@dc",
@@ -6874,38 +6718,35 @@ fn render_nav_markers(
             NavJump::DSalCoda => "@ds-al-coda",
             NavJump::ToCoda => "@to-coda",
         };
-        let nav_id = push_text_item(
-            items,
-            counter,
-            Some(measure_id),
-            "nav-end",
-            x + width - 4.0,
-            top - count_metric.descent_pt - 1.0,
-            TextRole::CountLabel,
-            label.to_string(),
-            count_metric.font_family,
-            count_metric.font_size_pt,
-            "#333",
-            Some("end"),
-            Some("bold"),
-        );
+        let nav_id = sink.push_text_item(TextItemSpec {
+            measure_id: Some(spec.measure_id),
+            role: "nav-end",
+            x: spec.x + spec.width - 4.0,
+            y: spec.top - count_metric.descent_pt - 1.0,
+            text_role: TextRole::CountLabel,
+            text: label.to_string(),
+            font_family: count_metric.font_family,
+            font_size_pt: count_metric.font_size_pt,
+            fill: "#333",
+            text_anchor: Some("end"),
+            font_weight: Some("bold"),
+        });
         composites.push(SceneComposite {
-            id: format!("navigation-end-{}", measure.global_index),
+            id: format!("navigation-end-{}", spec.measure.global_index),
             kind: CompositeKind::Navigation,
             fragment: SpanFragmentKind::SingleSegment,
             child_item_ids: vec![nav_id],
             label: Some(label.to_string()),
             count: None,
-            start_anchor_id: Some(measure_id.to_string()),
-            end_anchor_id: Some(measure_id.to_string()),
+            start_anchor_id: Some(spec.measure_id.to_string()),
+            end_anchor_id: Some(spec.measure_id.to_string()),
         });
     }
 }
 
 fn render_hairpin_fragments(
-    items: &mut Vec<SceneItem>,
+    sink: &mut SceneEmitSink<'_>,
     composites: &mut Vec<SceneComposite>,
-    counter: &mut usize,
     page_measures: &[SceneMeasure],
     measures: &[DisplayMeasure<'_>],
     hairpin_offset_y: f32,
@@ -6973,7 +6814,7 @@ fn render_hairpin_fragments(
                     HAIRPIN_OPEN_HEIGHT_PT,
                 );
                 let top_y = bottom_skyline_sample(
-                    items,
+                    sink.items,
                     fragment,
                     start_x,
                     end_x,
@@ -6985,32 +6826,28 @@ fn render_hairpin_fragments(
                 let left_bottom_y = center_y + left_open_height * 0.5;
                 let right_top_y = center_y - right_open_height * 0.5;
                 let right_bottom_y = center_y + right_open_height * 0.5;
-                let top_id = push_line_item(
-                    items,
-                    counter,
-                    Some(&first.id),
-                    "hairpin-top",
-                    start_x,
-                    left_top_y,
-                    end_x,
-                    right_top_y,
-                    "#333",
-                    1.2,
-                    None,
-                );
-                let bottom_id = push_line_item(
-                    items,
-                    counter,
-                    Some(&first.id),
-                    "hairpin-bottom",
-                    start_x,
-                    left_bottom_y,
-                    end_x,
-                    right_bottom_y,
-                    "#333",
-                    1.2,
-                    None,
-                );
+                let top_id = sink.push_line_item(LineItemSpec {
+                    measure_id: Some(&first.id),
+                    role: "hairpin-top",
+                    x1: start_x,
+                    y1: left_top_y,
+                    x2: end_x,
+                    y2: right_top_y,
+                    stroke: "#333",
+                    stroke_width: 1.2,
+                    stroke_line_cap: None,
+                });
+                let bottom_id = sink.push_line_item(LineItemSpec {
+                    measure_id: Some(&first.id),
+                    role: "hairpin-bottom",
+                    x1: start_x,
+                    y1: left_bottom_y,
+                    x2: end_x,
+                    y2: right_bottom_y,
+                    stroke: "#333",
+                    stroke_width: 1.2,
+                    stroke_line_cap: None,
+                });
                 composites.push(SceneComposite {
                     id: format!(
                         "hairpin-{}-{}-{}",
@@ -7503,78 +7340,193 @@ fn fraction_to_f32(fraction: Fraction) -> f32 {
     fraction.numerator as f32 / fraction.denominator.max(1) as f32
 }
 
-#[allow(clippy::too_many_arguments)]
-fn push_rect_item(
-    items: &mut Vec<SceneItem>,
-    counter: &mut usize,
-    measure_id: Option<&str>,
-    role: &str,
+struct SceneEmitSink<'a> {
+    items: &'a mut Vec<SceneItem>,
+    counter: &'a mut usize,
+}
+
+impl<'a> SceneEmitSink<'a> {
+    fn new(items: &'a mut Vec<SceneItem>, counter: &'a mut usize) -> Self {
+        Self { items, counter }
+    }
+
+    fn next_id(&mut self) -> String {
+        let id = format!("item-{}", self.counter);
+        *self.counter += 1;
+        id
+    }
+
+    fn last_item_mut(&mut self) -> Option<&mut SceneItem> {
+        self.items.last_mut()
+    }
+
+    fn push_rect_item(&mut self, spec: RectItemSpec<'_>) {
+        let id = self.next_id();
+        self.items.push(SceneItem {
+            id,
+            measure_id: spec.measure_id.map(ToString::to_string),
+            anchor_item_id: None,
+            role: spec.role.to_string(),
+            kind: SceneItemKind::Rect,
+            z_index: 0,
+            primitive: ScenePrimitive::Rect(RectShape {
+                x_pt: spec.x,
+                y_pt: spec.y,
+                width_pt: spec.width,
+                height_pt: spec.height,
+                fill: spec.fill.to_string(),
+                stroke: spec.stroke.map(ToString::to_string),
+                stroke_width: spec.stroke_width,
+            }),
+        });
+    }
+
+    fn push_text_item(&mut self, spec: TextItemSpec<'_>) -> String {
+        let id = self.next_id();
+        self.items.push(SceneItem {
+            id: id.clone(),
+            measure_id: spec.measure_id.map(ToString::to_string),
+            anchor_item_id: None,
+            role: spec.role.to_string(),
+            kind: SceneItemKind::TextRun,
+            z_index: 0,
+            primitive: ScenePrimitive::TextRun(TextRun {
+                x_pt: spec.x,
+                y_pt: spec.y,
+                text_role: spec.text_role,
+                text: spec.text,
+                font_family: spec.font_family.to_string(),
+                font_size_pt: spec.font_size_pt,
+                fill: spec.fill.to_string(),
+                text_anchor: spec.text_anchor.map(ToString::to_string),
+                font_weight: spec.font_weight.map(ToString::to_string),
+            }),
+        });
+        id
+    }
+
+    fn push_line_item(&mut self, spec: LineItemSpec<'_>) -> String {
+        let id = self.next_id();
+        self.items.push(SceneItem {
+            id: id.clone(),
+            measure_id: spec.measure_id.map(ToString::to_string),
+            anchor_item_id: None,
+            role: spec.role.to_string(),
+            kind: SceneItemKind::LineSegment,
+            z_index: 0,
+            primitive: ScenePrimitive::LineSegment(LineSegment {
+                x1_pt: spec.x1,
+                y1_pt: spec.y1,
+                x2_pt: spec.x2,
+                y2_pt: spec.y2,
+                stroke: spec.stroke.to_string(),
+                stroke_width: spec.stroke_width,
+                stroke_line_cap: spec.stroke_line_cap.map(ToString::to_string),
+            }),
+        });
+        id
+    }
+
+    fn push_path_item(&mut self, spec: PathItemSpec<'_>) -> String {
+        let id = self.next_id();
+        self.items.push(SceneItem {
+            id: id.clone(),
+            measure_id: spec.measure_id.map(ToString::to_string),
+            anchor_item_id: None,
+            role: spec.role.to_string(),
+            kind: SceneItemKind::Path,
+            z_index: 0,
+            primitive: ScenePrimitive::Path(PathShape {
+                d: spec.d,
+                fill: spec.fill.to_string(),
+                stroke: spec.stroke.map(ToString::to_string),
+                stroke_width: spec.stroke_width,
+            }),
+        });
+        id
+    }
+
+    fn push_glyph_item(&mut self, spec: GlyphItemSpec<'_>) -> String {
+        let id = self.next_id();
+        let metric = canonical_glyph_metric(spec.glyph_role);
+        self.items.push(SceneItem {
+            id: id.clone(),
+            measure_id: spec.measure_id.map(ToString::to_string),
+            anchor_item_id: None,
+            role: spec.role.to_string(),
+            kind: SceneItemKind::GlyphRun,
+            z_index: 0,
+            primitive: ScenePrimitive::GlyphRun(GlyphRun {
+                x_pt: spec.x,
+                y_pt: spec.y,
+                glyph_role: spec.glyph_role,
+                glyph_count: 1,
+                smufl_codepoint: Some(metric.smufl_codepoint),
+                font_family: spec.font_family.to_string(),
+                font_size_pt: spec.font_size_pt,
+                fill: spec.fill.to_string(),
+            }),
+        });
+        id
+    }
+}
+
+struct RectItemSpec<'a> {
+    measure_id: Option<&'a str>,
+    role: &'a str,
     x: f32,
     y: f32,
     width: f32,
     height: f32,
-    fill: &str,
-    stroke: Option<&str>,
+    fill: &'a str,
+    stroke: Option<&'a str>,
     stroke_width: Option<f32>,
-) {
-    items.push(SceneItem {
-        id: format!("item-{counter}"),
-        measure_id: measure_id.map(ToString::to_string),
-        anchor_item_id: None,
-        role: role.to_string(),
-        kind: SceneItemKind::Rect,
-        z_index: 0,
-        primitive: ScenePrimitive::Rect(RectShape {
-            x_pt: x,
-            y_pt: y,
-            width_pt: width,
-            height_pt: height,
-            fill: fill.to_string(),
-            stroke: stroke.map(ToString::to_string),
-            stroke_width,
-        }),
-    });
-    *counter += 1;
 }
 
-#[allow(clippy::too_many_arguments)]
-fn push_text_item(
-    items: &mut Vec<SceneItem>,
-    counter: &mut usize,
-    measure_id: Option<&str>,
-    role: &str,
+struct TextItemSpec<'a> {
+    measure_id: Option<&'a str>,
+    role: &'a str,
     x: f32,
     y: f32,
     text_role: TextRole,
     text: String,
-    font_family: &str,
+    font_family: &'a str,
     font_size_pt: f32,
-    fill: &str,
-    text_anchor: Option<&str>,
-    font_weight: Option<&str>,
-) -> String {
-    let id = format!("item-{counter}");
-    items.push(SceneItem {
-        id: id.clone(),
-        measure_id: measure_id.map(ToString::to_string),
-        anchor_item_id: None,
-        role: role.to_string(),
-        kind: SceneItemKind::TextRun,
-        z_index: 0,
-        primitive: ScenePrimitive::TextRun(TextRun {
-            x_pt: x,
-            y_pt: y,
-            text_role,
-            text,
-            font_family: font_family.to_string(),
-            font_size_pt,
-            fill: fill.to_string(),
-            text_anchor: text_anchor.map(ToString::to_string),
-            font_weight: font_weight.map(ToString::to_string),
-        }),
-    });
-    *counter += 1;
-    id
+    fill: &'a str,
+    text_anchor: Option<&'a str>,
+    font_weight: Option<&'a str>,
+}
+
+struct LineItemSpec<'a> {
+    measure_id: Option<&'a str>,
+    role: &'a str,
+    x1: f32,
+    y1: f32,
+    x2: f32,
+    y2: f32,
+    stroke: &'a str,
+    stroke_width: f32,
+    stroke_line_cap: Option<&'a str>,
+}
+
+struct PathItemSpec<'a> {
+    measure_id: Option<&'a str>,
+    role: &'a str,
+    d: String,
+    fill: &'a str,
+    stroke: Option<&'a str>,
+    stroke_width: Option<f32>,
+}
+
+struct GlyphItemSpec<'a> {
+    measure_id: Option<&'a str>,
+    role: &'a str,
+    x: f32,
+    y: f32,
+    glyph_role: GlyphRole,
+    font_family: &'a str,
+    font_size_pt: f32,
+    fill: &'a str,
 }
 
 fn num_to_glyph(n: u32) -> String {
@@ -9100,6 +9052,110 @@ fn test_final_scene_validator_checks_ids_and_page_local_references() {
     assert!(diagnostics.contains("LAYOUT_ERROR item-anchor"));
     assert!(diagnostics.contains("LAYOUT_ERROR composite-anchor"));
     assert!(diagnostics.contains("LAYOUT_ERROR duplicate-item"));
+}
+
+#[test]
+fn test_final_scene_validator_suppresses_only_named_overflow_system_bounds() {
+    let mut scene = LayoutScene {
+        version: LAYOUT_SCENE_VERSION.to_string(),
+        metrics_version: CANONICAL_METRICS_VERSION.to_string(),
+        pages: vec![ScenePage {
+            index: 0,
+            width_pt: 100.0,
+            height_pt: 100.0,
+            systems: vec![
+                SceneSystem {
+                    id: "system-0".into(),
+                    index: 0,
+                    page_index: 0,
+                    x_pt: 0.0,
+                    y_pt: 0.0,
+                    width_pt: 100.0,
+                    height_pt: 200.0,
+                    measure_ids: vec!["measure-0".into()],
+                },
+                SceneSystem {
+                    id: "system-1".into(),
+                    index: 1,
+                    page_index: 0,
+                    x_pt: 0.0,
+                    y_pt: 0.0,
+                    width_pt: 100.0,
+                    height_pt: 50.0,
+                    measure_ids: vec!["measure-1".into()],
+                },
+            ],
+            measures: vec![
+                SceneMeasure {
+                    id: "measure-0".into(),
+                    index: 0,
+                    global_index: 0,
+                    system_id: "system-0".into(),
+                    x_pt: 0.0,
+                    y_pt: 0.0,
+                    width_pt: 100.0,
+                    height_pt: 200.0,
+                },
+                SceneMeasure {
+                    id: "measure-1".into(),
+                    index: 1,
+                    global_index: 1,
+                    system_id: "system-1".into(),
+                    x_pt: 0.0,
+                    y_pt: 0.0,
+                    width_pt: 100.0,
+                    height_pt: 50.0,
+                },
+            ],
+            items: vec![
+                SceneItem {
+                    id: "system-0-item-0".into(),
+                    measure_id: Some("measure-0".into()),
+                    anchor_item_id: None,
+                    role: "staff-line".into(),
+                    kind: SceneItemKind::LineSegment,
+                    z_index: 0,
+                    primitive: ScenePrimitive::LineSegment(LineSegment {
+                        x1_pt: 0.0,
+                        y1_pt: 150.0,
+                        x2_pt: 80.0,
+                        y2_pt: 150.0,
+                        stroke: "#333".into(),
+                        stroke_width: 1.0,
+                        stroke_line_cap: None,
+                    }),
+                },
+                SceneItem {
+                    id: "system-1-item-0".into(),
+                    measure_id: Some("measure-1".into()),
+                    anchor_item_id: None,
+                    role: "staff-line".into(),
+                    kind: SceneItemKind::LineSegment,
+                    z_index: 0,
+                    primitive: ScenePrimitive::LineSegment(LineSegment {
+                        x1_pt: 0.0,
+                        y1_pt: 120.0,
+                        x2_pt: 80.0,
+                        y2_pt: 120.0,
+                        stroke: "#333".into(),
+                        stroke_width: 1.0,
+                        stroke_line_cap: None,
+                    }),
+                },
+            ],
+            composites: Vec::new(),
+        }],
+        issues: vec![layout_overflow_warning(0, "system-0", 200.0, 100.0)],
+    };
+
+    let diagnostics = validate_layout_scene(&scene).join("\n");
+    assert!(!diagnostics.contains("system-0-item-0"));
+    assert!(diagnostics.contains("system-1-item-0"));
+
+    scene.issues.clear();
+    let diagnostics = validate_layout_scene(&scene).join("\n");
+    assert!(diagnostics.contains("system-0-item-0"));
+    assert!(diagnostics.contains("system-1-item-0"));
 }
 
 #[test]

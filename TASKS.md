@@ -109,5 +109,5 @@
 - [x] Preserve `LayoutOptions::default()` values when JS callers omit optional fields
 - [x] Replace lexer multi-rest no-op test with a real assertion
 - [x] Clean obvious Clippy findings in `drummark-layout`
-- [ ] Refactor scene renderer helpers to reduce argument-heavy functions
-- [ ] Design and implement true multi-page layout for long scores
+- [x] Refactor scene renderer helpers to reduce argument-heavy functions
+- [x] Design and implement true multi-page layout for long scores
