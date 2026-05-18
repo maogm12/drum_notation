@@ -232,7 +232,7 @@ Changes in v0.2:
 - **Dependencies**: Task 1
 
 ### Task 4: Header Layout Box Renderer
-- [ ] **Status**: Pending
+- [x] **Status**: Done
 - **Scope**: `crates/drummark-layout/src/lib.rs`
 - **Input/Output Contract**: Input is score metadata plus `LayoutOptions`; output is a page-0-only `HeaderLayoutBox` with header items and actual visual bounds.
 - **Commits**:

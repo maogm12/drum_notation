@@ -508,6 +508,36 @@ fn layout_overflow_warning(
     )
 }
 
+#[allow(dead_code)]
+fn bounds_for_items(items: &[SceneItem]) -> Result<Option<SceneItemBounds>, String> {
+    let mut min_x = f32::INFINITY;
+    let mut min_y = f32::INFINITY;
+    let mut max_x = f32::NEG_INFINITY;
+    let mut max_y = f32::NEG_INFINITY;
+    let mut found = false;
+    for item in items {
+        let bounds = scene_item_bounds(item)?;
+        min_x = min_x.min(bounds.x);
+        min_y = min_y.min(bounds.y);
+        max_x = max_x.max(bounds.x + bounds.width);
+        max_y = max_y.max(bounds.y + bounds.height);
+        found = true;
+    }
+    Ok(found.then_some(SceneItemBounds {
+        x: min_x,
+        y: min_y,
+        width: max_x - min_x,
+        height: max_y - min_y,
+    }))
+}
+
+#[allow(dead_code)]
+fn page0_first_system_cursor(opts: &LayoutOptions, header: &HeaderLayoutBox) -> f32 {
+    let fixed_cursor = opts.top_margin_pt + opts.header_height_pt + opts.header_staff_spacing_pt;
+    let visual_cursor = header.visual_bottom + opts.header_staff_spacing_pt;
+    fixed_cursor.max(visual_cursor)
+}
+
 #[derive(Debug, Clone, PartialEq)]
 struct WireLayoutScene {
     version: String,
@@ -4021,6 +4051,186 @@ fn plan_scene_systems<'a>(
 }
 
 // ── Platform-Neutral Scene Output ───────────────────────────────
+
+#[allow(dead_code)]
+fn render_header_layout_box(header: &RenderHeader, opts: &LayoutOptions) -> HeaderLayoutBox {
+    let page_w = opts.page_width_pt;
+    let margin = opts.left_margin_pt;
+    let center_x = page_w / 2.0;
+    let header_bottom_y = opts.top_margin_pt + opts.header_height_pt;
+    let mut item_counter = 0usize;
+    let mut items = Vec::new();
+    let mut composites = Vec::new();
+
+    let title_metric = canonical_text_metric(TextRole::Title);
+    let subtitle_metric = canonical_text_metric(TextRole::Subtitle);
+    let composer_metric = canonical_text_metric(TextRole::Composer);
+    let tempo_metric = canonical_text_metric(TextRole::Tempo);
+    let title_y = opts.top_margin_pt + title_metric.ascent_pt + 18.0;
+    let subtitle_y = header_bottom_y + subtitle_metric.ascent_pt + 12.0;
+    let composer_y = header_bottom_y + composer_metric.ascent_pt + 12.0;
+    let tempo_y = header_bottom_y + opts.header_staff_spacing_pt + opts.tempo_offset_y;
+
+    if let Some(ref text) = header.title {
+        let title_id = push_text_item(
+            &mut items,
+            &mut item_counter,
+            None,
+            "title",
+            center_x,
+            title_y,
+            TextRole::Title,
+            text.clone(),
+            title_metric.font_family,
+            title_metric.font_size_pt,
+            "#333",
+            Some("middle"),
+            Some("bold"),
+        );
+        composites.push(SceneComposite {
+            id: "text-block-title".to_string(),
+            kind: CompositeKind::TextBlock,
+            fragment: SpanFragmentKind::SingleSegment,
+            child_item_ids: vec![title_id],
+            label: Some("title".to_string()),
+            count: None,
+            start_anchor_id: None,
+            end_anchor_id: None,
+        });
+    }
+    if let Some(ref text) = header.subtitle {
+        let subtitle_id = push_text_item(
+            &mut items,
+            &mut item_counter,
+            None,
+            "subtitle",
+            center_x,
+            subtitle_y,
+            TextRole::Subtitle,
+            text.clone(),
+            subtitle_metric.font_family,
+            subtitle_metric.font_size_pt,
+            "#333",
+            Some("middle"),
+            None,
+        );
+        composites.push(SceneComposite {
+            id: "text-block-subtitle".to_string(),
+            kind: CompositeKind::TextBlock,
+            fragment: SpanFragmentKind::SingleSegment,
+            child_item_ids: vec![subtitle_id],
+            label: Some("subtitle".to_string()),
+            count: None,
+            start_anchor_id: None,
+            end_anchor_id: None,
+        });
+    }
+    if let Some(ref text) = header.composer {
+        let composer_id = push_text_item(
+            &mut items,
+            &mut item_counter,
+            None,
+            "composer",
+            page_w - margin,
+            composer_y,
+            TextRole::Composer,
+            text.clone(),
+            composer_metric.font_family,
+            composer_metric.font_size_pt,
+            "#333",
+            Some("end"),
+            None,
+        );
+        composites.push(SceneComposite {
+            id: "text-block-composer".to_string(),
+            kind: CompositeKind::TextBlock,
+            fragment: SpanFragmentKind::SingleSegment,
+            child_item_ids: vec![composer_id],
+            label: Some("composer".to_string()),
+            count: None,
+            start_anchor_id: None,
+            end_anchor_id: None,
+        });
+    }
+    if header.tempo > 0 {
+        let tempo_glyph_x = margin + 9.0;
+        let tempo_glyph_width =
+            canonical_glyph_metric(GlyphRole::MetNoteQuarterUp).width_ss() * 25.0 / 4.0;
+        let tempo_equals_x = tempo_glyph_x + tempo_glyph_width + 8.0;
+        let tempo_value_text = header.tempo.to_string();
+        let tempo_value_x = tempo_equals_x + canonical_text_width(TextRole::Tempo, "=") + 6.0;
+        let tempo_glyph_id = push_text_item(
+            &mut items,
+            &mut item_counter,
+            None,
+            "tempo-glyph",
+            tempo_glyph_x,
+            tempo_y,
+            TextRole::Tempo,
+            "\u{ECA5}".to_string(),
+            "Bravura",
+            25.0,
+            "#333",
+            None,
+            None,
+        );
+        let tempo_equals_id = push_text_item(
+            &mut items,
+            &mut item_counter,
+            None,
+            "tempo-equals",
+            tempo_equals_x,
+            tempo_y,
+            TextRole::Tempo,
+            "=".to_string(),
+            tempo_metric.font_family,
+            tempo_metric.font_size_pt,
+            "#333",
+            None,
+            None,
+        );
+        let tempo_value_id = push_text_item(
+            &mut items,
+            &mut item_counter,
+            None,
+            "tempo",
+            tempo_value_x,
+            tempo_y,
+            TextRole::Tempo,
+            tempo_value_text,
+            tempo_metric.font_family,
+            tempo_metric.font_size_pt,
+            "#333",
+            None,
+            None,
+        );
+        composites.push(SceneComposite {
+            id: "text-block-tempo".to_string(),
+            kind: CompositeKind::TextBlock,
+            fragment: SpanFragmentKind::SingleSegment,
+            child_item_ids: vec![tempo_glyph_id, tempo_equals_id, tempo_value_id],
+            label: Some("tempo".to_string()),
+            count: Some(header.tempo),
+            start_anchor_id: None,
+            end_anchor_id: None,
+        });
+    }
+
+    let item_bounds = bounds_for_items(&items).ok().flatten();
+    let visual_top = item_bounds
+        .map(|bounds| bounds.y)
+        .unwrap_or(opts.top_margin_pt);
+    let visual_bottom = item_bounds
+        .map(|bounds| bounds.y + bounds.height)
+        .unwrap_or(opts.top_margin_pt + opts.header_height_pt);
+
+    HeaderLayoutBox {
+        items,
+        composites,
+        visual_top,
+        visual_bottom,
+    }
+}
 
 pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutScene {
     let page_w = opts.page_width_pt;
@@ -8187,6 +8397,52 @@ fn test_scene_item_bounds_cover_emitted_primitive_kinds() {
         primitive: ScenePrimitive::Polyline(Polyline { points_pt: vec![] }),
     };
     assert!(scene_item_bounds(&empty_polyline).is_err());
+}
+
+#[test]
+fn test_header_layout_box_bounds_and_page0_cursor_use_actual_visual_bottom() {
+    let header = RenderHeader {
+        tempo: 120,
+        time_beats: 4,
+        time_beat_unit: 4,
+        divisions: 16,
+        note_value: 8,
+        grouping: vec![1, 1, 1, 1],
+        title: Some("Title".into()),
+        subtitle: Some("Subtitle".into()),
+        composer: Some("Composer".into()),
+    };
+    let opts = LayoutOptions {
+        top_margin_pt: 10.0,
+        header_height_pt: 20.0,
+        header_staff_spacing_pt: 8.0,
+        tempo_offset_y: 40.0,
+        ..LayoutOptions::default()
+    };
+    let header_box = render_header_layout_box(&header, &opts);
+
+    assert_eq!(header_box.items.len(), 6);
+    assert!(header_box
+        .composites
+        .iter()
+        .any(|composite| composite.label.as_deref() == Some("tempo")));
+    assert!(header_box.visual_bottom > opts.top_margin_pt + opts.header_height_pt);
+
+    let fixed_cursor = opts.top_margin_pt + opts.header_height_pt + opts.header_staff_spacing_pt;
+    let cursor = page0_first_system_cursor(&opts, &header_box);
+    assert!(cursor > fixed_cursor);
+    assert_eq!(cursor, header_box.visual_bottom + opts.header_staff_spacing_pt);
+
+    let empty_header = RenderHeader {
+        tempo: 0,
+        title: None,
+        subtitle: None,
+        composer: None,
+        ..header
+    };
+    let empty_box = render_header_layout_box(&empty_header, &opts);
+    assert!(empty_box.items.is_empty());
+    assert_eq!(page0_first_system_cursor(&opts, &empty_box), fixed_cursor);
 }
 
 #[test]
