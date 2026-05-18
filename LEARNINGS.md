@@ -912,3 +912,13 @@ Nav markers (`@segno`, `@fine`, `@to-coda`, etc.) were converted to `TokenGlyph:
 - Visual-band inclusion is only appropriate for unowned system-level items such as staff lines, clefs, and measure numbers. Letting measure-owned items fall through can duplicate beams/stems from one system into the next system when their Y bounds happen to overlap the next extraction band.
 
 - A minimal regression input is `time 4/4`, `note 1/8`, first paragraph `| p p b b |`, blank line, second paragraph `| ss|`. The correct scene has two beam items for `measure-0` and one beam item for `measure-1`.
+
+## 2026-05-18 Addendum: Split WASM Packages Need an Explicit Runtime Registry
+
+- Building `drummark-core` with `--no-default-features --features parser-wasm` can keep `drummark-layout` out of the parser package, but every Rust export and module that references `drummark_layout` must be `cfg(feature = "layout-wasm")` gated. Hiding TypeScript declarations is not enough; the parser Cargo dependency tree must also exclude `drummark-layout`.
+
+- `wasm-bindgen --target nodejs` emits CommonJS glue that eagerly instantiates the `.wasm` file at module load. In this ESM package, generated Node package directories therefore need a local `package.json` with `{ "type": "commonjs" }`, and TypeScript wrappers should load them with `createRequire(import.meta.url)`.
+
+- The parser-facing TS normalization pipeline should not be coupled to a browser-only wrapper. A small runtime registry lets browser and Node parser wrappers register the active `parse(source)` implementation, while `skeleton.ts` stays package-neutral and works in both the app and CLI.
+
+- Browser tests can exercise web-target wasm-bindgen packages without fetching from a dev server by reading the generated `.wasm` bytes in Vitest setup and calling the wrapper's test-only `initSync` path. This keeps browser wrappers free of Node imports while preserving Node test coverage.

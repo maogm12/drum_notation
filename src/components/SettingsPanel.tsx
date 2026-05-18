@@ -2,8 +2,8 @@ import * as Switch from "@radix-ui/react-switch";
 import * as Accordion from "@radix-ui/react-accordion";
 import { NumericSettingControl } from "./NumericSettingControl";
 import type { AppSettings } from "../hooks/useAppSettings";
-import type { PagePadding } from "../vexflow/types";
-import { SETTINGS_RANGES } from "../vexflow/config";
+import type { PagePadding } from "../renderer/renderOptions";
+import { SETTINGS_RANGES } from "../renderer/renderOptions";
 import { useT } from "../i18n/context";
 
 function Numeric({
@@ -110,7 +110,7 @@ export function SettingsPanel({
           </Accordion.Trigger>
           <Accordion.Content className="settings-content">
             <label className="setting-row toggle">
-              <span>{t("settings.useLayoutEngine")}</span>
+              <span>{settings.useLayoutEngine ? t("settings.rendererLayoutEngine") : t("settings.rendererLegacyVexFlow")}</span>
               <Switch.Root
                 className="toggle-root"
                 checked={settings.useLayoutEngine}

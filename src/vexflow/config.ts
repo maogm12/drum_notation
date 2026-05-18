@@ -16,19 +16,4 @@ export const VOLTA_TEXT_SIZE = 12;
 
 // ── User-facing setting value ranges ──
 
-export const SETTINGS_RANGES = {
-  hairpinOffsetY: { min: -20, max: 20, default: 0 },
-  voltaSpacing: { min: -20, max: 20, default: 0 },
-  staffScale: { min: 30, max: 150 },
-  stemLength: { min: 20, max: 40, default: 31 },
-  systemSpacing: { min: 0, max: 100, default: 30 },
-  headerHeight: { min: 10, max: 300, default: 50 },
-  headerStaffSpacing: { min: 0, max: 100, default: 60 },
-  durationSpacingCompression: { min: 0, max: 1.5, default: 0.6 },
-  measureWidthCompression: { min: 0, max: 1.5, default: 0.75 },
-  tempoOffsetX: { min: -100, max: 100, default: 0 },
-  tempoOffsetY: { min: -100, max: 100, default: 0 },
-  measureNumberOffsetX: { min: -100, max: 100, default: 0 },
-  measureNumberOffsetY: { min: -100, max: 100, default: 8 },
-  measureNumberFontSize: { min: 6, max: 20, default: 10 },
-} as const;
+export { SETTINGS_RANGES } from "../renderer/renderOptions";

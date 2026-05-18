@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/compat";
-import type { PagePadding } from "../vexflow/types";
-import { SETTINGS_RANGES } from "../vexflow/config";
+import type { PagePadding } from "../renderer/renderOptions";
+import { SETTINGS_RANGES } from "../renderer/renderOptions";
 
 export type MainTab = "editor" | "page" | "xml";
 
@@ -27,7 +27,7 @@ export interface AppSettings {
 
 export const defaultSettings: AppSettings = {
   hideVoice2Rests: false,
-  useLayoutEngine: false,
+  useLayoutEngine: true,
   pagePadding: { top: 30, right: 50, bottom: 30, left: 50 },
   staffScale: 0.75,
   headerStaffSpacing: 60,
@@ -46,37 +46,50 @@ export const defaultSettings: AppSettings = {
   measureWidthCompression: 0.75,
 };
 
+function hasOwn(object: object, key: PropertyKey): boolean {
+  return Object.prototype.hasOwnProperty.call(object, key);
+}
+
+export function resolveAppSettings(saved: string | null): AppSettings {
+  if (!saved) return defaultSettings;
+  try {
+    const parsed = JSON.parse(saved) as Partial<AppSettings>;
+    const hasExplicitRenderer = hasOwn(parsed, "useLayoutEngine");
+    const r = SETTINGS_RANGES;
+    if (parsed.stemLength === undefined || parsed.stemLength < r.stemLength.min || parsed.stemLength > r.stemLength.max) {
+      parsed.stemLength = r.stemLength.default;
+    }
+    if (parsed.voltaSpacing === undefined || parsed.voltaSpacing < r.voltaSpacing.min || parsed.voltaSpacing > r.voltaSpacing.max) {
+      parsed.voltaSpacing = r.voltaSpacing.default;
+    }
+    if (parsed.hairpinOffsetY === undefined || parsed.hairpinOffsetY < r.hairpinOffsetY.min || parsed.hairpinOffsetY > r.hairpinOffsetY.max) {
+      parsed.hairpinOffsetY = r.hairpinOffsetY.default;
+    }
+    if (parsed.headerHeight === undefined || parsed.headerHeight < r.headerHeight.min || parsed.headerHeight > r.headerHeight.max) {
+      parsed.headerHeight = r.headerHeight.default;
+    }
+    if (parsed.durationSpacingCompression === undefined || parsed.durationSpacingCompression < r.durationSpacingCompression.min || parsed.durationSpacingCompression > r.durationSpacingCompression.max) {
+      parsed.durationSpacingCompression = r.durationSpacingCompression.default;
+    }
+    if (parsed.measureWidthCompression === undefined || parsed.measureWidthCompression < r.measureWidthCompression.min || parsed.measureWidthCompression > r.measureWidthCompression.max) {
+      parsed.measureWidthCompression = r.measureWidthCompression.default;
+    }
+    const resolved = { ...defaultSettings, ...parsed };
+    if (!hasExplicitRenderer) {
+      resolved.useLayoutEngine = true;
+    }
+    return resolved;
+  } catch {
+    return defaultSettings;
+  }
+}
+
 export function useAppSettings() {
   const [settingsVisible, setSettingsVisible] = useState(true);
 
   const [settings, setSettings] = useState<AppSettings>(() => {
     const saved = localStorage.getItem("drummark-settings");
-    if (!saved) return defaultSettings;
-    try {
-      const parsed = JSON.parse(saved);
-      const r = SETTINGS_RANGES;
-      if (parsed.stemLength === undefined || parsed.stemLength < r.stemLength.min || parsed.stemLength > r.stemLength.max) {
-        parsed.stemLength = r.stemLength.default;
-      }
-      if (parsed.voltaSpacing === undefined || parsed.voltaSpacing < r.voltaSpacing.min || parsed.voltaSpacing > r.voltaSpacing.max) {
-        parsed.voltaSpacing = r.voltaSpacing.default;
-      }
-      if (parsed.hairpinOffsetY === undefined || parsed.hairpinOffsetY < r.hairpinOffsetY.min || parsed.hairpinOffsetY > r.hairpinOffsetY.max) {
-        parsed.hairpinOffsetY = r.hairpinOffsetY.default;
-      }
-      if (parsed.headerHeight === undefined || parsed.headerHeight < r.headerHeight.min || parsed.headerHeight > r.headerHeight.max) {
-        parsed.headerHeight = r.headerHeight.default;
-      }
-      if (parsed.durationSpacingCompression === undefined || parsed.durationSpacingCompression < r.durationSpacingCompression.min || parsed.durationSpacingCompression > r.durationSpacingCompression.max) {
-        parsed.durationSpacingCompression = r.durationSpacingCompression.default;
-      }
-      if (parsed.measureWidthCompression === undefined || parsed.measureWidthCompression < r.measureWidthCompression.min || parsed.measureWidthCompression > r.measureWidthCompression.max) {
-        parsed.measureWidthCompression = r.measureWidthCompression.default;
-      }
-      return { ...defaultSettings, ...parsed };
-    } catch {
-      return defaultSettings;
-    }
+    return resolveAppSettings(saved);
   });
 
   useEffect(() => {

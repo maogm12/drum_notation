@@ -4,9 +4,9 @@ import { fileURLToPath } from "url";
 import { buildNormalizedScore } from "./src/dsl/index";
 import { renderScoreToSvg } from "./src/vexflow/index";
 import { highlightDslStatic } from "./src/drummark";
-import { DEFAULT_RENDER_OPTIONS } from "./src/vexflow/types";
+import { DEFAULT_RENDER_OPTIONS } from "./src/renderer/renderOptions";
 import { ensureCliRenderEnvironment } from "./src/cli_render_env";
-import { initWasm } from "./src/wasm/drummark_wasm";
+import { initParserWasmBrowserForTests } from "./src/wasm/parser_wasm_browser";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -107,7 +107,7 @@ async function buildDocs(templatePath: string, outputPath: string) {
 
 async function run() {
     console.log("Initializing WASM parser...");
-    await initWasm();
+    initParserWasmBrowserForTests(fs.readFileSync(path.join(__dirname, "src/wasm/parser-pkg-web/drummark_core_bg.wasm")));
     await buildDocs('docs.template.html', 'docs.html');
     await buildDocs('docs_zh.template.html', 'docs_zh.html');
     console.log("Build complete.");

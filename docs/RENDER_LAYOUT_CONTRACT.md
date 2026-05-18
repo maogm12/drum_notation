@@ -174,3 +174,62 @@ Layout tests must validate final scenes for:
 - bounded item containment within page dimensions
 
 Overflow suppresses only bounds failures for the explicitly overflowing system named by a `LAYOUT_WARNING overflow ...` issue. Page order, ID uniqueness, page-local references, header bounds, and unrelated system bounds remain validated.
+
+## Addendum 2026-05-18: Split Parser/Layout WASM and Default Layout Rendering
+
+The approved web runtime architecture separates parser startup from layout rendering:
+
+- parser WASM is the startup package for parser, worker, diagnostics, and editor state
+- layout WASM is loaded only when the layout renderer is invoked
+- VexFlow remains available as a lazy legacy renderer
+
+### Package Boundaries
+
+Browser production code uses web packages only:
+
+- `src/wasm/parser-pkg-web/`
+- `src/wasm/layout-pkg-web/`
+
+CLI and Node initialization use Node packages only:
+
+- `src/wasm/layout-pkg-node/`
+- `src/wasm/parser-pkg-node/`, only if needed
+
+The Rust WASM crate is built with explicit features:
+
+- parser: `--target web --no-default-features --features parser-wasm`
+- browser layout: `--target web --no-default-features --features layout-wasm`
+- Node layout: `--target nodejs --no-default-features --features layout-wasm`
+
+The parser package must not expose layout exports or link `drummark-layout`.
+
+### Render Source Coherence
+
+The app's active parsed score state carries:
+
+`{ score, source, sourceRevision }`
+
+Layout rendering receives `source` and `sourceRevision` explicitly with the score. Production rendering does not use a module-level source cache or `setLayoutSource`.
+
+If parsing is asynchronous, stale parse results cannot replace newer active score/source revisions.
+
+### Default Renderer
+
+The layout engine is the default renderer for users without an explicit saved renderer preference. Explicit saved VexFlow preferences remain respected.
+
+User-facing renderer labels are:
+
+- `Layout Engine`
+- `Legacy VexFlow`
+
+### Lazy Runtime Gates
+
+Default app/settings/layout production code must not import VexFlow runtime modules. Shared render settings and option ranges used outside VexFlow live in renderer-neutral modules.
+
+Verification must prove:
+
+- startup can fetch parser WASM without fetching layout WASM or VexFlow
+- first default layout render fetches layout WASM and not VexFlow
+- first legacy render fetches VexFlow
+- CLI SVG output uses the Node layout WASM package
+- parser/layout semantic parity holds for successful and failed source fixtures

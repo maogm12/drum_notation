@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, beforeAll } from "vitest";
-import { initWasm } from "../wasm/drummark_wasm";
+import { initParserWasmBrowser } from "../wasm/parser_wasm_browser";
 import { buildNormalizedScore } from "../dsl/normalize";
 import { renderScoreToSvg } from "./svgRenderer";
 import { renderScoreToSvg as vexRender } from "../vexflow/renderer";
-import { setLayoutSource } from "./svgRenderer";
 
 const SRC = `tempo 100
 time 4/4
@@ -131,7 +130,7 @@ function summarize(cats: Record<string, Element[]>) {
 }
 
 describe("VexFlow vs Layout full element parity", () => {
-  beforeAll(async () => { await initWasm(); });
+  beforeAll(async () => { await initParserWasmBrowser(); });
 
   let vexEls: Element[];
   let ourEls: Element[];
@@ -139,8 +138,11 @@ describe("VexFlow vs Layout full element parity", () => {
   beforeAll(async () => {
     const score = buildNormalizedScore(SRC);
     const vexSvg = await vexRender(score, { staffScale: 0.75 });
-    setLayoutSource(SRC);
-    const ourSvg = renderScoreToSvg(score, { staffScale: 0.75, pageWidth: 816, showTitle: true });
+    const ourSvg = await renderScoreToSvg(
+      score,
+      { staffScale: 0.75, pageWidth: 816, showTitle: true },
+      { source: SRC, sourceRevision: 1 },
+    );
     vexEls = parseSvg(vexSvg);
     ourEls = parseSvg(ourSvg);
   });

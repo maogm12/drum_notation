@@ -1,10 +1,10 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { initWasm } from "../wasm/drummark_wasm";
+import { initParserWasmBrowser } from "../wasm/parser_wasm_browser";
 import { parseDocumentSkeletonFromWasmSync } from "../wasm/skeleton";
 import { buildNormalizedScoreWasm } from "./normalize";
 
 beforeAll(async () => {
-  await initWasm();
+  await initParserWasmBrowser();
 });
 
 describe("WASM cutover blockers", () => {

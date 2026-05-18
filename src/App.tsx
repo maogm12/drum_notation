@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type UIEvent } from "preact/compat";
 import { buildNormalizedScore, type ParseError } from "./dsl";
 import { type NormalizedScore } from "./dsl";
-import type { VexflowRenderOptions, PagePadding } from "./vexflow";
+import type { ScoreRenderOptions, PagePadding } from "./renderer/renderOptions";
 import { resolveDocumentTheme, subscribeToThemeChanges, type AppTheme } from "./theme";
 import { useAppSettings } from "./hooks/useAppSettings";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -9,6 +9,11 @@ import { useT } from "./i18n/context";
 import * as Tabs from "@radix-ui/react-tabs";
 import * as Popover from "@radix-ui/react-popover";
 import type { MainTab } from "./hooks/useAppSettings";
+import {
+  acceptCurrentParsedScoreResult,
+  createParsedScoreState,
+  type ParsedScoreState,
+} from "./scoreState";
 
 function toggleTheme() {
   const resolved = resolveDocumentTheme();
@@ -382,8 +387,14 @@ const PagePreview = memo(function PagePreview({
   active,
   theme,
   useLayoutEngine,
+  source,
+  sourceRevision,
+  onRenderInput,
 }: {
   score: NormalizedScore | null;
+  source: string;
+  sourceRevision: number;
+  onRenderInput?: (input: ParsedScoreState) => void;
   pagePadding: PagePadding;
   staffScale: number;
   headerHeight: number;
@@ -420,12 +431,13 @@ const PagePreview = memo(function PagePreview({
 
   useEffect(() => {
     if (!active || !score) return;
+    onRenderInput?.(createParsedScoreState(score, source, sourceRevision));
 
     const targetTop = scrollPosRef.current.top;
     const targetLeft = scrollPosRef.current.left;
     setIsRendering(true);
 
-    const opts: VexflowRenderOptions = {
+    const opts: ScoreRenderOptions = {
       pagePadding,
       staffScale,
       pageWidth: pdfPageWidth,
@@ -449,7 +461,13 @@ const PagePreview = memo(function PagePreview({
     if (useLayoutEngine) {
       import("./renderer/svgRenderer")
         .then(({ renderScorePagesToSvgs }) => {
-          const pages = renderScorePagesToSvgs(score, { staffScale, pageWidth: pdfPageWidth, pageHeight: pdfPageHeight, showTitle: true, topMargin: pagePadding.top, bottomMargin: pagePadding.bottom, leftMargin: pagePadding.left, rightMargin: pagePadding.right, stemLength, systemSpacing, headerHeight, headerStaffSpacing, voltaSpacing, hairpinOffsetY, hideVoice2Rests, durationSpacingCompression, measureWidthCompression });
+          return renderScorePagesToSvgs(
+            score,
+            { staffScale, pageWidth: pdfPageWidth, pageHeight: pdfPageHeight, showTitle: true, topMargin: pagePadding.top, bottomMargin: pagePadding.bottom, leftMargin: pagePadding.left, rightMargin: pagePadding.right, stemLength, systemSpacing, headerHeight, headerStaffSpacing, voltaSpacing, hairpinOffsetY, hideVoice2Rests, durationSpacingCompression, measureWidthCompression },
+            { source, sourceRevision },
+          );
+        })
+        .then((pages) => {
           const markup = pages.map((svg, i) => `<section class="staff-preview-page" data-page="${i+1}">${svg}</section>`).join("");
           setRenderedMarkup(markup);
           setIsRendering(false);
@@ -480,7 +498,7 @@ const PagePreview = memo(function PagePreview({
         console.error("VexFlow render error:", renderError);
         setError(msg || t("preview.error"));
       });
-  }, [score, systemSpacing, stemLength, voltaSpacing, hairpinOffsetY, headerStaffSpacing, headerHeight, active, hideVoice2Rests, pagePadding, staffScale, tempoOffsetX, tempoOffsetY, measureNumberOffsetX, measureNumberOffsetY, measureNumberFontSize, durationSpacingCompression, measureWidthCompression, useLayoutEngine]);
+  }, [score, source, sourceRevision, systemSpacing, stemLength, voltaSpacing, hairpinOffsetY, headerStaffSpacing, headerHeight, active, hideVoice2Rests, pagePadding, staffScale, tempoOffsetX, tempoOffsetY, measureNumberOffsetX, measureNumberOffsetY, measureNumberFontSize, durationSpacingCompression, measureWidthCompression, useLayoutEngine, onRenderInput]);
 
   if (!score) {
     return (
@@ -641,6 +659,7 @@ export function App() {
   useEffect(() => { pageZoomMenuOpenRef.current = pageZoomMenuOpen; }, [pageZoomMenuOpen]);
   const [xmlCollapsed, setXmlCollapsed] = useState<Set<string>>(new Set());
   const debugMode = new URLSearchParams(window.location.search).has("debug");
+  const suspendPreview = new URLSearchParams(window.location.search).has("suspendPreview");
 
   const xmlToggle = (path: string) => {
     setXmlCollapsed((prev) => {
@@ -678,7 +697,7 @@ export function App() {
   const [isScorePending, setIsScorePending] = useState(false);
   const [analysis, setAnalysis] = useState(() => {
     const initialScore = buildNormalizedScore(dsl);
-    return { score: initialScore };
+    return createParsedScoreState(initialScore, dsl, 0);
   });
   const [staffXml, setStaffXml] = useState<string | null>(null);
   const [isXmlPending, setIsXmlPending] = useState(false);
@@ -713,13 +732,18 @@ export function App() {
     const worker = new Worker(new URL("./scoreWorker.ts", import.meta.url), { type: "module" });
     workerRef.current = worker;
 
-    worker.onmessage = (event: MessageEvent<{ type: string; id: number; score?: NormalizedScore; xml?: string }>) => {
-      const { type, id, score: nextScore, xml: nextXml } = event.data;
+    worker.onmessage = (event: MessageEvent<{ type: string; id: number; score?: NormalizedScore; source?: string; sourceRevision?: number; xml?: string }>) => {
+      const { type, id, score: nextScore, source: nextSource, sourceRevision: nextSourceRevision, xml: nextXml } = event.data;
 
-      if (type === "parse" && nextScore) {
+      if (type === "parse" && nextScore && nextSource !== undefined && nextSourceRevision !== undefined) {
+        const accepted = acceptCurrentParsedScoreResult(
+          requestIdRef.current,
+          createParsedScoreState(nextScore, nextSource, nextSourceRevision),
+        );
+        if (!accepted) return;
         if (id < latestHandledRequestIdRef.current) return;
         latestHandledRequestIdRef.current = id;
-        setAnalysis((prev) => ({ ...prev, score: nextScore }));
+        setAnalysis(accepted);
         setIsScorePending(id !== requestIdRef.current);
       } else if (type === "xml" && nextXml !== undefined) {
         if (id < latestXmlIdRef.current) return;
@@ -755,6 +779,7 @@ export function App() {
     worker.postMessage({
       type: "parse" as const,
       id: nextId,
+      sourceRevision: nextId,
       dsl: debouncedAnalysisInput.dsl,
       hideVoice2Rests: debouncedAnalysisInput.hideVoice2Rests,
     });
@@ -786,7 +811,6 @@ export function App() {
 
   useEffect(() => {
     localStorage.setItem("drummark-dsl", dsl);
-    import("./renderer/svgRenderer").then(({ setLayoutSource }) => setLayoutSource(dsl));
   }, [dsl]);
 
   useEffect(() => {
@@ -1228,6 +1252,8 @@ export function App() {
                   {settings.activeTab === "page" ? (
                     <PagePreview
                       score={hasRenderableScore ? score : null}
+                      source={analysis.source}
+                      sourceRevision={analysis.sourceRevision}
                       pagePadding={settings.pagePadding}
                       staffScale={settings.staffScale}
                       headerHeight={settings.headerHeight}
@@ -1244,7 +1270,7 @@ export function App() {
                       measureNumberFontSize={settings.measureNumberFontSize}
                       durationSpacingCompression={settings.durationSpacingCompression}
                       measureWidthCompression={settings.measureWidthCompression}
-                       active={true}
+                       active={!suspendPreview}
                        theme={resolvedTheme}
                        useLayoutEngine={settings.useLayoutEngine}
                       />

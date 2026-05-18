@@ -1,6 +1,11 @@
 import { beforeAll } from "vitest";
-import { initWasm } from "../wasm/drummark_wasm";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { initParserWasmBrowserForTests } from "../wasm/parser_wasm_browser";
+import { initLayoutWasmBrowserForTests } from "../wasm/layout_wasm_browser";
 
 beforeAll(async () => {
-  await initWasm();
+  const root = process.cwd();
+  initParserWasmBrowserForTests(readFileSync(join(root, "src/wasm/parser-pkg-web/drummark_core_bg.wasm")));
+  initLayoutWasmBrowserForTests(readFileSync(join(root, "src/wasm/layout-pkg-web/drummark_core_bg.wasm")));
 });

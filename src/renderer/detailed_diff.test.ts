@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, beforeAll } from "vitest";
-import { initWasm } from "../wasm/drummark_wasm";
+import { initParserWasmBrowser } from "../wasm/parser_wasm_browser";
 import { buildNormalizedScore } from "../dsl/normalize";
 import { renderScoreToSvg } from "./svgRenderer";
 import { renderScoreToSvg as vexRender } from "../vexflow/renderer";
-import { setLayoutSource } from "./svgRenderer";
 import fs from "fs";
 
 const SRC = `title Rock
@@ -88,13 +87,15 @@ function classify(e: El): string {
 }
 
 describe("Detailed render diff", () => {
-  beforeAll(async () => { await initWasm(); });
+  beforeAll(async () => { await initParserWasmBrowser(); });
 
   it("prints detailed comparison", async () => {
     const score = buildNormalizedScore(SRC);
     const vexSvg = await vexRender(score, RENDER_OPTS);
-    setLayoutSource(SRC);
-    const ourSvg = renderScoreToSvg(score, RENDER_OPTS as any);
+    const ourSvg = await renderScoreToSvg(score, RENDER_OPTS as any, {
+      source: SRC,
+      sourceRevision: 1,
+    });
 
     // Save for inspection
     fs.writeFileSync("/tmp/vex_detailed.svg", vexSvg);

@@ -1,13 +1,14 @@
 /// <reference lib="webworker" />
 
 import { buildMusicXml, buildNormalizedScore } from "./dsl";
-import { initWasm } from "./wasm/drummark_wasm";
+import { initParserWasmBrowser } from "./wasm/parser_wasm_browser";
 
-const wasmInit = initWasm();
+const wasmInit = initParserWasmBrowser();
 
 type ParseRequest = {
   type: "parse";
   id: number;
+  sourceRevision: number;
   dsl: string;
   hideVoice2Rests: boolean;
 };
@@ -23,6 +24,8 @@ type ScoreWorkerRequest = ParseRequest | GenerateXmlRequest;
 type ParseResponse = {
   type: "parse";
   id: number;
+  source: string;
+  sourceRevision: number;
   score: ReturnType<typeof buildNormalizedScore>;
 };
 
@@ -36,10 +39,16 @@ let lastScore: ReturnType<typeof buildNormalizedScore> | null = null;
 
 function handleMessage(msg: ScoreWorkerRequest) {
   if (msg.type === "parse") {
-    const { id, dsl } = msg;
+    const { id, dsl, sourceRevision } = msg;
     const score = buildNormalizedScore(dsl);
     lastScore = score;
-    const response: ParseResponse = { type: "parse", id, score };
+    const response: ParseResponse = {
+      type: "parse",
+      id,
+      source: dsl,
+      sourceRevision,
+      score,
+    };
     self.postMessage(response);
   } else if (msg.type === "generateXml") {
     const { id, hideVoice2Rests } = msg;

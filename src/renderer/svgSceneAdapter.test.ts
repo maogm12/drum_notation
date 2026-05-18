@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildLayoutSceneFromSource, renderScenePagesToSvgs, renderSceneToSvg, renderScorePagesToSvgs, renderSourcePagesToSvgs, renderSourceToSvg, setLayoutSource } from "./svgRenderer";
+import { buildLayoutSceneFromSource, renderScenePagesToSvgs, renderSceneToSvg, renderScorePagesToSvgs, renderSourcePagesToSvgs, renderSourceToSvg } from "./svgRenderer";
 
 const SRC = `title Smoke
 tempo 120
@@ -155,25 +155,25 @@ describe("SVG scene adapter", () => {
     warnSpy.mockRestore();
   });
 
-  it("builds scene from source and renders svg", () => {
-    const scene = buildLayoutSceneFromSource(SRC, { pageWidth: 612, staffScale: 0.75 });
+  it("builds scene from source and renders svg", async () => {
+    const scene = await buildLayoutSceneFromSource(SRC, { pageWidth: 612, staffScale: 0.75 });
     expect(scene.pages.length).toBeGreaterThan(0);
     expect(scene.pages[0]?.items.length).toBeGreaterThan(0);
     expect(scene.pages[0]?.systems.length).toBeGreaterThan(0);
     expect(scene.pages[0]?.systems[0]?.measureIds.length).toBeGreaterThan(0);
     expect(scene.pages[0]?.composites.some((composite) => composite.kind === "textBlock" && composite.label === "tempo")).toBe(true);
 
-    const svg = renderSourceToSvg(SRC, { pageWidth: 612, staffScale: 0.75 });
+    const svg = await renderSourceToSvg(SRC, { pageWidth: 612, staffScale: 0.75 });
     expect(svg).toContain("<svg");
     expect(svg).toContain("Smoke");
     expect(svg).toContain('data-role="notehead"');
 
-    const pages = renderSourcePagesToSvgs(SRC, { pageWidth: 612, staffScale: 0.75 });
+    const pages = await renderSourcePagesToSvgs(SRC, { pageWidth: 612, staffScale: 0.75 });
     expect(pages).toHaveLength(scene.pages.length);
     expect(pages[0]).toContain('data-role="notehead"');
   });
 
-  it("renders every cached-source page through the score-level layout adapter", () => {
+  it("renders every explicit-source page through the score-level layout adapter", async () => {
     const paragraphs = Array.from({ length: 8 }, () => "HH | x x x x |").join("\n\n");
     const multiPageSource = `title Cached Pages
 time 4/4
@@ -183,8 +183,7 @@ grouping 1+1+1+1
 ${paragraphs}
 `;
 
-    setLayoutSource(multiPageSource);
-    const pages = renderScorePagesToSvgs({}, {
+    const pages = await renderScorePagesToSvgs({}, {
       staffScale: 1,
       pageWidth: 612,
       pageHeight: 260,
@@ -193,14 +192,14 @@ ${paragraphs}
       headerHeight: 40,
       headerStaffSpacing: 20,
       systemSpacing: 24,
-    });
+    }, { source: multiPageSource, sourceRevision: 1 });
 
     expect(pages.length).toBeGreaterThan(1);
     expect(pages.every((svg) => svg.startsWith("<svg"))).toBe(true);
   });
 
-  it("does not carry measure-owned beams into the following system band", () => {
-    const scene = buildLayoutSceneFromSource(`time 4/4
+  it("does not carry measure-owned beams into the following system band", async () => {
+    const scene = await buildLayoutSceneFromSource(`time 4/4
 note 1/8
 
 | p p b b |
@@ -223,29 +222,29 @@ note 1/8
     });
   });
 
-  it("passes hairpin vertical offset into the layout engine", () => {
-    const baseline = buildLayoutSceneFromSource(HAIRPIN_SRC, { pageWidth: 612, staffScale: 1, hairpinOffsetY: 0 });
-    const lower = buildLayoutSceneFromSource(HAIRPIN_SRC, { pageWidth: 612, staffScale: 1, hairpinOffsetY: 10 });
-    const higher = buildLayoutSceneFromSource(HAIRPIN_SRC, { pageWidth: 612, staffScale: 1, hairpinOffsetY: -5 });
+  it("passes hairpin vertical offset into the layout engine", async () => {
+    const baseline = await buildLayoutSceneFromSource(HAIRPIN_SRC, { pageWidth: 612, staffScale: 1, hairpinOffsetY: 0 });
+    const lower = await buildLayoutSceneFromSource(HAIRPIN_SRC, { pageWidth: 612, staffScale: 1, hairpinOffsetY: 10 });
+    const higher = await buildLayoutSceneFromSource(HAIRPIN_SRC, { pageWidth: 612, staffScale: 1, hairpinOffsetY: -5 });
     const baselineY = hairpinCenterY(baseline);
 
     expect(hairpinCenterY(lower) - baselineY).toBeCloseTo(10, 3);
     expect(hairpinCenterY(higher) - baselineY).toBeCloseTo(-5, 3);
   });
 
-  it("passes title area height and title gap into the layout engine", () => {
-    const baseline = buildLayoutSceneFromSource(SRC, { pageWidth: 612, staffScale: 1, topMargin: 30, headerHeight: 50, headerStaffSpacing: 60 });
-    const taller = buildLayoutSceneFromSource(SRC, { pageWidth: 612, staffScale: 1, topMargin: 30, headerHeight: 80, headerStaffSpacing: 60 });
-    const tighter = buildLayoutSceneFromSource(SRC, { pageWidth: 612, staffScale: 1, topMargin: 30, headerHeight: 50, headerStaffSpacing: 20 });
+  it("passes title area height and title gap into the layout engine", async () => {
+    const baseline = await buildLayoutSceneFromSource(SRC, { pageWidth: 612, staffScale: 1, topMargin: 30, headerHeight: 50, headerStaffSpacing: 60 });
+    const taller = await buildLayoutSceneFromSource(SRC, { pageWidth: 612, staffScale: 1, topMargin: 30, headerHeight: 80, headerStaffSpacing: 60 });
+    const tighter = await buildLayoutSceneFromSource(SRC, { pageWidth: 612, staffScale: 1, topMargin: 30, headerHeight: 50, headerStaffSpacing: 20 });
 
     expect(baseline.pages[0].systems[0].yPt).toBeGreaterThan(140);
     expect(taller.pages[0].systems[0].yPt).toBeGreaterThan(baseline.pages[0].systems[0].yPt);
     expect(tighter.pages[0].systems[0].yPt).toBeLessThan(baseline.pages[0].systems[0].yPt);
   });
 
-  it("fails closed on parse errors", () => {
-    expect(() => buildLayoutSceneFromSource("time 4\nHH | x |\n")).toThrow(/Line/);
-    expect(() => renderSourceToSvg("time 4\nHH | x |\n")).toThrow(/Line/);
+  it("fails closed on parse errors", async () => {
+    await expect(buildLayoutSceneFromSource("time 4\nHH | x |\n")).rejects.toThrow(/Line/);
+    await expect(renderSourceToSvg("time 4\nHH | x |\n")).rejects.toThrow(/Line/);
   });
 
   it("throws on unknown scene item kinds", () => {

@@ -11,7 +11,11 @@ import type {
   BasicGlyph,
   BarlineType,
 } from "../dsl/types";
-import { initWasm, parse as wasmParse, isWasmReady } from "./drummark_wasm";
+import { initParserWasmBrowser } from "./parser_wasm_browser";
+import {
+  isParserRuntimeReady,
+  parseWithParserRuntime,
+} from "./parser_runtime";
 
 // ── Public API ───────────────────────────────────────────────────
 
@@ -19,7 +23,7 @@ import { initWasm, parse as wasmParse, isWasmReady } from "./drummark_wasm";
 export async function parseDocumentSkeletonFromWasm(
   source: string,
 ): Promise<DocumentSkeleton> {
-  await initWasm();
+  await initParserWasmBrowser();
   return parseDocumentSkeletonFromWasmSync(source);
 }
 
@@ -27,10 +31,10 @@ export async function parseDocumentSkeletonFromWasm(
 export function parseDocumentSkeletonFromWasmSync(
   source: string,
 ): DocumentSkeleton {
-  if (!isWasmReady()) {
+  if (!isParserRuntimeReady()) {
     throw new Error("WASM parser not ready. Call initWasm() first.");
   }
-  const raw = wasmParse(source) as WasmDocument | WasmError[];
+  const raw = parseWithParserRuntime(source) as WasmDocument | WasmError[];
   if (isWasmErrorArray(raw)) {
     return {
       headers: {

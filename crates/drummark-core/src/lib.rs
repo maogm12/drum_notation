@@ -4,8 +4,8 @@
 #![allow(clippy::too_many_arguments)]
 
 use wasm_bindgen::prelude::*;
-use js_sys::{Array, Object};
 
+#[cfg(feature = "layout-wasm")]
 extern crate drummark_layout;
 
 pub mod lexer;
@@ -21,9 +21,11 @@ pub mod nav;
 pub mod volta;
 pub mod event;
 pub mod normalize;
+#[cfg(feature = "layout-wasm")]
 pub mod render_score;
 
 /// Parse a DrumMark source string and return the AST as a JS object.
+#[cfg(feature = "parser-wasm")]
 #[wasm_bindgen]
 pub fn parse(source: &str) -> JsValue {
     let parser = parser::Parser::new(source);
@@ -35,6 +37,7 @@ pub fn parse(source: &str) -> JsValue {
 
 /// Parse and normalize a DrumMark source string in one call.
 /// Returns the NormalizedScore as a JS object tree.
+#[cfg(all(feature = "parser-wasm", feature = "layout-wasm"))]
 #[wasm_bindgen]
 pub fn build_normalized_score(source: &str) -> JsValue {
     let parser = parser::Parser::new(source);
@@ -46,6 +49,7 @@ pub fn build_normalized_score(source: &str) -> JsValue {
     normalize_to_js(&score)
 }
 
+#[cfg(all(feature = "parser-wasm", feature = "layout-wasm"))]
 #[wasm_bindgen]
 pub fn build_render_score(source: &str) -> JsValue {
     let parser = parser::Parser::new(source);
@@ -58,6 +62,7 @@ pub fn build_render_score(source: &str) -> JsValue {
     render_score_to_js(&render_score)
 }
 
+#[cfg(feature = "layout-wasm")]
 #[wasm_bindgen]
 pub fn build_layout_scene(source: &str, options: JsValue) -> JsValue {
     let opts = parse_layout_options(&options);
@@ -80,6 +85,7 @@ pub fn build_layout_scene(source: &str, options: JsValue) -> JsValue {
     layout_scene_to_js(&scene)
 }
 
+#[cfg(all(feature = "parser-wasm", feature = "layout-wasm"))]
 fn normalize_to_js(score: &normalize::NormalizedScore) -> JsValue {
     use js_sys::{Array, Object};
 
@@ -202,6 +208,7 @@ fn frac_js(f: crate::fraction::Fraction) -> JsValue {
     obj.into()
 }
 
+#[cfg(all(feature = "parser-wasm", feature = "layout-wasm"))]
 fn render_fraction_js(f: drummark_layout::Fraction) -> JsValue {
     let obj = js_sys::Object::new();
     set(&obj, "numerator", &JsValue::from_f64(f.numerator as f64));
@@ -209,7 +216,9 @@ fn render_fraction_js(f: drummark_layout::Fraction) -> JsValue {
     obj.into()
 }
 
+#[cfg(all(feature = "parser-wasm", feature = "layout-wasm"))]
 fn render_score_to_js(score: &drummark_layout::RenderScore) -> JsValue {
+    use js_sys::{Array, Object};
     let obj = Object::new();
     set(&obj, "version", &JsValue::from_str(&score.version));
 
@@ -358,6 +367,7 @@ fn set(obj: &js_sys::Object, key: &str, val: &JsValue) {
     js_sys::Reflect::set(obj, &JsValue::from_str(key), val).unwrap();
 }
 
+#[cfg(feature = "layout-wasm")]
 fn parse_layout_options(options: &JsValue) -> drummark_layout::LayoutOptions {
     let mut opts = drummark_layout::LayoutOptions::default();
     if !options.is_object() {
@@ -414,6 +424,7 @@ fn parse_layout_options(options: &JsValue) -> drummark_layout::LayoutOptions {
     opts
 }
 
+#[cfg(feature = "layout-wasm")]
 fn layout_scene_to_js(scene: &drummark_layout::LayoutScene) -> JsValue {
     drummark_layout::layout_scene_to_js(scene)
 }

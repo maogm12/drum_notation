@@ -1,16 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { buildNormalizedScore } from "../dsl/normalize";
-import { buildLayoutSceneFromSource, renderSceneToSvg, renderScoreToSvg, setLayoutSource } from "./svgRenderer";
+import { buildLayoutSceneFromSource, renderSceneToSvg, renderScoreToSvg } from "./svgRenderer";
 
 const HEADER = `time 4/4
 note 1/8
 grouping 2+2
 `;
 
-function render(dsl: string): string {
-  setLayoutSource(dsl);
+async function render(dsl: string): Promise<string> {
   const score = buildNormalizedScore(dsl);
-  return renderScoreToSvg(score, { pageWidth: 612, showTitle: true });
+  return renderScoreToSvg(score, { pageWidth: 612, showTitle: true }, { source: dsl, sourceRevision: 1 });
 }
 
 function countRe(svg: string, re: RegExp): number {
@@ -38,34 +37,34 @@ function renderPrecomputedScene(items: Array<Record<string, unknown>>): string {
 }
 
 describe("SVG Renderer parity", () => {
-  it("renders 5 staff lines", () => {
-    const svg = render(HEADER + "SD | d |\n");
+  it("renders 5 staff lines", async () => {
+    const svg = await render(HEADER + "SD | d |\n");
     expect(countRe(svg, /<line /g)).toBeGreaterThanOrEqual(5);
   });
 
-  it("renders percussion clef", () => {
-    const svg = render(HEADER + "SD | d |\n");
+  it("renders percussion clef", async () => {
+    const svg = await render(HEADER + "SD | d |\n");
     expect(svg).toContain("");
   });
 
-  it("renders time signature", () => {
-    const svg = render(HEADER + "SD | d |\n");
+  it("renders time signature", async () => {
+    const svg = await render(HEADER + "SD | d |\n");
     expect(svg).toContain("\u{E084}"); // time sig "4"
   });
 
-  it("renders barline", () => {
-    const svg = render(HEADER + "SD | d |\n");
+  it("renders barline", async () => {
+    const svg = await render(HEADER + "SD | d |\n");
     expect(countRole(svg, "opening-barline")).toBe(1);
     expect(countRole(svg, "final-barline-thin") + countRole(svg, "barline") + countRole(svg, "closing-barline")).toBeGreaterThanOrEqual(1);
   });
 
-  it("renders notehead", () => {
-    const svg = render(HEADER + "SD | d |\n");
+  it("renders notehead", async () => {
+    const svg = await render(HEADER + "SD | d |\n");
     expect(svg).toContain("");
   });
 
-  it("renders stem", () => {
-    const svg = render(HEADER + "SD | d |\n");
+  it("renders stem", async () => {
+    const svg = await render(HEADER + "SD | d |\n");
     expect(countRole(svg, "stem")).toBeGreaterThanOrEqual(1);
   });
 
@@ -95,37 +94,37 @@ describe("SVG Renderer parity", () => {
     expect(countRole(svg, "beam-secondary")).toBeGreaterThanOrEqual(1);
   });
 
-  it("renders X notehead on cymbal", () => {
-    const svg = render(HEADER + "HH | x |\n");
+  it("renders X notehead on cymbal", async () => {
+    const svg = await render(HEADER + "HH | x |\n");
     expect(svg).toContain("\u{E0A9}");
   });
 
-  it("renders accent modifier", () => {
-    const svg = render(HEADER + "SD | d:accent |\n");
+  it("renders accent modifier", async () => {
+    const svg = await render(HEADER + "SD | d:accent |\n");
     expect(countRole(svg, "accent")).toBe(1);
     expect(svg).toContain("\u{E4A0}");
   });
 
-  it("renders ghost modifier", () => {
-    const svg = render(HEADER + "SD | d:ghost |\n");
+  it("renders ghost modifier", async () => {
+    const svg = await render(HEADER + "SD | d:ghost |\n");
     expect(countRole(svg, "notehead")).toBe(1);
     expect(svg).toContain("\u{E0A4}");
   });
 
-  it("renders double barline", () => {
-    const svg = render(HEADER + "SD | d ||\n");
+  it("renders double barline", async () => {
+    const svg = await render(HEADER + "SD | d ||\n");
     expect(countRole(svg, "double-barline-left")).toBe(1);
     expect(countRole(svg, "double-barline-right")).toBe(1);
   });
 
-  it("renders repeat bars", () => {
-    const svg = render(HEADER + "SD |: d :|\n");
+  it("renders repeat bars", async () => {
+    const svg = await render(HEADER + "SD |: d :|\n");
     expect(countRole(svg, "repeat-start")).toBe(1);
     expect(countRole(svg, "repeat-end")).toBe(1);
   });
 
-  it("renders volta composites only for explicit numbered endings", () => {
-    const svg = render("time 4/4\nnote 1/4\ngrouping 1+1+1+1\n|: s s s s |1. s s [ss] s :|2. s s [ssss] s |\n");
+  it("renders volta composites only for explicit numbered endings", async () => {
+    const svg = await render("time 4/4\nnote 1/4\ngrouping 1+1+1+1\n|: s s s s |1. s s [ss] s :|2. s s [ssss] s |\n");
     expect(countRole(svg, "repeat-span-line")).toBe(0);
     expect(countRole(svg, "repeat-span-count")).toBe(0);
     expect(countRole(svg, "volta-line")).toBeGreaterThanOrEqual(2);
@@ -134,68 +133,68 @@ describe("SVG Renderer parity", () => {
     expect(svg).toContain("2.");
   });
 
-  it("renders title", () => {
-    const svg = render("title Hello\n" + HEADER + "SD | d |\n");
+  it("renders title", async () => {
+    const svg = await render("title Hello\n" + HEADER + "SD | d |\n");
     expect(svg).toContain("Hello");
   });
 
-  it("renders measure repeat", () => {
-    const svg = render(HEADER + "SD | d | % |\n");
+  it("renders measure repeat", async () => {
+    const svg = await render(HEADER + "SD | d | % |\n");
     expect(countRole(svg, "measure-repeat")).toBe(1);
   });
 
-  it("expands two-bar repeats into two display measures and uses the dedicated glyph", () => {
+  it("expands two-bar repeats into two display measures and uses the dedicated glyph", async () => {
     const source = HEADER + "HH | x - - - | x x - - | %% |\n";
-    const scene = buildLayoutSceneFromSource(source, { pageWidth: 612, staffScale: 1 });
+    const scene = await buildLayoutSceneFromSource(source, { pageWidth: 612, staffScale: 1 });
     expect(scene.pages[0]?.measures).toHaveLength(4);
     const svg = renderSceneToSvg(scene, { staffScale: 1 });
     expect(countRole(svg, "measure-repeat")).toBe(1);
     expect(svg).toContain("\u{E501}");
   });
 
-  it("renders multi-rest", () => {
-    const svg = render(HEADER + "SD | --2-- |\n");
+  it("renders multi-rest", async () => {
+    const svg = await render(HEADER + "SD | --2-- |\n");
     expect(countRole(svg, "multi-rest-bar")).toBe(1);
     expect(countRole(svg, "multi-rest-count")).toBe(1);
   });
 
-  it("renders navigation markers", () => {
-    const svg = render(HEADER + "SD | @segno d - - - | d - - - @dc |\n");
+  it("renders navigation markers", async () => {
+    const svg = await render(HEADER + "SD | @segno d - - - | d - - - @dc |\n");
     expect(countRole(svg, "nav-start")).toBe(1);
     expect(countRole(svg, "nav-end")).toBe(1);
     expect(svg).toContain("@segno");
     expect(svg).toContain("@dc");
   });
 
-  it("renders hairpins", () => {
-    const svg = render("time 4/4\nnote 1/8\ngrouping 2+2\nHH | < x x x x ! - - - |\n");
+  it("renders hairpins", async () => {
+    const svg = await render("time 4/4\nnote 1/8\ngrouping 2+2\nHH | < x x x x ! - - - |\n");
     expect(countRole(svg, "hairpin-top")).toBe(1);
     expect(countRole(svg, "hairpin-bottom")).toBe(1);
   });
 
-  it("renders rests by duration", () => {
-    const svg = render(HEADER + "SD | --2-- |\n");
+  it("renders rests by duration", async () => {
+    const svg = await render(HEADER + "SD | --2-- |\n");
     expect(countRole(svg, "rest")).toBe(0);
     expect(countRole(svg, "multi-rest-bar")).toBe(1);
   });
 
-  it("renders implicit lower-voice rests for rhythmic gaps", () => {
-    const svg = render("time 4/4\nnote 1/8\ngrouping 2+2\nHH | x x x x x x x x |\nBD | p - - - p - - - |\n");
+  it("renders implicit lower-voice rests for rhythmic gaps", async () => {
+    const svg = await render("time 4/4\nnote 1/8\ngrouping 2+2\nHH | x x x x x x x x |\nBD | p - - - p - - - |\n");
     expect(countRole(svg, "rest")).toBe(4);
     expect(svg).toContain("\u{E4E5}");
     expect(svg).toContain("\u{E4E6}");
   });
 
-  it("renders same-voice rests without inventing an upper voice", () => {
-    const svg = render("time 4/4\ndivisions 4\ngrouping 2+2\nBD | b - - - |\n");
+  it("renders same-voice rests without inventing an upper voice", async () => {
+    const svg = await render("time 4/4\ndivisions 4\ngrouping 2+2\nBD | b - - - |\n");
     expect(countRole(svg, "rest")).toBe(3);
     expect(svg).toContain("\u{E4E5}");
     expect(svg).toContain("\u{E4E6}");
     expect(svg).toContain("\u{E4E4}");
   });
 
-  it("renders eighth-rest glyphs for simple eighth-note gaps and trailing silence", () => {
-    const svg = render("time 4/4\nnote 1/8\ngrouping 2+2\nHH | x - x - |\n");
+  it("renders eighth-rest glyphs for simple eighth-note gaps and trailing silence", async () => {
+    const svg = await render("time 4/4\nnote 1/8\ngrouping 2+2\nHH | x - x - |\n");
     expect(countRole(svg, "rest")).toBe(3);
     expect(svg).toContain("\u{E4E6}");
     expect(svg).toContain("\u{E4E4}");

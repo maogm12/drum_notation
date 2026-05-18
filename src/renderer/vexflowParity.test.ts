@@ -2,7 +2,7 @@
 
 import { describe, it, expect } from "vitest";
 import { buildNormalizedScore } from "../dsl/normalize";
-import { renderScoreToSvg, setLayoutSource } from "./svgRenderer";
+import { renderScoreToSvg } from "./svgRenderer";
 import { renderScoreToSvg as vexRender } from "../vexflow/renderer";
 
 const HEADER = `time 4/4
@@ -31,10 +31,13 @@ function textEls(svg: string): { x: number; y: number; content: string }[] {
 describe("VexFlow position parity", () => {
   it("staff lines start at same Y", async () => {
     const dsl = HEADER + "SD | dddd |\n";
-    setLayoutSource(dsl);
     const score = buildNormalizedScore(dsl);
     const vexSvg = await vexRender(score, { staffScale: 0.75 });
-    const ourSvg = renderScoreToSvg(score, { staffScale: 0.75, pageWidth: 612, showTitle: false });
+    const ourSvg = await renderScoreToSvg(
+      score,
+      { staffScale: 0.75, pageWidth: 612, showTitle: false },
+      { source: dsl, sourceRevision: 1 },
+    );
 
     const vexY = lineY1s(vexSvg).sort((a, b) => a - b);
     const ourY = lineY1s(ourSvg).sort((a, b) => a - b);
@@ -50,10 +53,13 @@ describe("VexFlow position parity", () => {
 
   it("first notehead X position is reasonable", async () => {
     const dsl = HEADER + "SD | d |\n";
-    setLayoutSource(dsl);
     const score = buildNormalizedScore(dsl);
     const vexSvg = await vexRender(score, { staffScale: 0.75 });
-    const ourSvg = renderScoreToSvg(score, { staffScale: 0.75, pageWidth: 612, showTitle: false });
+    const ourSvg = await renderScoreToSvg(
+      score,
+      { staffScale: 0.75, pageWidth: 612, showTitle: false },
+      { source: dsl, sourceRevision: 1 },
+    );
 
     const vexText = textEls(vexSvg);
     const ourText = textEls(ourSvg);

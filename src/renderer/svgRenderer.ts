@@ -1,13 +1,4 @@
-import { build_layout_scene } from "../wasm/pkg/drummark_core";
-import { initWasm } from "../wasm/drummark_wasm";
-import { SETTINGS_RANGES } from "../vexflow/config";
-
-let cachedSource = "";
-initWasm().catch(() => {});
-
-export function setLayoutSource(src: string) {
-  cachedSource = src;
-}
+import { SETTINGS_RANGES } from "./renderOptions";
 
 type RenderOptions = {
   staffScale?: number;
@@ -28,6 +19,11 @@ type RenderOptions = {
   durationSpacingCompression?: number;
   measureWidthCompression?: number;
   debug?: boolean;
+};
+
+type LayoutRenderContext = {
+  source: string;
+  sourceRevision: number;
 };
 
 type Scene = {
@@ -89,7 +85,12 @@ type SceneComposite = {
   endAnchorId?: string;
 };
 
-export function buildLayoutSceneFromSource(source: string, options?: RenderOptions): Scene {
+export async function buildLayoutSceneFromSource(source: string, options?: RenderOptions): Promise<Scene> {
+  const {
+    buildLayoutSceneWithBrowserWasm,
+    initLayoutWasmBrowser,
+  } = await import("../wasm/layout_wasm_browser");
+  await initLayoutWasmBrowser();
   const ss = options?.staffScale ?? 0.75;
   const logicalW = (options?.pageWidth ?? 612) / ss;
   const logicalH = (options?.pageHeight ?? 792) / ss;
@@ -113,7 +114,7 @@ export function buildLayoutSceneFromSource(source: string, options?: RenderOptio
     measureWidthCompression: options?.measureWidthCompression ?? SETTINGS_RANGES.measureWidthCompression.default,
     debug: options?.debug ? 1 : 0,
   };
-  const scene = build_layout_scene(source, opts as any) as Scene;
+  const scene = buildLayoutSceneWithBrowserWasm(source, opts) as Scene;
   if (!scene || !Array.isArray(scene.pages)) {
     throw new Error("Layout scene export returned an invalid payload.");
   }
@@ -247,32 +248,40 @@ function renderScenePageToSvg(page: ScenePage, options?: RenderOptions): string 
   return svg;
 }
 
-export function renderSourceToSvg(source: string, options?: RenderOptions): string {
-  return renderSceneToSvg(buildLayoutSceneFromSource(source, options), options);
+export async function renderSourceToSvg(source: string, options?: RenderOptions): Promise<string> {
+  return renderSceneToSvg(await buildLayoutSceneFromSource(source, options), options);
 }
 
-export function renderSourcePagesToSvgs(source: string, options?: RenderOptions): string[] {
-  return renderScenePagesToSvgs(buildLayoutSceneFromSource(source, options), options);
+export async function renderSourcePagesToSvgs(source: string, options?: RenderOptions): Promise<string[]> {
+  return renderScenePagesToSvgs(await buildLayoutSceneFromSource(source, options), options);
 }
 
-export function renderScoreToSvg(_score: unknown, options?: RenderOptions): string {
-  if (!cachedSource) {
+export async function renderScoreToSvg(
+  _score: unknown,
+  options?: RenderOptions,
+  context?: LayoutRenderContext,
+): Promise<string> {
+  if (!context?.source) {
     return `<svg xmlns="http://www.w3.org/2000/svg" width="612" height="792"><text x="20" y="40">No layout source</text></svg>`;
   }
   try {
-    return renderSourceToSvg(cachedSource, options);
+    return await renderSourceToSvg(context.source, options);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return `<svg xmlns="http://www.w3.org/2000/svg" width="612" height="792"><text x="20" y="40" fill="#666">${esc(message)}</text></svg>`;
   }
 }
 
-export function renderScorePagesToSvgs(_score: unknown, options?: RenderOptions): string[] {
-  if (!cachedSource) {
+export async function renderScorePagesToSvgs(
+  _score: unknown,
+  options?: RenderOptions,
+  context?: LayoutRenderContext,
+): Promise<string[]> {
+  if (!context?.source) {
     return [`<svg xmlns="http://www.w3.org/2000/svg" width="612" height="792"><text x="20" y="40">No layout source</text></svg>`];
   }
   try {
-    return renderSourcePagesToSvgs(cachedSource, options);
+    return await renderSourcePagesToSvgs(context.source, options);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return [`<svg xmlns="http://www.w3.org/2000/svg" width="612" height="792"><text x="20" y="40" fill="#666">${esc(message)}</text></svg>`];

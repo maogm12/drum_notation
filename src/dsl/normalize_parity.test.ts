@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { initWasm } from "../wasm/drummark_wasm";
+import { initParserWasmBrowser } from "../wasm/parser_wasm_browser";
 import { buildNormalizedScoreWasm } from "./normalize";
 import { buildNormalizedScoreFromRegex } from "./normalize";
 import type { NormalizedScore, NormalizedMeasure, NormalizedEvent } from "./types";
 
 beforeAll(async () => {
-  await initWasm();
+  await initParserWasmBrowser();
 });
 
 // ── Test inputs ──────────────────────────────────────────────────

@@ -7,8 +7,8 @@ import { fileURLToPath } from "node:url";
 import { EXAMPLE_CORPUS_FILES } from "../dsl/example_corpus";
 import { buildNormalizedScore } from "../dsl/normalize";
 import { renderScoreToSvg as vexRender } from "../vexflow/renderer";
-import { buildLayoutSceneFromSource, renderScoreToSvg, setLayoutSource } from "./svgRenderer";
-import { initWasm } from "../wasm/drummark_wasm";
+import { buildLayoutSceneFromSource, renderScoreToSvg } from "./svgRenderer";
+import { initParserWasmBrowser } from "../wasm/parser_wasm_browser";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const REPO_ROOT = dirname(ROOT);
@@ -136,7 +136,7 @@ function buildOracleDiff(layoutSvg: string, vexSvg: string): OracleDiff {
 
 describe("Layout corpus gate", () => {
   beforeAll(async () => {
-    await initWasm();
+    await initParserWasmBrowser();
   });
 
   it("keeps the supported corpus scene report stable", async () => {
@@ -147,7 +147,7 @@ describe("Layout corpus gate", () => {
       const source = readFileSync(join(REPO_ROOT, file), "utf8");
       actualSceneReport.push({
         file,
-        summary: sceneSummary(buildLayoutSceneFromSource(source, { staffScale: 0.75, pageWidth: 612, showTitle: true })),
+        summary: sceneSummary(await buildLayoutSceneFromSource(source, { staffScale: 0.75, pageWidth: 612, showTitle: true })),
       });
     }
 
@@ -158,7 +158,7 @@ describe("Layout corpus gate", () => {
     for (const file of REPRESENTATIVE_SCENE_FILES) {
       const source = readFileSync(join(REPO_ROOT, file), "utf8");
       const actual = JSON.stringify(
-        buildLayoutSceneFromSource(source, { staffScale: 0.75, pageWidth: 612, showTitle: true }),
+        await buildLayoutSceneFromSource(source, { staffScale: 0.75, pageWidth: 612, showTitle: true }),
         null,
         2,
       );
@@ -180,9 +180,12 @@ describe("Layout corpus gate", () => {
 
     for (const file of EXAMPLE_CORPUS_FILES) {
       const source = readFileSync(join(REPO_ROOT, file), "utf8");
-      setLayoutSource(source);
       const score = buildNormalizedScore(source);
-      const layoutSvg = renderScoreToSvg(score, { staffScale: 0.75, pageWidth: 612, showTitle: true });
+      const layoutSvg = await renderScoreToSvg(
+        score,
+        { staffScale: 0.75, pageWidth: 612, showTitle: true },
+        { source, sourceRevision: 1 },
+      );
       const vexSvg = await vexRender(score, { staffScale: 0.75 });
       actualOracleReport.push({
         file,

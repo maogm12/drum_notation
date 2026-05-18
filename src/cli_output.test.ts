@@ -1,13 +1,13 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { buildNormalizedScore } from "./dsl/normalize";
 import { formatScoreJson } from "./cli_output";
-import { initWasm } from "./wasm/drummark_wasm";
+import { initParserWasmNode } from "./wasm/parser_wasm_node";
 
 describe("formatScoreJson", () => {
   let score: ReturnType<typeof buildNormalizedScore>;
 
   beforeAll(async () => {
-    await initWasm();
+    await initParserWasmNode();
     score = buildNormalizedScore(`title CLI Output
 time 4/4
 note 1/8

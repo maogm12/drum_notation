@@ -1,11 +1,11 @@
 import { buildMusicXml } from "./dsl/musicxml";
 import { buildNormalizedScore } from "./dsl/normalize";
 import type { NormalizedScore } from "./dsl/types";
-import { renderSourceToSvg } from "./renderer/svgRenderer";
-import { DEFAULT_RENDER_OPTIONS, type VexflowRenderOptions } from "./vexflow/types";
+import { renderSourceToSvgNode } from "./renderer/svgRendererNode";
+import { DEFAULT_RENDER_OPTIONS, type ScoreRenderOptions } from "./renderer/renderOptions";
 import { formatScoreJson, type CliOutputFormat } from "./cli_output";
 import { ensureCliRenderEnvironment } from "./cli_render_env";
-import { initWasm } from "./wasm/drummark_wasm";
+import { initParserWasmNode } from "./wasm/parser_wasm_node";
 
 export type CliParams = {
   input: string;
@@ -16,7 +16,7 @@ export type CliParams = {
 export const CLI_USAGE =
   "Usage: npm run drummark -- <input-file> [--format ast|ir|svg|xml] [--output path]";
 
-export const CLI_RENDER_OPTIONS: VexflowRenderOptions = {
+export const CLI_RENDER_OPTIONS: ScoreRenderOptions = {
   ...DEFAULT_RENDER_OPTIONS,
   pagePadding: { top: 20, right: 20, bottom: 20, left: 20 },
 };
@@ -65,7 +65,7 @@ export async function buildCliOutput(
   score: NormalizedScore;
   result: string;
 }> {
-  await initWasm();
+  await initParserWasmNode();
   const score = buildNormalizedScore(source);
 
   if (format === "ast" || format === "ir") {
@@ -77,7 +77,7 @@ export async function buildCliOutput(
   }
 
   ensureCliRenderEnvironment();
-  const result = renderSourceToSvg(source, {
+  const result = await renderSourceToSvgNode(source, {
     staffScale: CLI_RENDER_OPTIONS.staffScale,
     pageWidth: CLI_RENDER_OPTIONS.pageWidth,
     topMargin: CLI_RENDER_OPTIONS.pagePadding.top,

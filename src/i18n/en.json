@@ -51,7 +51,9 @@
   "settings.titleGap": "Title Gap",
   "settings.voltaOffset": "Volta Offset",
   "settings.hairpinOffset": "Hairpin Vertical Offset",
-  "settings.useLayoutEngine": "Use Layout Engine (SVG)",
+  "settings.useLayoutEngine": "Layout Engine",
+  "settings.rendererLayoutEngine": "Layout Engine",
+  "settings.rendererLegacyVexFlow": "Legacy VexFlow",
   "settings.decrease": "Decrease {{label}}",
   "settings.increase": "Increase {{label}}"
 }
