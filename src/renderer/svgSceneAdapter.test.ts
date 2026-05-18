@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildLayoutSceneFromSource, renderScenePagesToSvgs, renderSceneToSvg, renderSourcePagesToSvgs, renderSourceToSvg } from "./svgRenderer";
+import { buildLayoutSceneFromSource, renderScenePagesToSvgs, renderSceneToSvg, renderScorePagesToSvgs, renderSourcePagesToSvgs, renderSourceToSvg, setLayoutSource } from "./svgRenderer";
 
 const SRC = `title Smoke
 tempo 120
@@ -171,6 +171,56 @@ describe("SVG scene adapter", () => {
     const pages = renderSourcePagesToSvgs(SRC, { pageWidth: 612, staffScale: 0.75 });
     expect(pages).toHaveLength(scene.pages.length);
     expect(pages[0]).toContain('data-role="notehead"');
+  });
+
+  it("renders every cached-source page through the score-level layout adapter", () => {
+    const paragraphs = Array.from({ length: 8 }, () => "HH | x x x x |").join("\n\n");
+    const multiPageSource = `title Cached Pages
+time 4/4
+note 1/4
+grouping 1+1+1+1
+
+${paragraphs}
+`;
+
+    setLayoutSource(multiPageSource);
+    const pages = renderScorePagesToSvgs({}, {
+      staffScale: 1,
+      pageWidth: 612,
+      pageHeight: 260,
+      topMargin: 20,
+      bottomMargin: 20,
+      headerHeight: 40,
+      headerStaffSpacing: 20,
+      systemSpacing: 24,
+    });
+
+    expect(pages.length).toBeGreaterThan(1);
+    expect(pages.every((svg) => svg.startsWith("<svg"))).toBe(true);
+  });
+
+  it("does not carry measure-owned beams into the following system band", () => {
+    const scene = buildLayoutSceneFromSource(`time 4/4
+note 1/8
+
+| p p b b |
+
+| ss|
+`, { pageWidth: 612, staffScale: 1 });
+
+    const beamsByMeasure = scene.pages
+      .flatMap((page) => page.items)
+      .filter((item) => item.role === "beam")
+      .reduce<Record<string, number>>((counts, item) => {
+        const measureId = item.measureId ?? "unowned";
+        counts[measureId] = (counts[measureId] ?? 0) + 1;
+        return counts;
+      }, {});
+
+    expect(beamsByMeasure).toEqual({
+      "measure-0": 2,
+      "measure-1": 1,
+    });
   });
 
   it("passes hairpin vertical offset into the layout engine", () => {

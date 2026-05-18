@@ -448,9 +448,10 @@ const PagePreview = memo(function PagePreview({
 
     if (useLayoutEngine) {
       import("./renderer/svgRenderer")
-        .then(({ renderScoreToSvg }) => {
-          const svg = renderScoreToSvg(score, { staffScale, pageWidth: pdfPageWidth, showTitle: true, topMargin: pagePadding.top, bottomMargin: pagePadding.bottom, leftMargin: pagePadding.left, rightMargin: pagePadding.right, stemLength, systemSpacing, headerHeight, headerStaffSpacing, voltaSpacing, hairpinOffsetY, hideVoice2Rests, durationSpacingCompression, measureWidthCompression });
-          setRenderedMarkup(`<section class="staff-preview-page" data-page="1">${svg}</section>`);
+        .then(({ renderScorePagesToSvgs }) => {
+          const pages = renderScorePagesToSvgs(score, { staffScale, pageWidth: pdfPageWidth, pageHeight: pdfPageHeight, showTitle: true, topMargin: pagePadding.top, bottomMargin: pagePadding.bottom, leftMargin: pagePadding.left, rightMargin: pagePadding.right, stemLength, systemSpacing, headerHeight, headerStaffSpacing, voltaSpacing, hairpinOffsetY, hideVoice2Rests, durationSpacingCompression, measureWidthCompression });
+          const markup = pages.map((svg, i) => `<section class="staff-preview-page" data-page="${i+1}">${svg}</section>`).join("");
+          setRenderedMarkup(markup);
           setIsRendering(false);
           if (shellRef.current) { shellRef.current.scrollTop = targetTop; shellRef.current.scrollLeft = targetLeft; }
           setError(null);

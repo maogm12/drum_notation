@@ -12,6 +12,7 @@ export function setLayoutSource(src: string) {
 type RenderOptions = {
   staffScale?: number;
   pageWidth?: number;
+  pageHeight?: number;
   showTitle?: boolean;
   topMargin?: number;
   bottomMargin?: number;
@@ -91,7 +92,7 @@ type SceneComposite = {
 export function buildLayoutSceneFromSource(source: string, options?: RenderOptions): Scene {
   const ss = options?.staffScale ?? 0.75;
   const logicalW = (options?.pageWidth ?? 612) / ss;
-  const logicalH = 792 / ss;
+  const logicalH = (options?.pageHeight ?? 792) / ss;
   const opts = {
     pageWidth: logicalW,
     pageHeight: logicalH,
@@ -263,6 +264,18 @@ export function renderScoreToSvg(_score: unknown, options?: RenderOptions): stri
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return `<svg xmlns="http://www.w3.org/2000/svg" width="612" height="792"><text x="20" y="40" fill="#666">${esc(message)}</text></svg>`;
+  }
+}
+
+export function renderScorePagesToSvgs(_score: unknown, options?: RenderOptions): string[] {
+  if (!cachedSource) {
+    return [`<svg xmlns="http://www.w3.org/2000/svg" width="612" height="792"><text x="20" y="40">No layout source</text></svg>`];
+  }
+  try {
+    return renderSourcePagesToSvgs(cachedSource, options);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return [`<svg xmlns="http://www.w3.org/2000/svg" width="612" height="792"><text x="20" y="40" fill="#666">${esc(message)}</text></svg>`];
   }
 }
 

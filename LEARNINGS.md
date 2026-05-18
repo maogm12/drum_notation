@@ -896,3 +896,19 @@ Nav markers (`@segno`, `@fine`, `@to-coda`, etc.) were converted to `TokenGlyph:
 - Rust layout option parsing should start from `LayoutOptions::default()` and only override fields that are explicitly supplied by JS. Otherwise partial option objects can accidentally zero out page margins or spacing while still passing the page-size validity check.
 
 - The current layout scene builder still emits a single page. Adding real page breaking changes the scene pagination contract and should be handled as a designed layout feature rather than a small cleanup.
+
+## 2026-05-18 Addendum: WASM Preview Pagination Requires the Page-Aware Adapter
+
+- The Rust layout scene can contain multiple `pages`, but `renderSceneToSvg()` and `renderScoreToSvg()` intentionally render only `pages[0]` and warn on multi-page scenes. Front-end preview pagination must call `renderScenePagesToSvgs()` / `renderScorePagesToSvgs()` and wrap each returned SVG in its own page section.
+
+- The App preview has two independent render branches. The VexFlow branch already uses `renderScorePagesToSvgs`; the `useLayoutEngine` WASM branch must mirror that behavior instead of wrapping a single SVG as page 1.
+
+- `pageHeight` is part of the pagination contract. The JS layout adapter must pass `pageHeight / staffScale` to WASM just like `pageWidth / staffScale`, otherwise tests or settings that use non-default page heights cannot exercise page breaks correctly.
+
+## 2026-05-18 Addendum: System Box Extraction Must Respect Measure Ownership First
+
+- During Rust scene pagination, `system_box_from_page_system()` must treat `measure_id` as authoritative. If an item has a `measure_id`, it belongs only to the system containing that measure and must not fall through to visual-band inclusion.
+
+- Visual-band inclusion is only appropriate for unowned system-level items such as staff lines, clefs, and measure numbers. Letting measure-owned items fall through can duplicate beams/stems from one system into the next system when their Y bounds happen to overlap the next extraction band.
+
+- A minimal regression input is `time 4/4`, `note 1/8`, first paragraph `| p p b b |`, blank line, second paragraph `| ss|`. The correct scene has two beam items for `measure-0` and one beam item for `measure-1`.

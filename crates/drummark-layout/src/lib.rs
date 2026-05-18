@@ -5083,12 +5083,8 @@ fn system_box_from_page_system(
         .items
         .iter()
         .filter(|item| {
-            if item
-                .measure_id
-                .as_ref()
-                .is_some_and(|id| measure_ids.contains(id))
-            {
-                return true;
+            if let Some(measure_id) = item.measure_id.as_ref() {
+                return measure_ids.contains(measure_id);
             }
             if matches!(
                 item.role.as_str(),
