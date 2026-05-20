@@ -2087,11 +2087,28 @@ mod tests {
             .filter(|composite| composite.kind == CompositeKind::Navigation)
             .collect::<Vec<_>>();
         assert_eq!(navigation.len(), 2);
-        assert_eq!(navigation[0].label.as_deref(), Some("@segno"));
-        assert_eq!(navigation[1].label.as_deref(), Some("@ds-al-coda"));
+        assert_eq!(navigation[0].label.as_deref(), Some("segno"));
+        assert_eq!(navigation[1].label.as_deref(), Some("D.S. al Coda"));
         assert!(navigation
             .iter()
             .all(|composite| !composite.child_item_ids.is_empty()));
+        assert!(items.iter().any(|item| {
+            item.role == "nav-start"
+                && matches!(
+                    &item.primitive,
+                    ScenePrimitive::GlyphRun(GlyphRun {
+                        glyph_role: GlyphRole::NavigationSegno,
+                        ..
+                    })
+                )
+        }));
+        assert!(items.iter().any(|item| {
+            item.role == "nav-end"
+                && matches!(
+                    &item.primitive,
+                    ScenePrimitive::TextRun(TextRun { text, .. }) if text == "D.S. al Coda"
+                )
+        }));
     }
 
     #[test]
@@ -2104,17 +2121,30 @@ mod tests {
             .collect::<Vec<_>>();
         let count_metric = canonical_text_metric(TextRole::CountLabel);
 
-        for role in ["nav-start", "nav-end"] {
-            let text_item = items
+        {
+            let nav_start = items
                 .iter()
                 .copied()
-                .find(|item| item.role == role)
-                .unwrap_or_else(|| panic!("expected scene item with role {role}"));
-            let ScenePrimitive::TextRun(text) = &text_item.primitive else {
-                panic!("expected text primitive for role {role}");
+                .find(|item| item.role == "nav-start")
+                .expect("expected scene item with role nav-start");
+            let ScenePrimitive::GlyphRun(glyph) = &nav_start.primitive else {
+                panic!("expected glyph primitive for nav-start");
+            };
+            assert_eq!(glyph.glyph_role, GlyphRole::NavigationSegno);
+            assert_eq!(glyph.font_family, "Bravura");
+            assert_eq!(glyph.font_size_pt, 20.0);
+        }
+        {
+            let nav_end = items
+                .iter()
+                .copied()
+                .find(|item| item.role == "nav-end")
+                .expect("expected scene item with role nav-end");
+            let ScenePrimitive::TextRun(text) = &nav_end.primitive else {
+                panic!("expected text primitive for nav-end");
             };
             assert_eq!(text.text_role, TextRole::CountLabel);
-            assert_eq!(text.font_family, count_metric.font_family);
+            assert_eq!(text.font_family, "Academico");
             assert_eq!(text.font_size_pt, count_metric.font_size_pt);
         }
 
@@ -2273,6 +2303,61 @@ mod tests {
 
         assert!(nav_y + nav_h <= measure_number_y - 4.0);
         assert!(hairpin_y >= notehead_y + notehead_h + 4.0);
+    }
+
+    #[test]
+    fn test_navigation_uses_anchor_aware_bounds_and_clears_notes() {
+        let mut items = Vec::new();
+        let mut counter = 0usize;
+        let mut sink = SceneEmitSink::new(&mut items, &mut counter);
+        let note_id = sink.push_text_item(TextItemSpec {
+            measure_id: Some("measure-0"),
+            role: "notehead",
+            x: 500.0,
+            y: 210.0,
+            text_role: TextRole::Tempo,
+            text: "\u{E0A4}".to_string(),
+            font_family: "Bravura",
+            font_size_pt: 30.0,
+            fill: "#333",
+            text_anchor: None,
+            font_weight: None,
+        });
+        let mut composites = Vec::new();
+        render_nav_markers(
+            &mut sink,
+            &mut composites,
+            &DeferredNavMarker {
+                measure_id: "measure-0".to_string(),
+                global_index: 0,
+                start_nav: None,
+                end_nav: Some(NavJump::DSalCoda),
+                x: 50.0,
+                width: 520.0,
+                top: 220.0,
+            },
+        );
+        drop(sink);
+
+        let nav_end = items
+            .iter()
+            .find(|item| item.role == "nav-end")
+            .expect("expected end navigation item");
+        let notehead = items
+            .iter()
+            .find(|item| item.id == note_id)
+            .expect("expected colliding notehead candidate");
+
+        let (nav_x, nav_y, nav_w, nav_h) = item_bounds(nav_end).unwrap();
+        let (note_x, note_y, note_w, _) = item_bounds(notehead).unwrap();
+        assert!(
+            nav_x < note_x + note_w && nav_x + nav_w > note_x,
+            "fixture should exercise horizontal nav/note overlap: nav=({nav_x:.1},{nav_y:.1},{nav_w:.1},{nav_h:.1}) note=({note_x:.1},{note_y:.1},{note_w:.1})"
+        );
+        assert!(
+            nav_y + nav_h <= note_y - 4.0,
+            "end navigation should float above the overlapping notehead"
+        );
     }
 
     #[test]
@@ -3597,6 +3682,8 @@ const FIRST_MEASURE_START_REPEAT_PREAMBLE_PULL_PT: f32 = 10.0;
 const START_REPEAT_TRAILING_GAP_PT: f32 = 22.0;
 const VOLTA_TEXT_SIZE_PT: f32 = 12.0;
 const VOLTA_LINE_HEIGHT_PT: f32 = 15.0;
+const VOLTA_LINE_THICKNESS_PT: f32 = 1.0;
+const VOLTA_SKYLINE_GAP_PT: f32 = 4.0;
 
 impl SystemStartReservation {
     fn width(&self) -> f32 {
@@ -4480,6 +4567,8 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
         });
     }
 
+    let mut deferred_navs = Vec::new();
+
     for (sys_idx, system) in planned_systems.iter().enumerate() {
         let is_first_system = sys_idx == 0;
         let is_last = sys_idx + 1 == planned_systems.len();
@@ -4754,18 +4843,15 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
                 );
             }
 
-            render_nav_markers(
-                &mut sink,
-                &mut page.composites,
-                NavMarkerSpec {
-                    measure_id: &measure_id,
-                    measure,
-                    x: mx,
-                    width: *mw,
-                    system_y: sy,
-                    top: s_top,
-                },
-            );
+            deferred_navs.push(DeferredNavMarker {
+                measure_id: measure_id.clone(),
+                global_index: measure.global_index,
+                start_nav: measure.start_nav.clone(),
+                end_nav: measure.end_nav.clone(),
+                x: mx,
+                width: *mw,
+                top: s_top,
+            });
             render_right_barline(
                 &mut sink,
                 RightBarlineSpec {
@@ -4809,6 +4895,9 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
         &expanded.measures,
         opts.hairpin_offset_y,
     );
+    for nav_spec in &deferred_navs {
+        render_nav_markers(&mut sink, &mut page.composites, nav_spec);
+    }
     let _ = sink;
     stack_scene_structural_items(&mut page.items, &page.composites, opts.edge_padding);
 
@@ -5341,8 +5430,17 @@ fn push_system_volta_composites(
             block_x2,
             system_measures[block_start].y_pt - 60.0,
         );
-        let line_y =
-            occupied_top - opts.volta_offset_y - (VOLTA_LINE_HEIGHT_PT + VOLTA_TEXT_SIZE_PT + 2.0);
+        struct PendingVoltaRun {
+            start: usize,
+            end: usize,
+            label: Vec<u32>,
+            show_left_hook: bool,
+            show_label: bool,
+            show_right: bool,
+            fragment: SpanFragmentKind,
+            line_y: f32,
+        }
+        let mut runs = Vec::new();
         let mut index = block_start;
         while index <= block_end {
             let Some(display_measure) =
@@ -5378,28 +5476,135 @@ fn push_system_volta_composites(
             let show_left_hook = show_label || index == 0;
             let show_right = matches!(end_type, VoltaSegmentType::End | VoltaSegmentType::BeginEnd);
             let fragment = volta_fragment_kind(show_label, show_right);
+            let line_y = volta_line_y_for_segment(
+                sink.items,
+                &system_measures[index..=end],
+                measures,
+                label,
+                occupied_top,
+                opts.volta_offset_y,
+                show_left_hook,
+                show_label,
+                show_right,
+                index == 0,
+                is_first_system,
+            );
+            runs.push(PendingVoltaRun {
+                start: index,
+                end,
+                label: label.clone(),
+                show_left_hook,
+                show_label,
+                show_right,
+                fragment,
+                line_y,
+            });
+
+            index = end + 1;
+        }
+        let block_line_y = runs
+            .iter()
+            .map(|run| run.line_y)
+            .fold(f32::INFINITY, f32::min);
+        for run in &runs {
             push_volta_segment(
                 sink,
                 composites,
                 VoltaSegmentSpec {
-                    segment_measures: &system_measures[index..=end],
+                    segment_measures: &system_measures[run.start..=run.end],
                     measures,
-                    label,
-                    line_y,
-                    show_left_hook,
-                    show_label,
-                    show_right,
-                    fragment,
-                    starts_at_system_left: index == 0,
+                    label: &run.label,
+                    line_y: block_line_y,
+                    show_left_hook: run.show_left_hook,
+                    show_label: run.show_label,
+                    show_right: run.show_right,
+                    fragment: run.fragment,
+                    starts_at_system_left: run.start == 0,
                     is_first_system,
                 },
             );
-
-            index = end + 1;
         }
 
         block_start = block_end + 1;
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn volta_line_y_for_segment(
+    items: &[SceneItem],
+    segment_measures: &[SceneMeasure],
+    measures: &[DisplayMeasure<'_>],
+    label: &[u32],
+    occupied_top: f32,
+    volta_offset_y: f32,
+    show_left_hook: bool,
+    show_label: bool,
+    show_right: bool,
+    starts_at_system_left: bool,
+    is_first_system: bool,
+) -> f32 {
+    let first = segment_measures
+        .first()
+        .expect("volta segment has measures");
+    let last = segment_measures.last().expect("volta segment has measures");
+    let first_display = display_measure_for_scene(measures, first);
+    let x1 = volta_segment_left_x(first, first_display, starts_at_system_left, is_first_system);
+    let x2 = last.x_pt + last.width_pt;
+    let mut line_y = occupied_top - VOLTA_SKYLINE_GAP_PT - VOLTA_LINE_THICKNESS_PT;
+
+    if show_left_hook {
+        line_y = line_y.min(volta_line_y_for_child(
+            items,
+            segment_measures,
+            x1 - VOLTA_LINE_THICKNESS_PT,
+            x1 + VOLTA_LINE_THICKNESS_PT,
+            VOLTA_LINE_HEIGHT_PT,
+        ));
+    }
+    if show_right {
+        line_y = line_y.min(volta_line_y_for_child(
+            items,
+            segment_measures,
+            x2 - VOLTA_LINE_THICKNESS_PT,
+            x2 + VOLTA_LINE_THICKNESS_PT,
+            VOLTA_LINE_HEIGHT_PT,
+        ));
+    }
+    if show_label {
+        let label_text = format!(
+            "{}.",
+            label
+                .iter()
+                .map(|value| value.to_string())
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+        let label_x = x1 + 5.0;
+        let label_width = canonical_text_width(TextRole::CountLabel, &label_text);
+        let count_metric = canonical_text_metric(TextRole::CountLabel);
+        let label_bottom_extent = VOLTA_TEXT_SIZE_PT + 2.0 + count_metric.descent_pt;
+        line_y = line_y.min(volta_line_y_for_child(
+            items,
+            segment_measures,
+            label_x,
+            label_x + label_width,
+            label_bottom_extent,
+        ));
+    }
+
+    line_y - volta_offset_y
+}
+
+fn volta_line_y_for_child(
+    items: &[SceneItem],
+    segment_measures: &[SceneMeasure],
+    x1: f32,
+    x2: f32,
+    child_bottom_extent: f32,
+) -> f32 {
+    top_skyline_sample_optional(items, segment_measures, x1, x2)
+        .map(|top| top - VOLTA_SKYLINE_GAP_PT - child_bottom_extent)
+        .unwrap_or(f32::INFINITY)
 }
 
 struct VoltaSegmentSpec<'a> {
@@ -5528,6 +5733,15 @@ fn top_skyline_sample(
     x2: f32,
     fallback_top: f32,
 ) -> f32 {
+    top_skyline_sample_optional(items, block_measures, x1, x2).unwrap_or(fallback_top)
+}
+
+fn top_skyline_sample_optional(
+    items: &[SceneItem],
+    block_measures: &[SceneMeasure],
+    x1: f32,
+    x2: f32,
+) -> Option<f32> {
     let left = x1.min(x2);
     let right = x1.max(x2);
     let measure_ids = block_measures
@@ -5544,6 +5758,9 @@ fn top_skyline_sample(
         .fold(f32::NEG_INFINITY, f32::max);
     let mut top = f32::INFINITY;
     for item in items {
+        if is_decoration_role(&item.role) {
+            continue;
+        }
         if item.role.starts_with("volta") {
             continue;
         }
@@ -5565,9 +5782,9 @@ fn top_skyline_sample(
         }
     }
     if top.is_finite() {
-        top
+        Some(top)
     } else {
-        fallback_top
+        None
     }
 }
 
@@ -6659,83 +6876,221 @@ fn render_right_barline(sink: &mut SceneEmitSink<'_>, spec: RightBarlineSpec<'_>
     }
 }
 
-struct NavMarkerSpec<'a> {
-    measure_id: &'a str,
-    measure: &'a DisplayMeasure<'a>,
+struct DeferredNavMarker {
+    measure_id: String,
+    global_index: u32,
+    start_nav: Option<NavMarker>,
+    end_nav: Option<NavJump>,
     x: f32,
     width: f32,
-    system_y: f32,
     top: f32,
+}
+
+/// Returns true for roles that are purely decorative (background, staff infrastructure)
+/// and should not be considered when computing skyline for content-positioned markers.
+const SKYLINE_Y_RANGE_ABOVE: f32 = 60.0;
+const SKYLINE_Y_RANGE_BELOW: f32 = 30.0;
+
+fn is_decoration_role(role: &str) -> bool {
+    matches!(
+        role,
+        "tempo-glyph"
+            | "tempo-equals"
+            | "tempo"
+            | "staff-line"
+            | "percussion-clef"
+            | "time-signature-digit"
+            | "measure-number"
+            | "title"
+            | "subtitle"
+            | "composer"
+    )
+}
+
+fn skyline_top_for_range(
+    items: &[SceneItem],
+    x1: f32,
+    x2: f32,
+    reference_top: f32,
+    fallback: f32,
+) -> f32 {
+    let left = x1.min(x2);
+    let right = x1.max(x2);
+    let mut top = f32::INFINITY;
+    for item in items {
+        if is_decoration_role(&item.role) {
+            continue;
+        }
+        if item.role.starts_with("volta") {
+            continue;
+        }
+        if let Some((item_x, item_y, item_width, _)) = item_bounds(item) {
+            // Only consider items within a reasonable Y band of the reference.
+            // Items far above (e.g. volta lines from other systems on the
+            // pre-pagination page) must not push this marker upward.
+            if item_y < reference_top - SKYLINE_Y_RANGE_ABOVE
+                || item_y > reference_top + SKYLINE_Y_RANGE_BELOW
+            {
+                continue;
+            }
+            let item_right = item_x + item_width;
+            if item_x < right && item_right > left {
+                top = top.min(item_y);
+            }
+        }
+    }
+    if top.is_finite() {
+        top
+    } else {
+        fallback
+    }
 }
 
 fn render_nav_markers(
     sink: &mut SceneEmitSink<'_>,
     composites: &mut Vec<SceneComposite>,
-    spec: NavMarkerSpec<'_>,
+    spec: &DeferredNavMarker,
 ) {
     let count_metric = canonical_text_metric(TextRole::CountLabel);
-    if let Some(ref start_nav) = spec.measure.start_nav {
-        let label = match start_nav {
-            NavMarker::Segno => "@segno",
-            NavMarker::Coda => "@coda",
+    const NAV_TEXT_FONT: &str = "Academico";
+    const NAV_GAP: f32 = 6.0;
+    if let Some(ref start_nav) = spec.start_nav {
+        let (label, glyph_role) = match start_nav {
+            NavMarker::Segno => ("segno", GlyphRole::NavigationSegno),
+            NavMarker::Coda => ("coda", GlyphRole::NavigationCoda),
         };
-        let nav_id = sink.push_text_item(TextItemSpec {
-            measure_id: Some(spec.measure_id),
+        let glyph_width = rendered_glyph_width(glyph_role, 20.0);
+        let x_start = spec.x + 4.0;
+        let default_y = spec.top - 8.0;
+        let occupied_top = skyline_top_for_range(
+            &sink.items,
+            x_start,
+            x_start + glyph_width,
+            spec.top,
+            default_y + NAV_GAP,
+        );
+        let glyph_metric = canonical_glyph_metric(glyph_role);
+        let nav_y = occupied_top - NAV_GAP + glyph_metric.bbox_sw_y_ss * (20.0 / 4.0);
+        let nav_id = sink.push_glyph_item(GlyphItemSpec {
+            measure_id: Some(spec.measure_id.as_str()),
             role: "nav-start",
-            x: spec.x + 4.0,
-            y: spec.system_y - count_metric.descent_pt,
-            text_role: TextRole::CountLabel,
-            text: label.to_string(),
-            font_family: count_metric.font_family,
-            font_size_pt: count_metric.font_size_pt,
+            x: x_start,
+            y: nav_y,
+            glyph_role,
+            font_family: "Bravura",
+            font_size_pt: 20.0,
             fill: "#333",
-            text_anchor: None,
-            font_weight: Some("bold"),
         });
         composites.push(SceneComposite {
-            id: format!("navigation-start-{}", spec.measure.global_index),
+            id: format!("navigation-start-{}", spec.global_index),
             kind: CompositeKind::Navigation,
             fragment: SpanFragmentKind::SingleSegment,
             child_item_ids: vec![nav_id],
             label: Some(label.to_string()),
             count: None,
-            start_anchor_id: Some(spec.measure_id.to_string()),
-            end_anchor_id: Some(spec.measure_id.to_string()),
+            start_anchor_id: Some(spec.measure_id.clone()),
+            end_anchor_id: Some(spec.measure_id.clone()),
         });
     }
-    if let Some(ref end_nav) = spec.measure.end_nav {
+    if let Some(ref end_nav) = spec.end_nav {
         let label = match end_nav {
-            NavJump::Fine => "@fine",
-            NavJump::DC => "@dc",
-            NavJump::DS => "@ds",
-            NavJump::DCalFine => "@dc-al-fine",
-            NavJump::DCalCoda => "@dc-al-coda",
-            NavJump::DSalFine => "@ds-al-fine",
-            NavJump::DSalCoda => "@ds-al-coda",
-            NavJump::ToCoda => "@to-coda",
+            NavJump::Fine => "Fine",
+            NavJump::DC => "D.C.",
+            NavJump::DS => "D.S.",
+            NavJump::DCalFine => "D.C. al Fine",
+            NavJump::DCalCoda => "D.C. al Coda",
+            NavJump::DSalFine => "D.S. al Fine",
+            NavJump::DSalCoda => "D.S. al Coda",
+            NavJump::ToCoda => "To Coda",
         };
-        let nav_id = sink.push_text_item(TextItemSpec {
-            measure_id: Some(spec.measure_id),
-            role: "nav-end",
-            x: spec.x + spec.width - 4.0,
-            y: spec.top - count_metric.descent_pt - 1.0,
-            text_role: TextRole::CountLabel,
-            text: label.to_string(),
-            font_family: count_metric.font_family,
-            font_size_pt: count_metric.font_size_pt,
-            fill: "#333",
-            text_anchor: Some("end"),
-            font_weight: Some("bold"),
-        });
+        let child_item_ids = match end_nav {
+            NavJump::ToCoda => {
+                let right_x = spec.x + spec.width - 4.0;
+                let glyph_font_size = 16.0;
+                let coda_width = rendered_glyph_width(GlyphRole::NavigationCoda, glyph_font_size);
+                let to_text_width = canonical_text_width(TextRole::CountLabel, "To");
+                let combined_x_start = right_x - coda_width - 4.0 - to_text_width;
+                let combined_x_end = right_x;
+                let default_glyph_y = spec.top - 8.0;
+                let default_text_y = spec.top - count_metric.descent_pt - 1.0;
+                let occupied_top = skyline_top_for_range(
+                    &sink.items,
+                    combined_x_start,
+                    combined_x_end,
+                    spec.top,
+                    default_glyph_y + NAV_GAP,
+                );
+                let coda_metric = canonical_glyph_metric(GlyphRole::NavigationCoda);
+                let default_glyph_bottom =
+                    default_glyph_y - coda_metric.bbox_sw_y_ss * (glyph_font_size / 4.0);
+                let default_text_bottom = default_text_y + count_metric.descent_pt;
+                let default_group_bottom = default_glyph_bottom.max(default_text_bottom);
+                let delta = occupied_top - NAV_GAP - default_group_bottom;
+                let glyph_y = default_glyph_y + delta;
+                let text_y = default_text_y + delta;
+                let glyph_id = sink.push_glyph_item(GlyphItemSpec {
+                    measure_id: Some(spec.measure_id.as_str()),
+                    role: "nav-end-symbol",
+                    x: right_x - coda_width,
+                    y: glyph_y,
+                    glyph_role: GlyphRole::NavigationCoda,
+                    font_family: "Bravura",
+                    font_size_pt: glyph_font_size,
+                    fill: "#333",
+                });
+                let text_id = sink.push_text_item(TextItemSpec {
+                    measure_id: Some(spec.measure_id.as_str()),
+                    role: "nav-end",
+                    x: right_x - coda_width - 4.0,
+                    y: text_y,
+                    text_role: TextRole::CountLabel,
+                    text: "To".to_string(),
+                    font_family: NAV_TEXT_FONT,
+                    font_size_pt: count_metric.font_size_pt,
+                    fill: "#333",
+                    text_anchor: Some("end"),
+                    font_weight: Some("bold"),
+                });
+                vec![text_id, glyph_id]
+            }
+            _ => {
+                let text_width = canonical_text_width(TextRole::CountLabel, label);
+                let x_start = spec.x + spec.width - 4.0 - text_width;
+                let x_end = spec.x + spec.width - 4.0;
+                let default_y = spec.top - count_metric.descent_pt - 1.0;
+                let occupied_top = skyline_top_for_range(
+                    &sink.items,
+                    x_start,
+                    x_end,
+                    spec.top,
+                    default_y + NAV_GAP,
+                );
+                let nav_y = occupied_top - NAV_GAP - count_metric.descent_pt;
+                let nav_id = sink.push_text_item(TextItemSpec {
+                    measure_id: Some(spec.measure_id.as_str()),
+                    role: "nav-end",
+                    x: spec.x + spec.width - 4.0,
+                    y: nav_y,
+                    text_role: TextRole::CountLabel,
+                    text: label.to_string(),
+                    font_family: NAV_TEXT_FONT,
+                    font_size_pt: count_metric.font_size_pt,
+                    fill: "#333",
+                    text_anchor: Some("end"),
+                    font_weight: Some("bold"),
+                });
+                vec![nav_id]
+            }
+        };
         composites.push(SceneComposite {
-            id: format!("navigation-end-{}", spec.measure.global_index),
+            id: format!("navigation-end-{}", spec.global_index),
             kind: CompositeKind::Navigation,
             fragment: SpanFragmentKind::SingleSegment,
-            child_item_ids: vec![nav_id],
+            child_item_ids,
             label: Some(label.to_string()),
             count: None,
-            start_anchor_id: Some(spec.measure_id.to_string()),
-            end_anchor_id: Some(spec.measure_id.to_string()),
+            start_anchor_id: Some(spec.measure_id.clone()),
+            end_anchor_id: Some(spec.measure_id.clone()),
         });
     }
 }
@@ -7099,12 +7454,21 @@ fn bounding_box_for_ids(
 
 fn item_bounds(item: &SceneItem) -> Option<(f32, f32, f32, f32)> {
     match &item.primitive {
-        ScenePrimitive::TextRun(text) => Some((
-            text.x_pt,
-            text.y_pt - canonical_text_metric(text.text_role).ascent_pt,
-            canonical_text_width(text.text_role, &text.text),
-            canonical_text_metric(text.text_role).line_height_pt,
-        )),
+        ScenePrimitive::TextRun(text) => {
+            let metric = canonical_text_metric(text.text_role);
+            let width = canonical_text_width(text.text_role, &text.text);
+            let x = match text.text_anchor.as_deref() {
+                Some("middle") => text.x_pt - width * 0.5,
+                Some("end") => text.x_pt - width,
+                _ => text.x_pt,
+            };
+            Some((
+                x,
+                text.y_pt - metric.ascent_pt,
+                width,
+                metric.line_height_pt,
+            ))
+        }
         ScenePrimitive::LineSegment(line) => Some((
             line.x1_pt.min(line.x2_pt),
             line.y1_pt.min(line.y2_pt),
@@ -9381,6 +9745,23 @@ fn test_adjacent_voltas_share_y_and_positive_offset_moves_up() {
     let default_ys = line_ys(&default_scene);
     assert_eq!(default_ys.len(), 2);
     assert!((default_ys[0] - default_ys[1]).abs() < 0.01);
+    let stem_top = default_scene.pages[0]
+        .items
+        .iter()
+        .filter(|item| item.role == "stem")
+        .filter_map(|item| match &item.primitive {
+            ScenePrimitive::LineSegment(line) => Some(line.y1_pt.min(line.y2_pt)),
+            _ => None,
+        })
+        .fold(f32::INFINITY, f32::min);
+    assert!(
+        default_ys[0] <= stem_top - VOLTA_SKYLINE_GAP_PT - VOLTA_LINE_THICKNESS_PT + 0.01,
+        "volta line should clear the note skyline"
+    );
+    assert!(
+        default_ys[0] > stem_top - (VOLTA_LINE_HEIGHT_PT + VOLTA_TEXT_SIZE_PT + 2.0),
+        "volta line should not reserve hook and text height above the skyline"
+    );
 
     let spaced_opts = LayoutOptions {
         volta_offset_y: 10.0,

@@ -162,8 +162,21 @@ describe("SVG Renderer parity", () => {
     const svg = await render(HEADER + "SD | @segno d - - - | d - - - @dc |\n");
     expect(countRole(svg, "nav-start")).toBe(1);
     expect(countRole(svg, "nav-end")).toBe(1);
-    expect(svg).toContain("@segno");
-    expect(svg).toContain("@dc");
+    expect(svg).toContain("\u{E047}");
+    expect(svg).toContain("D.C.");
+    expect(svg).not.toContain("@segno");
+    expect(svg).not.toContain("@dc");
+  });
+
+  it("renders coda navigation with SMuFL symbols", async () => {
+    const svg = await render(HEADER + "SD | @coda d - - - | d - - - @to-coda |\n");
+    expect(countRole(svg, "nav-start")).toBe(1);
+    expect(countRole(svg, "nav-end")).toBe(1);
+    expect(countRole(svg, "nav-end-symbol")).toBe(1);
+    expect(svg.match(/\u{E048}/gu)).toHaveLength(2);
+    expect(svg).toContain(">To</text>");
+    expect(svg).not.toContain("@coda");
+    expect(svg).not.toContain("@to-coda");
   });
 
   it("renders hairpins", async () => {
