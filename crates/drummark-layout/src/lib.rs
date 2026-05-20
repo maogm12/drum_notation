@@ -159,6 +159,7 @@ pub enum GlyphRole {
     RestThirtySecond,
     RepeatLeft,
     RepeatRight,
+    RepeatRightLeft,
     RepeatDot,
     ArticAccentAbove,
     ArticAccentBelow,
@@ -882,6 +883,9 @@ pub fn canonical_glyph_metric(role: GlyphRole) -> CanonicalGlyphMetric {
         GlyphRole::RepeatRight => {
             glyph_metric(role, 0xE041, [0.004, 0.0], [1.468, 4.0], None, None)
         }
+        GlyphRole::RepeatRightLeft => {
+            glyph_metric(role, 0xE042, [0.004, 0.0], [2.432, 4.0], None, None)
+        }
         GlyphRole::RepeatDot => glyph_metric(role, 0xE044, [0.0, -0.2], [0.4, 0.2], None, None),
         GlyphRole::ArticAccentAbove => {
             glyph_metric(role, 0xE4A0, [0.0, 0.004], [1.356, 0.98], None, None)
@@ -1119,6 +1123,7 @@ fn glyph_role_name(role: GlyphRole) -> &'static str {
         GlyphRole::RestThirtySecond => "restThirtySecond",
         GlyphRole::RepeatLeft => "repeatLeft",
         GlyphRole::RepeatRight => "repeatRight",
+        GlyphRole::RepeatRightLeft => "repeatRightLeft",
         GlyphRole::RepeatDot => "repeatDot",
         GlyphRole::ArticAccentAbove => "articAccentAbove",
         GlyphRole::ArticAccentBelow => "articAccentBelow",
@@ -3709,6 +3714,10 @@ fn is_start_repeat_barline(barline: Option<&str>) -> bool {
     matches!(barline, Some("repeat-start") | Some("repeat-both"))
 }
 
+fn is_end_repeat_barline(barline: Option<&str>) -> bool {
+    matches!(barline, Some("repeat-end") | Some("repeat-both"))
+}
+
 fn start_repeat_reserved_width() -> f32 {
     repeat_barline_rendered_width(GlyphRole::RepeatLeft) + START_REPEAT_TRAILING_GAP_PT
 }
@@ -4661,6 +4670,17 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
             measure_ids.push(measure_id.clone());
 
             let left_pad = measure_left_pad(mi, is_first_system, measure.barline.as_deref());
+            let left_repeat_is_shared_boundary = mi > 0
+                && is_start_repeat_barline(measure.barline.as_deref())
+                && system.measures.get(mi - 1).is_some_and(|previous| {
+                    is_end_repeat_barline(
+                        previous
+                            .closing_barline
+                            .as_deref()
+                            .or(previous.barline.as_deref()),
+                    )
+                });
+
             if mi == 0 {
                 render_system_opening_barline(&mut sink, Some(&measure_id), mx, s_top, s_bot);
                 if is_start_repeat_barline(measure.barline.as_deref()) {
@@ -4672,7 +4692,7 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
                         s_bot,
                     );
                 }
-            } else {
+            } else if !left_repeat_is_shared_boundary {
                 render_left_barline(
                     &mut sink,
                     Some(&measure_id),
@@ -4852,20 +4872,36 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
                 width: *mw,
                 top: s_top,
             });
-            render_right_barline(
-                &mut sink,
-                RightBarlineSpec {
-                    measure_id: Some(&measure_id),
-                    x: mx + *mw,
-                    top: s_top,
-                    bottom: s_bot,
-                    barline: measure
-                        .closing_barline
-                        .as_deref()
-                        .or(measure.barline.as_deref()),
-                    is_last_measure_of_score: mi + 1 == system.measures.len() && is_last,
-                },
-            );
+            let right_barline = measure
+                .closing_barline
+                .as_deref()
+                .or(measure.barline.as_deref());
+            let right_repeat_is_shared_boundary = is_end_repeat_barline(right_barline)
+                && system
+                    .measures
+                    .get(mi + 1)
+                    .is_some_and(|next| is_start_repeat_barline(next.barline.as_deref()));
+            if right_repeat_is_shared_boundary {
+                render_right_left_repeat_barline(
+                    &mut sink,
+                    Some(&measure_id),
+                    mx + *mw,
+                    s_top,
+                    s_bot,
+                );
+            } else {
+                render_right_barline(
+                    &mut sink,
+                    RightBarlineSpec {
+                        measure_id: Some(&measure_id),
+                        x: mx + *mw,
+                        top: s_top,
+                        bottom: s_bot,
+                        barline: right_barline,
+                        is_last_measure_of_score: mi + 1 == system.measures.len() && is_last,
+                    },
+                );
+            }
             mx += *mw;
         }
 
@@ -6778,6 +6814,25 @@ fn render_start_repeat_barline(
         x,
         y: start_repeat_vertical_origin(top, bottom),
         glyph_role: GlyphRole::RepeatLeft,
+        font_family: "Bravura",
+        font_size_pt: REPEAT_BARLINE_FONT_SIZE_PT,
+        fill: "#333",
+    });
+}
+
+fn render_right_left_repeat_barline(
+    sink: &mut SceneEmitSink<'_>,
+    measure_id: Option<&str>,
+    x: f32,
+    top: f32,
+    bottom: f32,
+) {
+    sink.push_glyph_item(GlyphItemSpec {
+        measure_id,
+        role: "repeat-end-start",
+        x: x - repeat_barline_rendered_width(GlyphRole::RepeatRight),
+        y: start_repeat_vertical_origin(top, bottom),
+        glyph_role: GlyphRole::RepeatRightLeft,
         font_family: "Bravura",
         font_size_pt: REPEAT_BARLINE_FONT_SIZE_PT,
         fill: "#333",
@@ -10155,6 +10210,91 @@ fn test_first_measure_repeat_start_sits_after_system_preamble() {
     assert!((repeat_top - opening_rect.y_pt).abs() < 0.01);
     assert!((repeat_bottom - (opening_rect.y_pt + opening_rect.height_pt - 1.0)).abs() < 0.01);
     assert!(note_x > repeat_glyph.x_pt + repeat_barline_rendered_width(GlyphRole::RepeatLeft));
+}
+
+#[test]
+fn test_adjacent_repeat_end_start_uses_smufl_right_left_glyph() {
+    fn repeat_measure(index: u32) -> RenderMeasure {
+        RenderMeasure {
+            index,
+            global_index: index,
+            paragraph_index: 0,
+            measure_in_paragraph: index,
+            source_line: 1,
+            events: vec![RenderEvent {
+                track: "HH".into(),
+                track_family: "cymbal".into(),
+                start: Fraction {
+                    numerator: 0,
+                    denominator: 1,
+                },
+                duration: Fraction {
+                    numerator: 1,
+                    denominator: 4,
+                },
+                kind: EventKind::Hit,
+                glyph: "x".into(),
+                modifiers: vec![],
+                modifier: None,
+                voice: 1,
+                beam: "none".into(),
+                tuplet: None,
+            }],
+            barline: Some("repeat-start".into()),
+            closing_barline: Some("repeat-end".into()),
+            start_nav: None,
+            end_nav: None,
+            volta_indices: None,
+            hairpins: vec![],
+            measure_repeat_slashes: None,
+            multi_rest_count: None,
+            note_value: 4,
+            volta_terminator: false,
+        }
+    }
+
+    let score = RenderScore {
+        version: RENDER_SCORE_VERSION.to_string(),
+        header: RenderHeader {
+            tempo: 120,
+            time_beats: 4,
+            time_beat_unit: 4,
+            divisions: 4,
+            note_value: 4,
+            grouping: vec![1, 1, 1, 1],
+            title: None,
+            subtitle: None,
+            composer: None,
+        },
+        tracks: vec![RenderTrack {
+            id: "HH".into(),
+            family: "cymbal".into(),
+        }],
+        measures: vec![repeat_measure(0), repeat_measure(1)],
+        errors: vec![],
+        repeat_spans: vec![],
+    };
+    let scene = build_layout_scene(&score, &LayoutOptions::default());
+    let page = &scene.pages[0];
+    let shared_repeat = page
+        .items
+        .iter()
+        .find(|item| item.role == "repeat-end-start")
+        .expect("expected shared repeat boundary glyph");
+    let ScenePrimitive::GlyphRun(shared_glyph) = &shared_repeat.primitive else {
+        panic!("shared repeat boundary should be a glyph");
+    };
+
+    assert_eq!(shared_glyph.glyph_role, GlyphRole::RepeatRightLeft);
+    assert_eq!(shared_glyph.font_size_pt, REPEAT_BARLINE_FONT_SIZE_PT);
+    assert_eq!(
+        page.items
+            .iter()
+            .filter(|item| item.role == "repeat-start")
+            .count(),
+        1,
+        "the second measure's left repeat should be represented by repeatRightLeft"
+    );
 }
 
 #[test]

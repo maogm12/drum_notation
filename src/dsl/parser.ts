@@ -951,12 +951,14 @@ function parseMeasureTail(remainder: string, line: PreprocessedLine, errors: Par
       voltaTerminator: currentLeftBoundary.voltaTerminator || endBoundary.voltaTerminator,
     });
 
+    const nextCursor = endIndex + endBoundary.length;
+    const compactRepeatEndStart = endBoundary.kind === "repeat_end" && remainder.startsWith(":", nextCursor);
     currentLeftBoundary = {
-      kind: endBoundary.kind === "repeat_start" ? "repeat_start" : "barline",
+      kind: endBoundary.kind === "repeat_start" || compactRepeatEndStart ? "repeat_start" : "barline",
       ...(endBoundary.voltaIndices ? { voltaIndices: endBoundary.voltaIndices } : {}),
       ...(endBoundary.voltaTerminator ? { voltaTerminator: true } : {}),
     };
-    cursor = endIndex + endBoundary.length;
+    cursor = nextCursor + (compactRepeatEndStart ? 1 : 0);
   }
 
   return measures;

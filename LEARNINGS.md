@@ -134,3 +134,10 @@ When an older note conflicts with this file, treat this file plus the active spe
 - First-system tempo text is measure-owned layout content, not header-owned content.
 - Header extraction for pagination should include only text-block children with no `measure_id`.
 - System boxes must preserve measure-owned `TextBlock` composites such as tempo, otherwise semantic scene consumers lose the grouped tempo marker.
+
+## 2026-05-20 Compact Repeat Boundary Parsing
+
+- In Rust/WASM parser input, the compact shared repeat boundary `:|:` is lexed as `RepeatEnd` plus a trailing `Colon`, not as `RepeatEnd` plus `RepeatStart`, because the second half has no `|` character left for the `|:` token.
+- The parser must interpret a standalone `Colon` as a repeat-start barline only when `parse_barline()` is already being asked for a measure boundary. Note suffix parsing such as `x:close` remains owned by `parse_suffix_chain()`.
+- The legacy TypeScript parser has no lexer token for `:|:` either; handle it after consuming a repeat-end boundary by seeding the next left boundary as `repeat_start` and advancing past the extra colon, instead of adding `:` to the general boundary regex where it would collide with note modifiers.
+- SMuFL provides a dedicated `repeatRightLeft` glyph at U+E042 for a right-and-left repeat sign. When rendering adjacent repeat-end/repeat-start boundaries, emit one semantic `repeat-end-start` glyph run with `GlyphRole::RepeatRightLeft` rather than separate `repeatRight` and next-measure `repeatLeft` glyphs.

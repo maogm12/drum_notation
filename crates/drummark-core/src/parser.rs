@@ -881,6 +881,14 @@ impl<'a> Parser<'a> {
     // ── Barline ───────────────────────────────────────────────────
 
     fn parse_barline(&mut self) -> Result<Barline, ParseError> {
+        // In a compact shared repeat boundary (`:|:`), the lexer emits `:|`
+        // as the previous measure's closing barline and leaves the trailing
+        // `:` as the next measure's left-repeat dots.
+        if self.peek() == Some(Token::Colon) {
+            self.next().ok();
+            return Ok(Barline::RepeatStart);
+        }
+
         if !matches!(self.peek(), Some(Token::Integer(_))) {
             if let Some(token) = self.peek() {
                 if !token.is_barline_like() {
@@ -1111,6 +1119,17 @@ mod tests {
             .expect("expected closing repeat-end location");
         assert_eq!(location.line, 4);
         assert_eq!(location.column, 28);
+    }
+
+    #[test]
+    fn test_compact_repeat_end_start_boundary() {
+        let doc = parse_ok("time 4/4\nnote 1/4\ngrouping 1+1+1+1\n|: ssss :|: ssss :|\n");
+        let measures = &doc.paragraphs[0].lines[0].measures;
+        assert_eq!(measures.len(), 2);
+        assert!(matches!(measures[0].barline, Barline::RepeatStart));
+        assert!(matches!(measures[0].closing_barline, Some(Barline::RepeatEnd)));
+        assert!(matches!(measures[1].barline, Barline::RepeatStart));
+        assert!(matches!(measures[1].closing_barline, Some(Barline::RepeatEnd)));
     }
 
     #[test]

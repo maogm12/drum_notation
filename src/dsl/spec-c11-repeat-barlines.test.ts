@@ -102,6 +102,25 @@ divisions 4
     expect(measure.tokens).toHaveLength(4);
   });
 
+  it("parses compact `:|:` as a shared repeat-end and repeat-start boundary", () => {
+    const doc = parseDocumentSkeleton(`time 4/4
+divisions 4
+
+|: ssss :|: ssss :|`);
+
+    expect(doc.errors).toEqual([]);
+    const measures = doc.paragraphs[0].lines[0].measures;
+    expect(measures).toHaveLength(2);
+    expect(measures[0]).toMatchObject({
+      repeatStart: true,
+      repeatEnd: true,
+    });
+    expect(measures[1]).toMatchObject({
+      repeatStart: true,
+      repeatEnd: true,
+    });
+  });
+
   it("treats `||` as a double barline with no empty measure between", () => {
     const score = buildNormalizedScore(`time 4/4
 divisions 4
@@ -222,6 +241,22 @@ divisions 4
       barline: "repeat-both",
       volta: undefined,
     });
+  });
+
+  it("parses compact :|: as repeat-end followed by repeat-start", () => {
+    const score = buildNormalizedScore(`time 4/4
+divisions 4
+
+|: ssss :|: ssss :|`);
+
+    expect(score.errors).toEqual([]);
+    expect(score.ast.repeatSpans).toEqual([
+      { startBar: 0, endBar: 0, times: 2 },
+      { startBar: 1, endBar: 1, times: 2 },
+    ]);
+    expect(score.measures).toHaveLength(2);
+    expect(score.measures[0]).toMatchObject({ barline: "repeat-both" });
+    expect(score.measures[1]).toMatchObject({ barline: "repeat-both" });
   });
 
   it("does not interfere with implicit repeat-end inference", () => {
