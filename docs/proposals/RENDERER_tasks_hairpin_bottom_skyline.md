@@ -157,3 +157,8 @@ All four issues addressed via Author Response + task file updates below. The tas
 #### STATUS: APPROVED
 
 Tasks file is ready for user stamp.
+### Supersession Note: 2026-05-20 VexFlow Removal
+
+This VexFlow-specific task stream is superseded by `ARCHITECTURE_proposal_remove_vexflow.md`.
+
+Hairpin skyline behavior is now owned by `drummark-layout` and verified through layout scene, SVG adapter, CLI, and corpus coverage rather than `src/vexflow/**`.

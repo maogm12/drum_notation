@@ -1,7 +1,8 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  noLegacyRendererImportRules,
   productionSplitWasmImportRules,
   scanImportBoundaries,
 } from "./check_import_boundaries.mjs";
@@ -34,6 +35,26 @@ describe("production split wasm import boundaries", () => {
       collectSourceFiles(join(ROOT, "src")),
       productionSplitWasmImportRules,
     );
+
+    expect(violations).toEqual([]);
+  });
+
+  it("keeps active routes off legacy renderer imports", () => {
+    const sourceFiles = [
+      ...collectSourceFiles(join(ROOT, "src")),
+      ...collectSourceFiles(join(ROOT, "scripts")),
+      {
+        path: "build-docs.ts",
+        source: readFileSync(join(ROOT, "build-docs.ts"), "utf8"),
+      },
+      ...["AGENTS.md", "LEARNINGS.md", "docs/RENDER_LAYOUT_CONTRACT.md"]
+        .filter((path) => existsSync(join(ROOT, path)))
+        .map((path) => ({
+          path,
+          source: readFileSync(join(ROOT, path), "utf8"),
+        })),
+    ];
+    const violations = scanImportBoundaries(sourceFiles, noLegacyRendererImportRules);
 
     expect(violations).toEqual([]);
   });

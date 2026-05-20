@@ -51,9 +51,6 @@ export const I18N_KEYS = [
   "settings.titleGap",
   "settings.voltaOffset",
   "settings.hairpinOffset",
-  "settings.useLayoutEngine",
-  "settings.rendererLayoutEngine",
-  "settings.rendererLegacyVexFlow",
   "settings.decrease",
   "settings.increase",
 ] as const;

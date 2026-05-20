@@ -123,3 +123,11 @@
   - `npm run drummark -- <example-input> --format svg` — correct SVG output
   - Manual smoke test: editor → type drummark → see preview → switch to Page view → zoom → export
 - **Dependencies**: Tasks 1-8
+
+### Terminal Supersession: VexFlow Chunk Expectation
+
+This terminal note is appended to retire stale build-output expectations without rewriting the original task ledger.
+
+Any acceptance criterion in this file that expects a `manualChunks` entry or emitted bundle chunk for `vexflow` is superseded by `docs/proposals/ARCHITECTURE_proposal_remove_vexflow.md` and `docs/proposals/ARCHITECTURE_tasks_remove_vexflow.md`.
+
+The active build expectation is the opposite: production bundles, network audits, package metadata, Vite config, and TypeScript aliases must not retain VexFlow as a dependency, chunk, or runtime fetch target.

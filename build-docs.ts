@@ -1,17 +1,33 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { buildNormalizedScore } from "./src/dsl/index";
-import { renderScoreToSvg } from "./src/vexflow/index";
 import { highlightDslStatic } from "./src/drummark";
 import { DEFAULT_RENDER_OPTIONS } from "./src/renderer/renderOptions";
-import { ensureCliRenderEnvironment } from "./src/cli_render_env";
 import { initParserWasmBrowserForTests } from "./src/wasm/parser_wasm_browser";
+import { renderSourcePagesToSvgsNode } from "./src/renderer/svgRendererNode";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-ensureCliRenderEnvironment({ installFileReader: true });
+const docsRenderOptions = {
+    staffScale: DEFAULT_RENDER_OPTIONS.staffScale,
+    pageWidth: DEFAULT_RENDER_OPTIONS.pageWidth,
+    pageHeight: DEFAULT_RENDER_OPTIONS.pageHeight,
+    showTitle: true,
+    topMargin: DEFAULT_RENDER_OPTIONS.pagePadding.top,
+    bottomMargin: DEFAULT_RENDER_OPTIONS.pagePadding.bottom,
+    leftMargin: DEFAULT_RENDER_OPTIONS.pagePadding.left,
+    rightMargin: DEFAULT_RENDER_OPTIONS.pagePadding.right,
+    stemLength: DEFAULT_RENDER_OPTIONS.stemLength,
+    systemSpacing: DEFAULT_RENDER_OPTIONS.systemSpacing,
+    headerHeight: DEFAULT_RENDER_OPTIONS.headerHeight,
+    headerStaffSpacing: DEFAULT_RENDER_OPTIONS.headerStaffSpacing,
+    voltaSpacing: DEFAULT_RENDER_OPTIONS.voltaSpacing,
+    hairpinOffsetY: DEFAULT_RENDER_OPTIONS.hairpinOffsetY,
+    hideVoice2Rests: DEFAULT_RENDER_OPTIONS.hideVoice2Rests,
+    durationSpacingCompression: DEFAULT_RENDER_OPTIONS.durationSpacingCompression,
+    measureWidthCompression: DEFAULT_RENDER_OPTIONS.measureWidthCompression,
+};
 
 async function buildDocs(templatePath: string, outputPath: string) {
     console.log(`Building ${outputPath} from ${templatePath}...`);
@@ -51,11 +67,10 @@ async function buildDocs(templatePath: string, outputPath: string) {
         // 2. Render Score
         let renderedSvg = "";
         try {
-            globalThis.document.body.innerHTML = '<div id="vd-container"></div>';
-            const score = buildNormalizedScore(dsl);
-            renderedSvg = await renderScoreToSvg(score, {
-                ...DEFAULT_RENDER_OPTIONS,
-            });
+            const pages = await renderSourcePagesToSvgsNode(dsl, docsRenderOptions);
+            renderedSvg = pages.map((svg, pageIndex) => (
+                `<section class="staff-preview-page" data-page="${pageIndex + 1}">${svg}</section>`
+            )).join("");
         } catch (e: any) {
             console.error(`     Error rendering ${id}:`, e.message);
             if (e.stack) console.error(`     ${e.stack.split('\n').slice(0,5).join('\n')}`);

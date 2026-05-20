@@ -109,16 +109,6 @@ export function SettingsPanel({
             <span className="settings-accordion-chevron" aria-hidden />
           </Accordion.Trigger>
           <Accordion.Content className="settings-content">
-            <label className="setting-row toggle">
-              <span>{settings.useLayoutEngine ? t("settings.rendererLayoutEngine") : t("settings.rendererLegacyVexFlow")}</span>
-              <Switch.Root
-                className="toggle-root"
-                checked={settings.useLayoutEngine}
-                onCheckedChange={(checked) => updateSetting("useLayoutEngine", checked)}
-              >
-                <Switch.Thumb className="toggle-thumb" />
-              </Switch.Root>
-            </label>
             <div className="settings-group-label">Coordinate Offsets</div>
             <NumericSettingControl
               label="Tempo X"

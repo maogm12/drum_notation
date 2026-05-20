@@ -1322,3 +1322,8 @@ The proposal remains technically approval-ready. v1.5 preserves the key constrai
 The remaining risk belongs in the tasks phase: the tasks file must split build generation, wrapper replacement, static checks, network audit, source-coherence tests, and parity fixtures into independently testable units with clear input/output contracts. That is not a proposal blocker.
 
 STATUS: APPROVED
+### Supersession Note: 2026-05-20 VexFlow Removal
+
+Historical review text in this proposal is preserved. The legacy VexFlow availability portions are superseded by `ARCHITECTURE_proposal_remove_vexflow.md`.
+
+The current architecture has no VexFlow product renderer or fallback path.

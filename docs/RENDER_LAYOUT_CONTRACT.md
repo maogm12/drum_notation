@@ -233,3 +233,25 @@ Verification must prove:
 - first legacy render fetches VexFlow
 - CLI SVG output uses the Node layout WASM package
 - parser/layout semantic parity holds for successful and failed source fixtures
+
+## Addendum 2026-05-20: Remove Legacy VexFlow Renderer
+
+This addendum supersedes the legacy-renderer availability rule in the split-WASM addendum above.
+
+The current rendering architecture is:
+
+`RenderScore -> LayoutScene -> thin platform adapter`
+
+VexFlow is no longer a supported product renderer, fallback path, dependency, or active test oracle. All score layout decisions belong to `drummark-layout` through the repository-owned `RenderScore -> LayoutScene` contract. Platform adapters may only translate resolved scene geometry into drawing commands, glyphs, paths, text, and accessibility/event metadata; they may not perform spacing, collision resolution, span reconstruction, or notation-specific layout fixes.
+
+### Removal Requirements
+
+- App preview rendering uses the layout-engine SVG adapter only.
+- CLI SVG rendering uses the Node layout WASM package.
+- Docs/example rendering uses the Node layout source API.
+- Saved legacy renderer preferences resolve to the layout route.
+- Active tests do not import VexFlow or compare against VexFlow output.
+- Corpus reports use layout-owned scene and SVG semantic summaries, not VexFlow oracle reports.
+- Build configuration, TypeScript aliases, package metadata, generated chunks, and import-boundary checks contain no active VexFlow route.
+
+Historical VexFlow divergence notes may remain archived as migration evidence. They are not active contracts.

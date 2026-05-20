@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractImports, scanImportBoundaries, splitWasmImportRules } from "./check_import_boundaries.mjs";
+import { extractImports, noLegacyRendererImportRules, scanImportBoundaries, splitWasmImportRules } from "./check_import_boundaries.mjs";
 
 describe("import boundary scanner harness", () => {
   it("extracts static re-export and dynamic import specifiers", () => {
@@ -74,5 +74,51 @@ describe("import boundary scanner harness", () => {
     ], splitWasmImportRules);
 
     expect(violations).toEqual([]);
+  });
+
+  it("flags active static and dynamic imports of the legacy renderer", () => {
+    const legacyPackage = ["vex", "flow"].join("");
+    const legacyRelative = ["vex", "flow"].join("");
+    const legacyRendererPath = ["src", legacyPackage, "index"].join("/");
+    const violations = scanImportBoundaries([
+      {
+        path: "src/App.tsx",
+        source: `const renderer = await import("./${legacyRelative}");`,
+      },
+      {
+        path: "build-docs.ts",
+        source: `import { renderScoreToSvg } from "./${legacyRendererPath}";`,
+      },
+      {
+        path: "src/renderer/current.test.ts",
+        source: `import LegacyRenderer from "${legacyPackage}/bravura";`,
+      },
+    ], noLegacyRendererImportRules);
+
+    expect(violations).toEqual([
+      expect.objectContaining({ file: "src/App.tsx", import: `./${legacyRelative}` }),
+      expect.objectContaining({ file: "build-docs.ts", import: `./${legacyRendererPath}` }),
+      expect.objectContaining({ file: "src/renderer/current.test.ts", import: `${legacyPackage}/bravura` }),
+    ]);
+  });
+
+  it("does not exempt deleted legacy renderer files or parity tests", () => {
+    const legacyPackage = ["vex", "flow"].join("");
+    const legacyParityPath = ["..", legacyPackage, "renderer"].join("/");
+    const violations = scanImportBoundaries([
+      {
+        path: `src/${legacyPackage}/renderer.ts`,
+        source: `import LegacyRenderer from "${legacyPackage}/bravura";`,
+      },
+      {
+        path: `src/renderer/${legacyPackage}Parity.test.ts`,
+        source: `import { renderScoreToSvg } from "${legacyParityPath}";`,
+      },
+    ], noLegacyRendererImportRules);
+
+    expect(violations).toEqual([
+      expect.objectContaining({ file: `src/${legacyPackage}/renderer.ts`, import: `${legacyPackage}/bravura` }),
+      expect.objectContaining({ file: `src/renderer/${legacyPackage}Parity.test.ts`, import: legacyParityPath }),
+    ]);
   });
 });

@@ -2,7 +2,7 @@ import {
   buildLayoutSceneWithNodeWasm,
   initLayoutWasmNode,
 } from "../wasm/layout_wasm_node";
-import { renderSceneToSvg } from "./svgRenderer";
+import { renderScenePagesToSvgs, renderSceneToSvg } from "./svgRenderer";
 import { SETTINGS_RANGES } from "./renderOptions";
 
 type RenderOptions = {
@@ -69,4 +69,8 @@ export async function buildLayoutSceneFromSourceNode(
 
 export async function renderSourceToSvgNode(source: string, options?: RenderOptions): Promise<string> {
   return renderSceneToSvg(await buildLayoutSceneFromSourceNode(source, options), options);
+}
+
+export async function renderSourcePagesToSvgsNode(source: string, options?: RenderOptions): Promise<string[]> {
+  return renderScenePagesToSvgs(await buildLayoutSceneFromSourceNode(source, options), options);
 }

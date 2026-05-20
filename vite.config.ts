@@ -35,11 +35,6 @@ export default defineConfig({
         docs: resolve(__dirname, "docs.html"),
         docs_zh: resolve(__dirname, "docs_zh.html"),
       },
-      output: {
-        manualChunks: {
-          vexflow: ["vexflow/bravura"],
-        },
-      },
     },
   },
 });

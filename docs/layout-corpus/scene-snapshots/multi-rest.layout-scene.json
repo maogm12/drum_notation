@@ -12,7 +12,7 @@
           "index": 0,
           "pageIndex": 0,
           "xPt": 53.33333206176758,
-          "yPt": 200,
+          "yPt": 234,
           "widthPt": 709.3333740234375,
           "heightPt": 50,
           "measureIds": [
@@ -27,7 +27,7 @@
           "globalIndex": 0,
           "systemId": "system-0",
           "xPt": 53.33333206176758,
-          "yPt": 200,
+          "yPt": 234,
           "widthPt": 709.3333740234375,
           "heightPt": 50
         }
@@ -51,128 +51,83 @@
           }
         },
         {
-          "id": "item-1",
-          "role": "tempo-glyph",
-          "kind": "textRun",
-          "zIndex": 0,
-          "primitive": {
-            "xPt": 62.33333206176758,
-            "yPt": 190,
-            "textRole": "tempo",
-            "text": "",
-            "fontFamily": "Bravura",
-            "fontSizePt": 25,
-            "fill": "#333"
-          }
-        },
-        {
-          "id": "item-2",
-          "role": "tempo-equals",
-          "kind": "textRun",
-          "zIndex": 0,
-          "primitive": {
-            "xPt": 78.63333129882812,
-            "yPt": 190,
-            "textRole": "tempo",
-            "text": "=",
-            "fontFamily": "Academico",
-            "fontSizePt": 14,
-            "fill": "#333"
-          }
-        },
-        {
-          "id": "item-3",
-          "role": "tempo",
-          "kind": "textRun",
-          "zIndex": 0,
-          "primitive": {
-            "xPt": 91.63333129882812,
-            "yPt": 190,
-            "textRole": "tempo",
-            "text": "120",
-            "fontFamily": "Academico",
-            "fontSizePt": 14,
-            "fill": "#333"
-          }
-        },
-        {
-          "id": "item-4",
+          "id": "system-0-item-1",
           "role": "staff-line",
           "kind": "lineSegment",
           "zIndex": 0,
           "primitive": {
             "x1Pt": 53.33333206176758,
-            "y1Pt": 210,
+            "y1Pt": 244,
             "x2Pt": 762.6666870117188,
-            "y2Pt": 210,
+            "y2Pt": 244,
             "stroke": "#333",
             "strokeWidth": 1
           }
         },
         {
-          "id": "item-5",
+          "id": "system-0-item-2",
           "role": "staff-line",
           "kind": "lineSegment",
           "zIndex": 0,
           "primitive": {
             "x1Pt": 53.33333206176758,
-            "y1Pt": 220,
+            "y1Pt": 254,
             "x2Pt": 762.6666870117188,
-            "y2Pt": 220,
+            "y2Pt": 254,
             "stroke": "#333",
             "strokeWidth": 1
           }
         },
         {
-          "id": "item-6",
+          "id": "system-0-item-3",
           "role": "staff-line",
           "kind": "lineSegment",
           "zIndex": 0,
           "primitive": {
             "x1Pt": 53.33333206176758,
-            "y1Pt": 230,
+            "y1Pt": 264,
             "x2Pt": 762.6666870117188,
-            "y2Pt": 230,
+            "y2Pt": 264,
             "stroke": "#333",
             "strokeWidth": 1
           }
         },
         {
-          "id": "item-7",
+          "id": "system-0-item-4",
           "role": "staff-line",
           "kind": "lineSegment",
           "zIndex": 0,
           "primitive": {
             "x1Pt": 53.33333206176758,
-            "y1Pt": 240,
+            "y1Pt": 274,
             "x2Pt": 762.6666870117188,
-            "y2Pt": 240,
+            "y2Pt": 274,
             "stroke": "#333",
             "strokeWidth": 1
           }
         },
         {
-          "id": "item-8",
+          "id": "system-0-item-5",
           "role": "staff-line",
           "kind": "lineSegment",
           "zIndex": 0,
           "primitive": {
             "x1Pt": 53.33333206176758,
-            "y1Pt": 250,
+            "y1Pt": 284,
             "x2Pt": 762.6666870117188,
-            "y2Pt": 250,
+            "y2Pt": 284,
             "stroke": "#333",
             "strokeWidth": 1
           }
         },
         {
-          "id": "item-9",
+          "id": "system-0-item-6",
           "role": "percussion-clef",
           "kind": "textRun",
           "zIndex": 0,
           "primitive": {
             "xPt": 58.33333206176758,
-            "yPt": 230,
+            "yPt": 264,
             "textRole": "percussionClef",
             "text": "",
             "fontFamily": "Bravura",
@@ -181,13 +136,13 @@
           }
         },
         {
-          "id": "item-10",
+          "id": "system-0-item-7",
           "role": "time-signature-digit",
           "kind": "textRun",
           "zIndex": 0,
           "primitive": {
             "xPt": 88.33332824707031,
-            "yPt": 220,
+            "yPt": 254,
             "textRole": "timeSignatureDigit",
             "text": "",
             "fontFamily": "Bravura",
@@ -196,13 +151,13 @@
           }
         },
         {
-          "id": "item-11",
+          "id": "system-0-item-8",
           "role": "time-signature-digit",
           "kind": "textRun",
           "zIndex": 0,
           "primitive": {
             "xPt": 88.33332824707031,
-            "yPt": 240,
+            "yPt": 274,
             "textRole": "timeSignatureDigit",
             "text": "",
             "fontFamily": "Bravura",
@@ -211,76 +166,124 @@
           }
         },
         {
-          "id": "item-12",
+          "id": "system-0-item-9",
+          "measureId": "measure-0",
+          "role": "tempo-glyph",
+          "kind": "textRun",
+          "zIndex": 0,
+          "primitive": {
+            "xPt": 62.33333206176758,
+            "yPt": 224,
+            "textRole": "tempo",
+            "text": "",
+            "fontFamily": "Bravura",
+            "fontSizePt": 25,
+            "fill": "#333"
+          }
+        },
+        {
+          "id": "system-0-item-10",
+          "measureId": "measure-0",
+          "role": "tempo-equals",
+          "kind": "textRun",
+          "zIndex": 0,
+          "primitive": {
+            "xPt": 78.63333129882812,
+            "yPt": 224,
+            "textRole": "tempo",
+            "text": "=",
+            "fontFamily": "Academico",
+            "fontSizePt": 14,
+            "fill": "#333"
+          }
+        },
+        {
+          "id": "system-0-item-11",
+          "measureId": "measure-0",
+          "role": "tempo",
+          "kind": "textRun",
+          "zIndex": 0,
+          "primitive": {
+            "xPt": 91.63333129882812,
+            "yPt": 224,
+            "textRole": "tempo",
+            "text": "120",
+            "fontFamily": "Academico",
+            "fontSizePt": 14,
+            "fill": "#333"
+          }
+        },
+        {
+          "id": "system-0-item-12",
           "measureId": "measure-0",
           "role": "opening-barline",
           "kind": "rect",
           "zIndex": 0,
           "primitive": {
             "xPt": 53.33333206176758,
-            "yPt": 210,
+            "yPt": 244,
             "widthPt": 1,
             "heightPt": 41,
             "fill": "#333"
           }
         },
         {
-          "id": "item-13",
+          "id": "system-0-item-13",
           "measureId": "measure-0",
           "role": "multi-rest-bar",
           "kind": "lineSegment",
           "zIndex": 0,
           "primitive": {
             "x1Pt": 124.26667785644531,
-            "y1Pt": 230,
+            "y1Pt": 264,
             "x2Pt": 691.7333374023438,
-            "y2Pt": 230,
+            "y2Pt": 264,
             "stroke": "#333",
             "strokeWidth": 5,
             "strokeLineCap": "butt"
           }
         },
         {
-          "id": "item-14",
+          "id": "system-0-item-14",
           "measureId": "measure-0",
           "role": "multi-rest-serif",
           "kind": "lineSegment",
           "zIndex": 0,
           "primitive": {
             "x1Pt": 124.26667785644531,
-            "y1Pt": 220,
+            "y1Pt": 254,
             "x2Pt": 124.26667785644531,
-            "y2Pt": 240,
+            "y2Pt": 274,
             "stroke": "#333",
             "strokeWidth": 2,
             "strokeLineCap": "butt"
           }
         },
         {
-          "id": "item-15",
+          "id": "system-0-item-15",
           "measureId": "measure-0",
           "role": "multi-rest-serif",
           "kind": "lineSegment",
           "zIndex": 0,
           "primitive": {
             "x1Pt": 691.7333374023438,
-            "y1Pt": 220,
+            "y1Pt": 254,
             "x2Pt": 691.7333374023438,
-            "y2Pt": 240,
+            "y2Pt": 274,
             "stroke": "#333",
             "strokeWidth": 2,
             "strokeLineCap": "butt"
           }
         },
         {
-          "id": "item-16",
+          "id": "system-0-item-16",
           "measureId": "measure-0",
           "role": "multi-rest-count",
           "kind": "textRun",
           "zIndex": 0,
           "primitive": {
             "xPt": 408.0000305175781,
-            "yPt": 190,
+            "yPt": 224,
             "textRole": "timeSignatureDigit",
             "text": "",
             "fontFamily": "Bravura",
@@ -290,28 +293,28 @@
           }
         },
         {
-          "id": "item-17",
+          "id": "system-0-item-17",
           "measureId": "measure-0",
           "role": "final-barline-thin",
           "kind": "rect",
           "zIndex": 0,
           "primitive": {
             "xPt": 758.6666870117188,
-            "yPt": 210,
+            "yPt": 244,
             "widthPt": 1,
             "heightPt": 41,
             "fill": "#333"
           }
         },
         {
-          "id": "item-18",
+          "id": "system-0-item-18",
           "measureId": "measure-0",
           "role": "final-barline-thick",
           "kind": "rect",
           "zIndex": 0,
           "primitive": {
             "xPt": 759.6666870117188,
-            "yPt": 210,
+            "yPt": 244,
             "widthPt": 3,
             "heightPt": 41,
             "fill": "#333"
@@ -329,26 +332,26 @@
           "label": "title"
         },
         {
-          "id": "text-block-tempo",
+          "id": "system-0-text-block-tempo",
           "kind": "textBlock",
           "fragment": "singleSegment",
           "childItemIds": [
-            "item-1",
-            "item-2",
-            "item-3"
+            "system-0-item-9",
+            "system-0-item-10",
+            "system-0-item-11"
           ],
           "label": "tempo",
           "count": 120
         },
         {
-          "id": "multi-rest-0",
+          "id": "system-0-multi-rest-0",
           "kind": "multiRest",
           "fragment": "singleSegment",
           "childItemIds": [
-            "item-13",
-            "item-14",
-            "item-15",
-            "item-16"
+            "system-0-item-13",
+            "system-0-item-14",
+            "system-0-item-15",
+            "system-0-item-16"
           ],
           "count": 16,
           "startAnchorId": "measure-0",

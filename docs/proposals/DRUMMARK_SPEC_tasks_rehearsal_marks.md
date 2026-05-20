@@ -110,3 +110,8 @@
 - **Acceptance Criteria**:
   - DRUMMARK_SPEC.md contains the final approved rehearsal mark spec: `[label]` syntax, `NormalizedMeasure.rehearsalMark` field, per-measure rendering, and MusicXML.
 - **Dependencies**: Task 4 (core feature working)
+### Supersession Note: 2026-05-20 VexFlow Removal
+
+Any uncompleted task in this file that targets `src/vexflow/**` or VexFlow-specific rendering is superseded by `ARCHITECTURE_proposal_remove_vexflow.md`.
+
+Rehearsal-mark rendering implementation, if resumed, must target the current `RenderScore -> LayoutScene -> thin adapter` architecture rather than VexFlow.

@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type UIEvent } from "preact/compat";
 import { buildNormalizedScore, type ParseError } from "./dsl";
 import { type NormalizedScore } from "./dsl";
-import type { ScoreRenderOptions, PagePadding } from "./renderer/renderOptions";
+import type { PagePadding } from "./renderer/renderOptions";
 import { resolveDocumentTheme, subscribeToThemeChanges, type AppTheme } from "./theme";
 import { useAppSettings } from "./hooks/useAppSettings";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -386,7 +386,6 @@ const PagePreview = memo(function PagePreview({
   measureWidthCompression,
   active,
   theme,
-  useLayoutEngine,
   source,
   sourceRevision,
   onRenderInput,
@@ -413,7 +412,6 @@ const PagePreview = memo(function PagePreview({
   measureWidthCompression: number;
   active: boolean;
   theme: AppTheme;
-  useLayoutEngine: boolean;
 }) {
   const { t } = useT();
   const shellRef = useRef<HTMLDivElement | null>(null);
@@ -437,68 +435,27 @@ const PagePreview = memo(function PagePreview({
     const targetLeft = scrollPosRef.current.left;
     setIsRendering(true);
 
-    const opts: ScoreRenderOptions = {
-      pagePadding,
-      staffScale,
-      pageWidth: pdfPageWidth,
-      pageHeight: pdfPageHeight,
-      headerHeight,
-      headerStaffSpacing,
-      systemSpacing,
-      stemLength,
-      voltaSpacing,
-      hairpinOffsetY,
-      hideVoice2Rests,
-      tempoOffsetX,
-      tempoOffsetY,
-      measureNumberOffsetX,
-      measureNumberOffsetY,
-      measureNumberFontSize,
-      durationSpacingCompression,
-      measureWidthCompression,
-    };
-
-    if (useLayoutEngine) {
-      import("./renderer/svgRenderer")
-        .then(({ renderScorePagesToSvgs }) => {
-          return renderScorePagesToSvgs(
-            score,
-            { staffScale, pageWidth: pdfPageWidth, pageHeight: pdfPageHeight, showTitle: true, topMargin: pagePadding.top, bottomMargin: pagePadding.bottom, leftMargin: pagePadding.left, rightMargin: pagePadding.right, stemLength, systemSpacing, headerHeight, headerStaffSpacing, voltaSpacing, hairpinOffsetY, hideVoice2Rests, durationSpacingCompression, measureWidthCompression },
-            { source, sourceRevision },
-          );
-        })
-        .then((pages) => {
-          const markup = pages.map((svg, i) => `<section class="staff-preview-page" data-page="${i+1}">${svg}</section>`).join("");
-          setRenderedMarkup(markup);
-          setIsRendering(false);
-          if (shellRef.current) { shellRef.current.scrollTop = targetTop; shellRef.current.scrollLeft = targetLeft; }
-          setError(null);
-        })
-        .catch((e) => { setIsRendering(false); setError(String(e)); });
-      return;
-    }
-
-    import("./vexflow")
-      .then(({ renderScorePagesToSvgs }) => renderScorePagesToSvgs(score, opts))
+    import("./renderer/svgRenderer")
+      .then(({ renderScorePagesToSvgs }) => {
+        return renderScorePagesToSvgs(
+          score,
+          { staffScale, pageWidth: pdfPageWidth, pageHeight: pdfPageHeight, showTitle: true, topMargin: pagePadding.top, bottomMargin: pagePadding.bottom, leftMargin: pagePadding.left, rightMargin: pagePadding.right, stemLength, systemSpacing, headerHeight, headerStaffSpacing, voltaSpacing, hairpinOffsetY, hideVoice2Rests, durationSpacingCompression, measureWidthCompression },
+          { source, sourceRevision },
+        );
+      })
       .then((pages) => {
         const markup = pages.map((svg, i) => `<section class="staff-preview-page" data-page="${i+1}">${svg}</section>`).join("");
         setRenderedMarkup(markup);
         setIsRendering(false);
-
-        if (shellRef.current) {
-          shellRef.current.scrollTop = targetTop;
-          shellRef.current.scrollLeft = targetLeft;
-        }
-
+        if (shellRef.current) { shellRef.current.scrollTop = targetTop; shellRef.current.scrollLeft = targetLeft; }
         setError(null);
       })
-      .catch((renderError) => {
+      .catch((e) => {
         setIsRendering(false);
-        const msg = renderError instanceof Error ? renderError.message : String(renderError);
-        console.error("VexFlow render error:", renderError);
+        const msg = e instanceof Error ? e.message : String(e);
         setError(msg || t("preview.error"));
       });
-  }, [score, source, sourceRevision, systemSpacing, stemLength, voltaSpacing, hairpinOffsetY, headerStaffSpacing, headerHeight, active, hideVoice2Rests, pagePadding, staffScale, tempoOffsetX, tempoOffsetY, measureNumberOffsetX, measureNumberOffsetY, measureNumberFontSize, durationSpacingCompression, measureWidthCompression, useLayoutEngine, onRenderInput]);
+  }, [score, source, sourceRevision, systemSpacing, stemLength, voltaSpacing, hairpinOffsetY, headerStaffSpacing, headerHeight, active, hideVoice2Rests, pagePadding, staffScale, tempoOffsetX, tempoOffsetY, measureNumberOffsetX, measureNumberOffsetY, measureNumberFontSize, durationSpacingCompression, measureWidthCompression, onRenderInput]);
 
   if (!score) {
     return (
@@ -1272,7 +1229,6 @@ export function App() {
                       measureWidthCompression={settings.measureWidthCompression}
                        active={!suspendPreview}
                        theme={resolvedTheme}
-                       useLayoutEngine={settings.useLayoutEngine}
                       />
                   ) : null}
                 </div>

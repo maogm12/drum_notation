@@ -22,7 +22,6 @@
     "noPropertyAccessFromIndexSignature": true,
     "baseUrl": ".",
     "paths": {
-      "vexflow": ["node_modules/vexflow/build/types/entry/vexflow.d.ts"],
       "react": ["./node_modules/preact/compat/src/index.d.ts"],
       "react-dom": ["./node_modules/preact/compat/src/index.d.ts"]
     },

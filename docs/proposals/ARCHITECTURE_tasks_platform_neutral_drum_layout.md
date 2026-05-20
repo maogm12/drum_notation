@@ -259,6 +259,14 @@ The binding rule is:
 
 Any remaining weaker wording elsewhere in this file is superseded by this rule and must not be used during implementation review or cutover approval.
 
+### Terminal Supersession: VexFlow Cutover Tasks
+
+This terminal note is appended to preserve the ledger while retiring stale task wording.
+
+Any pending or incomplete task text in this file that says to cut over rendering through VexFlow, compare against VexFlow, remove VexFlow as part of this older platform-neutral layout task list, or use VexFlow parity as a final gate is superseded by `docs/proposals/ARCHITECTURE_proposal_remove_vexflow.md` and `docs/proposals/ARCHITECTURE_tasks_remove_vexflow.md`.
+
+The active acceptance surface for renderer cutover is layout-owned scene output, SVG adapter semantic assertions, corpus reports, import-boundary checks, bundle/network checks, and CLI SVG generation. VexFlow-specific pending rows in this historical task file are no longer active implementation work.
+
 ### Review Round 5
 
 The new tail response closes the outstanding Round 4 task-planning objections.

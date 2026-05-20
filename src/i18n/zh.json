@@ -51,9 +51,6 @@
   "settings.titleGap": "标题间距",
   "settings.voltaOffset": "房子偏移",
   "settings.hairpinOffset": "强弱记号偏移",
-  "settings.useLayoutEngine": "排版引擎",
-  "settings.rendererLayoutEngine": "排版引擎",
-  "settings.rendererLegacyVexFlow": "Legacy VexFlow",
   "settings.decrease": "减小 {{label}}",
   "settings.increase": "增大 {{label}}"
 }

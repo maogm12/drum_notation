@@ -110,9 +110,9 @@ After consolidation is complete, implementation proceeds task-by-task:
 
 ## Rendering Rules
 
-- **Total Delegation:** All score rendering (staves, notes, headers, titles, tempo) must be handled exclusively by VexFlow.
-- **No Manual Simulation:** Do not add custom HTML, CSS, or Canvas/SVG drawing code to simulate or "patch" missing score elements that should be part of the VexFlow output.
-- **Graceful Failure:** If VexFlow cannot render a specific input, fall back only to empty preview states or clear error messages instead of trying to manually draw placeholders.
+- **Total Delegation:** All score layout decisions (staves, notes, headers, titles, tempo, spacing, collisions, and spans) must be handled through the `RenderScore -> LayoutScene` contract owned by `drummark-layout`.
+- **Thin Adapter Only:** Platform adapters may translate resolved scene geometry into drawing commands, glyphs, paths, text, and accessibility/event metadata. Do not add adapter-side engraving logic to simulate or "patch" missing score elements.
+- **Graceful Failure:** If the layout engine or adapter cannot render a specific input, fall back only to empty preview states or clear error messages instead of trying to manually draw placeholders.
 
 ## Debugging Tools
 
@@ -135,7 +135,7 @@ After consolidation is complete, implementation proceeds task-by-task:
 - **Use concrete direction words, not coordinate axes.** `X` and `Y` are implementation detail. Prefer "Horizontal" / "Vertical" or "Left/Right" / "Up/Down" for user-facing labels. (Debug-only labels are exempt.)
 - **Avoid orphan prepositions.** A label like "Volta Distance" leaves the user asking "distance from what?". Add the missing object ("Volta Offset") or rephrase entirely.
 - **Shorten verb phrases to nouns where context is clear.** "Distance from Title Area to Staff" is verbose; "Title Gap" says the same thing in half the characters. In a 280px sidebar, label length is a layout constraint, not just a style preference.
-- **Use the user's musical vocabulary, not the renderer's.** "Lower-voice rests" is implementation terminology (VexFlow voice 1/2). The user understands "secondary voice rests."
+- **Use the user's musical vocabulary, not the renderer's.** "Lower-voice rests" is implementation terminology. The user understands "secondary voice rests."
 - **Group labels should name the domain, not the section.** A debug subsection called "Coordinate Offsets" is cold and redundant (the parent already says "Debug"). Use domain terms the user recognizes, or omit the subgroup label entirely.
 
 ## UI Design (Settings Panel)

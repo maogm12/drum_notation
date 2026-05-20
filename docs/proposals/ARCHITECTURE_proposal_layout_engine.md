@@ -1304,3 +1304,11 @@ The three proposal-body documentation gaps (priority table, scope table, LayoutP
 **STATUS: APPROVED**
 
 No blocking issues found. The glyph selection mapping AC (Round 6's sole blocking issue) is confirmed present. The three non-blocking documentation fixes are correctly reflected in the tasks file. Two type-definition assignment gaps (Issues 7-1, 7-2) should be noted during the Consolidated Changes step but do not prevent implementation from proceeding.
+
+### Terminal Supersession: VexFlow Removal
+
+This terminal note is appended after approval to keep the historical proposal ledger intact while preventing stale VexFlow work from remaining active.
+
+Any unchecked or incomplete instruction in this file that requires VexFlow integration, VexFlow SVG parity, VexFlow dependency removal, or VexFlow as a comparison oracle is superseded by `docs/proposals/ARCHITECTURE_proposal_remove_vexflow.md` and `docs/proposals/ARCHITECTURE_tasks_remove_vexflow.md`.
+
+The active renderer architecture is now `RenderScore -> LayoutScene -> thin platform adapter`. Future implementation and review must not use VexFlow parity tests, VexFlow runtime imports, or VexFlow dependency cleanup tasks from this historical proposal as active acceptance criteria.

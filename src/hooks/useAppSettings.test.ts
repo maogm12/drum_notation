@@ -2,26 +2,23 @@ import { describe, expect, it } from "vitest";
 import { resolveAppSettings } from "./useAppSettings";
 
 describe("resolveAppSettings", () => {
-  it("defaults new users to the layout engine", () => {
-    expect(resolveAppSettings(null).useLayoutEngine).toBe(true);
+  it("does not expose a renderer selector for new users", () => {
+    expect(resolveAppSettings(null)).not.toHaveProperty("useLayoutEngine");
   });
 
-  it("defaults old saved settings without renderer preference to the layout engine", () => {
+  it("preserves old saved settings without renderer preference", () => {
     const settings = resolveAppSettings(JSON.stringify({ staffScale: 0.9 }));
 
     expect(settings.staffScale).toBe(0.9);
-    expect(settings.useLayoutEngine).toBe(true);
+    expect(settings).not.toHaveProperty("useLayoutEngine");
   });
 
-  it("preserves an explicit legacy renderer preference", () => {
-    expect(resolveAppSettings(JSON.stringify({ useLayoutEngine: false })).useLayoutEngine).toBe(false);
-  });
-
-  it("preserves an explicit layout renderer preference", () => {
-    expect(resolveAppSettings(JSON.stringify({ useLayoutEngine: true })).useLayoutEngine).toBe(true);
+  it("drops saved legacy renderer preferences", () => {
+    expect(resolveAppSettings(JSON.stringify({ useLayoutEngine: false }))).not.toHaveProperty("useLayoutEngine");
+    expect(resolveAppSettings(JSON.stringify({ useLayoutEngine: true }))).not.toHaveProperty("useLayoutEngine");
   });
 
   it("falls back to layout engine defaults for corrupt settings", () => {
-    expect(resolveAppSettings("{").useLayoutEngine).toBe(true);
+    expect(resolveAppSettings("{")).not.toHaveProperty("useLayoutEngine");
   });
 });

@@ -6,7 +6,6 @@ export type MainTab = "editor" | "page" | "xml";
 
 export interface AppSettings {
   hideVoice2Rests: boolean;
-  useLayoutEngine: boolean;
   pagePadding: PagePadding;
   staffScale: number;
   headerStaffSpacing: number;
@@ -27,7 +26,6 @@ export interface AppSettings {
 
 export const defaultSettings: AppSettings = {
   hideVoice2Rests: false,
-  useLayoutEngine: true,
   pagePadding: { top: 30, right: 50, bottom: 30, left: 50 },
   staffScale: 0.75,
   headerStaffSpacing: 60,
@@ -46,39 +44,32 @@ export const defaultSettings: AppSettings = {
   measureWidthCompression: 0.75,
 };
 
-function hasOwn(object: object, key: PropertyKey): boolean {
-  return Object.prototype.hasOwnProperty.call(object, key);
-}
-
 export function resolveAppSettings(saved: string | null): AppSettings {
   if (!saved) return defaultSettings;
   try {
-    const parsed = JSON.parse(saved) as Partial<AppSettings>;
-    const hasExplicitRenderer = hasOwn(parsed, "useLayoutEngine");
+    const parsed = JSON.parse(saved) as Partial<AppSettings> & { useLayoutEngine?: unknown };
+    const { useLayoutEngine: _legacyRenderer, ...rendererNeutralSettings } = parsed;
+    void _legacyRenderer;
     const r = SETTINGS_RANGES;
-    if (parsed.stemLength === undefined || parsed.stemLength < r.stemLength.min || parsed.stemLength > r.stemLength.max) {
-      parsed.stemLength = r.stemLength.default;
+    if (rendererNeutralSettings.stemLength === undefined || rendererNeutralSettings.stemLength < r.stemLength.min || rendererNeutralSettings.stemLength > r.stemLength.max) {
+      rendererNeutralSettings.stemLength = r.stemLength.default;
     }
-    if (parsed.voltaSpacing === undefined || parsed.voltaSpacing < r.voltaSpacing.min || parsed.voltaSpacing > r.voltaSpacing.max) {
-      parsed.voltaSpacing = r.voltaSpacing.default;
+    if (rendererNeutralSettings.voltaSpacing === undefined || rendererNeutralSettings.voltaSpacing < r.voltaSpacing.min || rendererNeutralSettings.voltaSpacing > r.voltaSpacing.max) {
+      rendererNeutralSettings.voltaSpacing = r.voltaSpacing.default;
     }
-    if (parsed.hairpinOffsetY === undefined || parsed.hairpinOffsetY < r.hairpinOffsetY.min || parsed.hairpinOffsetY > r.hairpinOffsetY.max) {
-      parsed.hairpinOffsetY = r.hairpinOffsetY.default;
+    if (rendererNeutralSettings.hairpinOffsetY === undefined || rendererNeutralSettings.hairpinOffsetY < r.hairpinOffsetY.min || rendererNeutralSettings.hairpinOffsetY > r.hairpinOffsetY.max) {
+      rendererNeutralSettings.hairpinOffsetY = r.hairpinOffsetY.default;
     }
-    if (parsed.headerHeight === undefined || parsed.headerHeight < r.headerHeight.min || parsed.headerHeight > r.headerHeight.max) {
-      parsed.headerHeight = r.headerHeight.default;
+    if (rendererNeutralSettings.headerHeight === undefined || rendererNeutralSettings.headerHeight < r.headerHeight.min || rendererNeutralSettings.headerHeight > r.headerHeight.max) {
+      rendererNeutralSettings.headerHeight = r.headerHeight.default;
     }
-    if (parsed.durationSpacingCompression === undefined || parsed.durationSpacingCompression < r.durationSpacingCompression.min || parsed.durationSpacingCompression > r.durationSpacingCompression.max) {
-      parsed.durationSpacingCompression = r.durationSpacingCompression.default;
+    if (rendererNeutralSettings.durationSpacingCompression === undefined || rendererNeutralSettings.durationSpacingCompression < r.durationSpacingCompression.min || rendererNeutralSettings.durationSpacingCompression > r.durationSpacingCompression.max) {
+      rendererNeutralSettings.durationSpacingCompression = r.durationSpacingCompression.default;
     }
-    if (parsed.measureWidthCompression === undefined || parsed.measureWidthCompression < r.measureWidthCompression.min || parsed.measureWidthCompression > r.measureWidthCompression.max) {
-      parsed.measureWidthCompression = r.measureWidthCompression.default;
+    if (rendererNeutralSettings.measureWidthCompression === undefined || rendererNeutralSettings.measureWidthCompression < r.measureWidthCompression.min || rendererNeutralSettings.measureWidthCompression > r.measureWidthCompression.max) {
+      rendererNeutralSettings.measureWidthCompression = r.measureWidthCompression.default;
     }
-    const resolved = { ...defaultSettings, ...parsed };
-    if (!hasExplicitRenderer) {
-      resolved.useLayoutEngine = true;
-    }
-    return resolved;
+    return { ...defaultSettings, ...rendererNeutralSettings };
   } catch {
     return defaultSettings;
   }

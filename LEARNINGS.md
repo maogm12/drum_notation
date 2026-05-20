@@ -9,9 +9,9 @@ When an older note conflicts with this file, treat this file plus the active spe
 ### Product Rendering Path
 
 - The default renderer is the platform-neutral Rust layout engine.
-- VexFlow remains in the repo as a lazy legacy renderer for comparison, fallback, and migration debugging.
-- New default-renderer work should target the Rust layout scene path, not VexFlow internals.
-- VexFlow-specific learnings are still useful only for legacy-renderer fixes or visual parity investigations.
+- VexFlow has been removed as a product renderer, fallback path, dependency, and active test oracle.
+- Renderer work should target the Rust layout scene path and thin adapter contract.
+- Historical VexFlow-specific notes are useful only as archived migration context, not as implementation guidance.
 
 ### Parser Ownership
 
@@ -89,13 +89,13 @@ When an older note conflicts with this file, treat this file plus the active spe
 - Browser production code must not import Node wrappers or Node generated packages.
 - Parser-facing production code must not import layout wrappers or layout generated packages.
 - CLI runtime must not import browser wrappers or browser generated packages.
-- Default layout/settings paths must not pull VexFlow runtime imports.
+- Default layout/settings paths must not pull legacy renderer runtime imports.
 - Integration/parity tests may cross these boundaries only when explicitly scoped as integration/parity tests.
 
 ## UI And Settings Copy
 
 - User-facing labels should use musical/product language, not implementation names.
-- Prefer labels such as `Layout Engine` and `Legacy VexFlow`.
+- Prefer musical/product labels over renderer implementation names.
 - Avoid labels such as `useLayoutEngine`, `WASM render`, `offsetY`, or source-code field names.
 - Settings that cross into layout WASM must preserve explicit zero values. Missing option and option value `0` are different states.
 
@@ -141,3 +141,15 @@ When an older note conflicts with this file, treat this file plus the active spe
 - The parser must interpret a standalone `Colon` as a repeat-start barline only when `parse_barline()` is already being asked for a measure boundary. Note suffix parsing such as `x:close` remains owned by `parse_suffix_chain()`.
 - The legacy TypeScript parser has no lexer token for `:|:` either; handle it after consuming a repeat-end boundary by seeding the next left boundary as `repeat_start` and advancing past the extra colon, instead of adding `:` to the general boundary regex where it would collide with note modifiers.
 - SMuFL provides a dedicated `repeatRightLeft` glyph at U+E042 for a right-and-left repeat sign. When rendering adjacent repeat-end/repeat-start boundaries, emit one semantic `repeat-end-start` glyph run with `GlyphRole::RepeatRightLeft` rather than separate `repeatRight` and next-measure `repeatLeft` glyphs.
+
+## 2026-05-20 VexFlow Removal Planning
+
+- At proposal-planning time, VexFlow remnants were legacy-only: `src/App.tsx` could lazy-import `./vexflow`, `build-docs.ts` imported `src/vexflow/index`, Vite optimized `vexflow/bravura`, `package.json` depended on `vexflow`, and some corpus/parity tests still imported VexFlow as an oracle.
+- The approved active architecture remains `RenderScore -> LayoutScene -> thin platform adapter`; VexFlow removal should be deletion/route simplification plus oracle replacement, not a new renderer rewrite.
+- Before deleting VexFlow-only tests, classify each test as obsolete, already covered by layout/adapter/CLI/corpus tests, or needing a new non-VexFlow regression.
+
+## 2026-05-20 VexFlow Removal Implementation
+
+- The active rendering ownership rule is `RenderScore -> LayoutScene -> thin platform adapter`.
+- Legacy VexFlow removal is governed by `docs/proposals/ARCHITECTURE_proposal_remove_vexflow.md` and `docs/proposals/ARCHITECTURE_tasks_remove_vexflow.md`.
+- During removal, do not use VexFlow output as an active oracle. Replace old parity coverage with layout scene snapshots, SVG semantic reports, adapter tests, CLI SVG tests, and corpus gates.

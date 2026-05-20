@@ -177,3 +177,8 @@
   - All existing 468 JS tests pass (or adapted)
   - No VexFlow in `package.json`; `npm ls vexflow` returns empty
 - **Dependencies**: Task 9
+### Supersession Note: 2026-05-20 VexFlow Removal
+
+This older layout-engine task stream is superseded for renderer-removal work by `ARCHITECTURE_proposal_remove_vexflow.md`.
+
+Any uncompleted parity or removal task in this file that compares against VexFlow is historical only; active verification is layout-owned scene, SVG semantic, CLI, and corpus coverage.

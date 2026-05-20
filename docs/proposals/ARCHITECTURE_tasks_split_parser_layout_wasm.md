@@ -500,3 +500,8 @@ The verification gate covered:
 - representative CLI SVG generation from `docs/examples/overview.drum`
 
 Task 12 remains pending because archival is explicitly post-merge.
+### Supersession Note: 2026-05-20 VexFlow Removal
+
+The split-WASM work that kept VexFlow available as a lazy legacy renderer is superseded by `ARCHITECTURE_proposal_remove_vexflow.md`.
+
+Parser/layout split requirements remain relevant. Any uncompleted legacy-renderer availability, legacy-renderer network-audit, or `Legacy VexFlow` UI task in this file is superseded.

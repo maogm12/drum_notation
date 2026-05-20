@@ -693,3 +693,8 @@ The final design:
 | Edge: empty | Empty paragraph with mark → valid | Empty measure with mark → valid |
 
 All rendering and MusicXML rules are unchanged in substance (mark appears above the target measure).
+### Supersession Note: 2026-05-20 VexFlow Removal
+
+Historical review text in this proposal is preserved. Any future rendering work described here that assumes VexFlow is superseded by `ARCHITECTURE_proposal_remove_vexflow.md`.
+
+If rehearsal marks are implemented after VexFlow removal, their layout and box geometry must be represented through `RenderScore -> LayoutScene` and rendered by the thin adapter without adapter-side engraving fixes.

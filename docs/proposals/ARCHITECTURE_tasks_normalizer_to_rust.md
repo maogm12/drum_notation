@@ -161,3 +161,8 @@
   - Additional edge cases mirroring `spec-c*.test.ts` fixtures
   - `npm test` includes WASM path parity
 - **Dependencies**: Task 8
+### Supersession Note: 2026-05-20 VexFlow Removal
+
+Any uncompleted task in this file that names VexFlow rendering as an acceptance target is superseded by `ARCHITECTURE_proposal_remove_vexflow.md`.
+
+Normalizer verification should target parser/IR/layout-owned outputs, not VexFlow rendering.

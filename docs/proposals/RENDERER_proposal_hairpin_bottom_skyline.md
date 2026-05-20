@@ -438,3 +438,8 @@ All three critical issues and all moderate issues from Review Round 1 have been 
 #### STATUS: APPROVED
 
 The proposal is ready for tasks file creation and user stamp.
+### Supersession Note: 2026-05-20 VexFlow Removal
+
+Historical review text in this proposal is preserved. The VexFlow-specific implementation path is superseded by `ARCHITECTURE_proposal_remove_vexflow.md`.
+
+Future hairpin placement work must target `RenderScore -> LayoutScene -> thin adapter`.

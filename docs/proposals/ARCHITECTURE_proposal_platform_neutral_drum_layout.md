@@ -512,6 +512,14 @@ The approved migration and execution rules are:
 - final migration and cutover require the full supported drum corpus
 - task completion counts only when the corresponding task items are actually marked done in the tasks file
 
+### Terminal Supersession: VexFlow Comparison Gates
+
+This terminal note is appended after consolidation to preserve historical review context while retiring obsolete comparison gates.
+
+Any remaining text in this proposal that requires VexFlow comparison gates, VexFlow as a parity oracle, VexFlow SVG output, or VexFlow-backed cutover criteria is superseded by `docs/proposals/ARCHITECTURE_proposal_remove_vexflow.md` and `docs/proposals/ARCHITECTURE_tasks_remove_vexflow.md`.
+
+The active post-removal verification model is layout-owned: `RenderScore -> LayoutScene -> thin platform adapter`, semantic SVG output, corpus scene reports, import-boundary enforcement, split-WASM network audit, clean package/build metadata, and representative CLI SVG generation.
+
 ### Consolidated Changes
 
 This final section is the authoritative terminal consolidation for the approved proposal. Any earlier `### Consolidated Changes` section or earlier misplaced summary language in this file is superseded by this terminal synthesis.

@@ -70,3 +70,14 @@ export const productionSplitWasmImportRules = [
     forbidden: /(?:_wasm_browser|pkg-web)/,
   },
 ];
+
+const legacyPackageName = ["vex", "flow"].join("");
+const legacyPackagePattern = new RegExp(`^(?:\\\\.{1,2}/)?(?:${legacyPackageName}(?:/.*)?|.*/?${legacyPackageName}(?:/.*)?|${legacyPackageName}/bravura)$`);
+
+export const noLegacyRendererImportRules = [
+  {
+    name: "active code must not import legacy renderer",
+    from: /^(?:(?:src|scripts)\/.*?\.(?:ts|tsx|mjs)|build-docs\.ts|AGENTS\.md|LEARNINGS\.md|docs\/RENDER_LAYOUT_CONTRACT\.md)$/,
+    forbidden: legacyPackagePattern,
+  },
+];
