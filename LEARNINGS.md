@@ -159,3 +159,9 @@ When an older note conflicts with this file, treat this file plus the active spe
 - `measure_geometry()` owns note X placement inside `drummark-layout`; SVG adapters should not shift notes away from barlines.
 - Event placement should use both event start slots and event end slots as spacing-cell boundaries. Centering only between adjacent starts incorrectly moves a lone short downbeat toward the middle of the measure.
 - The first event in a measure should sit in the center of its rhythmic cell, not on the cell's left boundary. This creates clearance after left barlines/repeat starts while keeping the final event from leaving a full trailing beat of empty space.
+
+## 2026-05-20 wasm-pack wasm-opt Feature Flags
+
+- `wasm-pack` reads `[package.metadata.wasm-pack.profile.release].wasm-opt` from the crate `Cargo.toml`; specifying the array overrides the feature flags passed to `wasm-opt`.
+- Recent Rust/LLVM wasm output can include `i32.trunc_sat_f32_s`, which requires Binaryen validation with `--enable-nontrapping-float-to-int`.
+- If `wasm-opt` is configured with only `--enable-bulk-memory`, GitHub Actions can fail during `wasm-pack build --target web crates/drummark-core` with `unexpected false: all used features should be allowed`.
