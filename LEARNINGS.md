@@ -165,3 +165,4 @@ When an older note conflicts with this file, treat this file plus the active spe
 - `wasm-pack` reads `[package.metadata.wasm-pack.profile.release].wasm-opt` from the crate `Cargo.toml`; specifying the array overrides the feature flags passed to `wasm-opt`.
 - Recent Rust/LLVM wasm output can include `i32.trunc_sat_f32_s`, which requires Binaryen validation with `--enable-nontrapping-float-to-int`.
 - If `wasm-opt` is configured with only `--enable-bulk-memory`, GitHub Actions can fail during `wasm-pack build --target web crates/drummark-core` with `unexpected false: all used features should be allowed`.
+- The custom split-WASM build script invokes a standalone `wasm-bindgen` binary. Installing `wasm-pack` is not sufficient for CI; install `wasm-bindgen-cli` matching the locked `wasm-bindgen` crate version before `npm run build`.
