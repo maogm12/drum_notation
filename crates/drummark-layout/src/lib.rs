@@ -4428,11 +4428,9 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
     let title_metric = canonical_text_metric(TextRole::Title);
     let subtitle_metric = canonical_text_metric(TextRole::Subtitle);
     let composer_metric = canonical_text_metric(TextRole::Composer);
-    let tempo_metric = canonical_text_metric(TextRole::Tempo);
     let title_y = opts.top_margin_pt + title_metric.ascent_pt + 18.0;
     let subtitle_y = header_bottom_y + subtitle_metric.ascent_pt + 12.0;
     let composer_y = header_bottom_y + composer_metric.ascent_pt + 12.0;
-    let tempo_y = header_bottom_y + opts.header_staff_spacing_pt + opts.tempo_offset_y;
 
     if let Some(ref text) = score.header.title {
         let title_id = sink.push_text_item(TextItemSpec {
@@ -4509,64 +4507,6 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
             end_anchor_id: None,
         });
     }
-    if score.header.tempo > 0 {
-        let tempo_glyph_x = margin + 9.0;
-        let tempo_glyph_width =
-            canonical_glyph_metric(GlyphRole::MetNoteQuarterUp).width_ss() * 25.0 / 4.0;
-        let tempo_equals_x = tempo_glyph_x + tempo_glyph_width + 8.0;
-        let tempo_value_text = score.header.tempo.to_string();
-        let tempo_value_x = tempo_equals_x + canonical_text_width(TextRole::Tempo, "=") + 6.0;
-        let tempo_glyph_id = sink.push_text_item(TextItemSpec {
-            measure_id: None,
-            role: "tempo-glyph",
-            x: tempo_glyph_x,
-            y: tempo_y,
-            text_role: TextRole::Tempo,
-            text: "\u{ECA5}".to_string(),
-            font_family: "Bravura",
-            font_size_pt: 25.0,
-            fill: "#333",
-            text_anchor: None,
-            font_weight: None,
-        });
-        let tempo_equals_id = sink.push_text_item(TextItemSpec {
-            measure_id: None,
-            role: "tempo-equals",
-            x: tempo_equals_x,
-            y: tempo_y,
-            text_role: TextRole::Tempo,
-            text: "=".to_string(),
-            font_family: tempo_metric.font_family,
-            font_size_pt: tempo_metric.font_size_pt,
-            fill: "#333",
-            text_anchor: None,
-            font_weight: None,
-        });
-        let tempo_value_id = sink.push_text_item(TextItemSpec {
-            measure_id: None,
-            role: "tempo",
-            x: tempo_value_x,
-            y: tempo_y,
-            text_role: TextRole::Tempo,
-            text: tempo_value_text,
-            font_family: tempo_metric.font_family,
-            font_size_pt: tempo_metric.font_size_pt,
-            fill: "#333",
-            text_anchor: None,
-            font_weight: None,
-        });
-        page.composites.push(SceneComposite {
-            id: "text-block-tempo".to_string(),
-            kind: CompositeKind::TextBlock,
-            fragment: SpanFragmentKind::SingleSegment,
-            child_item_ids: vec![tempo_glyph_id, tempo_equals_id, tempo_value_id],
-            label: Some("tempo".to_string()),
-            count: Some(score.header.tempo),
-            start_anchor_id: None,
-            end_anchor_id: None,
-        });
-    }
-
     let mut deferred_navs = Vec::new();
 
     for (sys_idx, system) in planned_systems.iter().enumerate() {
@@ -4637,6 +4577,66 @@ pub fn build_layout_scene(score: &RenderScore, opts: &LayoutOptions) -> LayoutSc
                 fill: "#333",
                 text_anchor: None,
                 font_weight: None,
+            });
+        }
+        if is_first_system && score.header.tempo > 0 {
+            let first_measure_id = format!("measure-{}", system.measures[0].global_index);
+            let tempo_metric = canonical_text_metric(TextRole::Tempo);
+            let tempo_y = sy + opts.tempo_offset_y;
+            let tempo_glyph_x = margin + 9.0;
+            let tempo_glyph_width =
+                canonical_glyph_metric(GlyphRole::MetNoteQuarterUp).width_ss() * 25.0 / 4.0;
+            let tempo_equals_x = tempo_glyph_x + tempo_glyph_width + 8.0;
+            let tempo_value_text = score.header.tempo.to_string();
+            let tempo_value_x = tempo_equals_x + canonical_text_width(TextRole::Tempo, "=") + 6.0;
+            let tempo_glyph_id = sink.push_text_item(TextItemSpec {
+                measure_id: Some(&first_measure_id),
+                role: "tempo-glyph",
+                x: tempo_glyph_x,
+                y: tempo_y,
+                text_role: TextRole::Tempo,
+                text: "\u{ECA5}".to_string(),
+                font_family: "Bravura",
+                font_size_pt: 25.0,
+                fill: "#333",
+                text_anchor: None,
+                font_weight: None,
+            });
+            let tempo_equals_id = sink.push_text_item(TextItemSpec {
+                measure_id: Some(&first_measure_id),
+                role: "tempo-equals",
+                x: tempo_equals_x,
+                y: tempo_y,
+                text_role: TextRole::Tempo,
+                text: "=".to_string(),
+                font_family: tempo_metric.font_family,
+                font_size_pt: tempo_metric.font_size_pt,
+                fill: "#333",
+                text_anchor: None,
+                font_weight: None,
+            });
+            let tempo_value_id = sink.push_text_item(TextItemSpec {
+                measure_id: Some(&first_measure_id),
+                role: "tempo",
+                x: tempo_value_x,
+                y: tempo_y,
+                text_role: TextRole::Tempo,
+                text: tempo_value_text,
+                font_family: tempo_metric.font_family,
+                font_size_pt: tempo_metric.font_size_pt,
+                fill: "#333",
+                text_anchor: None,
+                font_weight: None,
+            });
+            page.composites.push(SceneComposite {
+                id: "text-block-tempo".to_string(),
+                kind: CompositeKind::TextBlock,
+                fragment: SpanFragmentKind::SingleSegment,
+                child_item_ids: vec![tempo_glyph_id, tempo_equals_id, tempo_value_id],
+                label: Some("tempo".to_string()),
+                count: Some(score.header.tempo),
+                start_anchor_id: None,
+                end_anchor_id: None,
             });
         }
         let measure_number_metric = canonical_text_metric(TextRole::MeasureNumber);
@@ -5096,10 +5096,22 @@ fn item_system_id(page: &ScenePage, item: &SceneItem) -> Option<String> {
 }
 
 fn header_box_from_page(page: &ScenePage) -> HeaderLayoutBox {
+    let items_by_id = page
+        .items
+        .iter()
+        .map(|item| (item.id.as_str(), item))
+        .collect::<std::collections::HashMap<_, _>>();
     let header_item_ids = page
         .composites
         .iter()
         .filter(|composite| composite.kind == CompositeKind::TextBlock)
+        .filter(|composite| {
+            composite.child_item_ids.iter().all(|id| {
+                items_by_id
+                    .get(id.as_str())
+                    .is_some_and(|item| item.measure_id.is_none())
+            })
+        })
         .flat_map(|composite| composite.child_item_ids.iter().cloned())
         .collect::<std::collections::BTreeSet<_>>();
     let items = page
@@ -5112,6 +5124,12 @@ fn header_box_from_page(page: &ScenePage) -> HeaderLayoutBox {
         .composites
         .iter()
         .filter(|composite| composite.kind == CompositeKind::TextBlock)
+        .filter(|composite| {
+            composite
+                .child_item_ids
+                .iter()
+                .all(|id| header_item_ids.contains(id))
+        })
         .cloned()
         .collect::<Vec<_>>();
     let bounds = bounds_for_items(&items).ok().flatten();
@@ -5175,10 +5193,7 @@ fn system_box_from_page_system(
             if let Some(measure_id) = item.measure_id.as_ref() {
                 return measure_ids.contains(measure_id);
             }
-            if matches!(
-                item.role.as_str(),
-                "title" | "subtitle" | "composer" | "tempo" | "tempo-glyph" | "tempo-equals"
-            ) {
+            if matches!(item.role.as_str(), "title" | "subtitle" | "composer") {
                 return false;
             }
             item_bounds(item)
@@ -5200,7 +5215,6 @@ fn system_box_from_page_system(
     let composites = page
         .composites
         .iter()
-        .filter(|composite| composite.kind != CompositeKind::TextBlock)
         .filter(|composite| {
             let children_match = composite
                 .child_item_ids
@@ -8995,6 +9009,11 @@ fn test_contract_scene_smoke() {
         .composites
         .iter()
         .any(|c| c.kind == CompositeKind::TextBlock && c.label.as_deref() == Some("tempo")));
+    assert!(scene.pages[0]
+        .items
+        .iter()
+        .filter(|item| { matches!(item.role.as_str(), "tempo-glyph" | "tempo-equals" | "tempo") })
+        .all(|item| item.measure_id.as_deref() == Some("measure-0")));
 }
 
 #[test]

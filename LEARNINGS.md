@@ -128,3 +128,9 @@ When an older note conflicts with this file, treat this file plus the active spe
   - `--format xml`
 - For significant DSL or architecture changes, use proposal files under `docs/proposals/`, sub-agent review, tasks files, explicit human stamp, implementation branch, pre-merge review, and archival.
 - After this cleanup, append only concise, current-route learnings here. If a note is mainly historical context, place it in an archived document instead of bloating the active baseline.
+
+## 2026-05-20 Tempo Layout Contract
+
+- First-system tempo text is measure-owned layout content, not header-owned content.
+- Header extraction for pagination should include only text-block children with no `measure_id`.
+- System boxes must preserve measure-owned `TextBlock` composites such as tempo, otherwise semantic scene consumers lose the grouped tempo marker.
